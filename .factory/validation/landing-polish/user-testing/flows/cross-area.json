@@ -1,0 +1,142 @@
+{
+  "groupId": "cross-area",
+  "testedAt": "2026-03-14T12:00:00.000Z",
+  "isolation": {
+    "appUrl": "http://localhost:8080",
+    "browserSession": "1dcc008a7d12__cross-area",
+    "authBypass": "VITE_BYPASS_AUTH_FOR_TESTS=true",
+    "repoRoot": "/Users/gratitud3/Downloads/mogstudio-repo"
+  },
+  "toolsUsed": ["agent-browser", "file-system-checks", "source-code-grep"],
+  "assertions": [
+    {
+      "id": "VAL-CROSS-001",
+      "title": "First Visit Flow",
+      "status": "pass",
+      "steps": [
+        { "action": "Navigate to /", "expected": "Intro plays or is skipped (headless)", "observed": "Intro skipped in headless mode (WebGL unavailable, expected per user-testing.md). Landing page displayed immediately." },
+        { "action": "Verify landing page visible", "expected": "Landing page with header, sections, CTAs", "observed": "Landing page visible with WZRD.tech header, video background, card-based sections, Demo/Dashboard/Log Out buttons (auth bypass active)." },
+        { "action": "Navigate to /login", "expected": "/login page loads or redirects to /home (auth bypass)", "observed": "Auth bypass auto-redirected from /login to /home (dashboard). URL confirmed as http://localhost:8080/home." },
+        { "action": "Verify /home dashboard loads", "expected": "Dashboard page with project list, create button", "observed": "Dashboard loaded with 0 projects, sidebar with All Projects/Kanvas, stat cards, Create your first project CTA, 0 credits." }
+      ],
+      "evidence": {
+        "screenshots": [
+          "landing-polish/cross-area/VAL-CROSS-001-landing-page.png",
+          "landing-polish/cross-area/VAL-CROSS-001-login-page.png"
+        ],
+        "consoleErrors": "none on landing page; 2x 'controls.start() should only be called after a component has mounted' warnings on /home (Framer Motion, non-blocking)",
+        "network": "GET / -> 200, GET /login -> redirect to /home (auth bypass)"
+      },
+      "issues": "Auth bypass causes /login to redirect directly to /home, so the actual login form is not testable. The 'Log In' CTA is not visible on landing because auth bypass makes user appear authenticated (shows 'Dashboard'/'Log Out' instead). Flow still validates landing → login → dashboard path."
+    },
+    {
+      "id": "VAL-CROSS-005",
+      "title": "Color Consistency Across All Pages",
+      "status": "fail",
+      "steps": [
+        { "action": "Navigate to / (landing page)", "expected": "Orange/amber accents throughout", "observed": "Landing page uses hardcoded orange accents (#FF6B4A, orange-500, amber-500). Demo/Sign Up buttons use orange gradient. Section dividers use orange-500/20. Consistent orange theme." },
+        { "action": "Navigate to /home (dashboard)", "expected": "Orange/amber accents consistent with landing", "observed": "Dashboard uses CSS variable --primary (HSL 168 76% 42% = teal/green) for key elements: 'Create Project' button, '+' icon, and primary action styling. Sidebar 'All Projects' highlight and 'New Pro...' button use orange. Mixed color scheme." },
+        { "action": "Inspect CSS --primary variable", "expected": "Orange/amber hue", "observed": "index.css --primary: 168 76% 42% (teal/green in dark mode), 168 76% 47% (teal/green in light mode). NOT orange/amber." },
+        { "action": "Check for green accent exemptions", "expected": "Only online indicators and success checkmarks use green", "observed": "Home page 'Create Project' button and '+' icon use teal/green via --primary CSS variable. These are NOT exempt usage patterns (not online indicators or success checkmarks)." }
+      ],
+      "evidence": {
+        "screenshots": [
+          "landing-polish/cross-area/VAL-CROSS-005-landing-colors.png",
+          "landing-polish/cross-area/VAL-CROSS-005-home-page.png"
+        ],
+        "consoleErrors": "none relevant to colors",
+        "network": "N/A"
+      },
+      "issues": "CSS custom property --primary in index.css is still set to HSL 168 76% 42% (teal/green), not migrated to orange/amber. The landing page uses hardcoded orange (#FF6B4A, orange-500/amber-500 Tailwind classes) but the Home page and other pages using the --primary CSS variable show teal/green accents. This creates a visual inconsistency between the landing page (orange) and dashboard (teal/green for primary actions like 'Create Project')."
+    },
+    {
+      "id": "VAL-CROSS-006",
+      "title": "Loading States Across Navigation",
+      "status": "pass",
+      "steps": [
+        { "action": "Inspect LoadingScreen component source", "expected": "Uses wzrdtechlogo.png", "observed": "LoadingScreen.tsx line 126: src='/lovable-uploads/wzrdtechlogo.png'. Component renders logo centered with orange/amber animations (glow, rings, particles, progress bar)." },
+        { "action": "Verify LoadingScreen is used in App.tsx", "expected": "Shows on initial boot", "observed": "App.tsx line 89: <LoadingScreen isLoading={isLoading} message='Initializing MOG Studio...' />. isLoading state starts true, set to false after 2s timer (line 73-77)." },
+        { "action": "Verify Suspense fallback uses PerfShell", "expected": "PerfShell used as fallback for lazy pages", "observed": "App.tsx line 11: import PerfShell; line 69: const fallback = usePerfShell ? <PerfShell headline='Preparing studio' /> : null; line 94: <Suspense fallback={fallback}>. PerfShell wraps all lazy-loaded route components." },
+        { "action": "Verify unit test coverage", "expected": "Tests confirm wzrdtechlogo usage", "observed": "LoadingScreen.test.tsx line 26-29: tests that logo src is '/lovable-uploads/wzrdtechlogo.png'." }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "none",
+        "network": "N/A",
+        "sourceCodeFiles": [
+          "src/components/ui/LoadingScreen.tsx (line 126: wzrdtechlogo.png)",
+          "src/App.tsx (line 89: LoadingScreen, line 69+94: PerfShell Suspense fallback)",
+          "src/components/perf/PerfShell.tsx (line 12: export const PerfShell)",
+          "src/components/ui/__tests__/LoadingScreen.test.tsx (line 26-29: wzrdtechlogo verification)"
+        ]
+      },
+      "issues": "LoadingScreen only displays for ~2s on initial load and is difficult to capture visually in automated headless testing. Source code inspection confirms correct implementation. No visual screenshot of loading screen captured (dismissed before browser automation could screenshot), but source code and unit tests verify the behavior."
+    },
+    {
+      "id": "VAL-CROSS-012",
+      "title": "bgvid.mp4 Relocated to /public",
+      "status": "pass",
+      "steps": [
+        { "action": "Check /public/bgvid.mp4 exists", "expected": "File exists in public directory", "observed": "File exists: /public/bgvid.mp4 (1,872,572 bytes, dated Mar 13 16:51)." },
+        { "action": "Check repo root for bgvid.mp4", "expected": "File does NOT exist at repo root", "observed": "ls: /Users/gratitud3/Downloads/mogstudio-repo/bgvid.mp4: No such file or directory. Confirmed not at repo root." },
+        { "action": "Inspect video element src in browser DOM", "expected": "Video src references /bgvid.mp4", "observed": "DOM inspection: video src='http://localhost:8080/bgvid.mp4', currentSrc='http://localhost:8080/bgvid.mp4', autoplay=true, loop=true, muted=true." },
+        { "action": "Check source code reference", "expected": "VideoBackground.tsx uses /bgvid.mp4", "observed": "VideoBackground.tsx line 59: src='/bgvid.mp4'. Correct Vite public path reference." }
+      ],
+      "evidence": {
+        "screenshots": [
+          "landing-polish/cross-area/VAL-CROSS-001-landing-page.png"
+        ],
+        "consoleErrors": "none",
+        "network": "GET /bgvid.mp4 loaded successfully (video plays on landing page)",
+        "fileSystemChecks": [
+          "EXISTS: /Users/gratitud3/Downloads/mogstudio-repo/public/bgvid.mp4 (1,872,572 bytes)",
+          "NOT EXISTS: /Users/gratitud3/Downloads/mogstudio-repo/bgvid.mp4"
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-013",
+      "title": "Three.js Intro is Lazy-Loaded",
+      "status": "pass",
+      "steps": [
+        { "action": "Check Landing.tsx for React.lazy usage", "expected": "CinematicIntro loaded via React.lazy", "observed": "Landing.tsx line 8: const CinematicIntro = lazy(() => import('@/components/landing/CinematicIntro')); Comment: 'Lazy-load CinematicIntro so Three.js stays out of the initial bundle'." },
+        { "action": "Verify CinematicIntro imports Three.js", "expected": "Three.js imports inside lazy-loaded component", "observed": "CinematicIntro.tsx imports: '@react-three/fiber' (line 3), '@react-three/drei' (line 4), '@react-three/postprocessing' (line 5), 'three' (line 6). All imports are inside the dynamically imported module." },
+        { "action": "Verify Suspense wrapper around CinematicIntro", "expected": "Suspense boundary around lazy component", "observed": "Landing.tsx: <Suspense fallback={<div className='fixed inset-0 z-[99999] bg-black' />}><CinematicIntro onComplete={handleIntroComplete} /></Suspense>. Wrapped in AnimatePresence + Suspense." },
+        { "action": "Verify Three.js NOT in initial bundle imports", "expected": "No top-level Three.js imports in Landing.tsx or App.tsx", "observed": "Landing.tsx only imports React, react-router-dom, framer-motion, and other landing components. No three/react-three imports at top level. App.tsx has no Three.js imports. Three.js is isolated to the CinematicIntro lazy chunk." }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "none",
+        "network": "N/A",
+        "sourceCodeFiles": [
+          "src/pages/Landing.tsx (line 8: React.lazy(() => import('@/components/landing/CinematicIntro')))",
+          "src/components/landing/CinematicIntro.tsx (lines 3-6: three, @react-three/fiber, @react-three/drei, @react-three/postprocessing imports)"
+        ]
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "Auth bypass (VITE_BYPASS_AUTH_FOR_TESTS=true) makes user appear pre-authenticated on landing page, showing 'Dashboard'/'Log Out' instead of 'Log In'/'Sign Up'. Cannot test the actual Login CTA click from landing page because it's not rendered.",
+      "resolved": true,
+      "resolution": "Navigated directly to /login URL to test the login→dashboard redirect flow instead of clicking the Log In button on landing.",
+      "affectedAssertions": ["VAL-CROSS-001"]
+    },
+    {
+      "description": "LoadingScreen appears for only ~2 seconds on initial app load and auto-dismisses. Cannot reliably capture screenshot of loading state in automated headless testing.",
+      "resolved": true,
+      "resolution": "Verified LoadingScreen implementation via source code inspection and existing unit tests instead of visual capture.",
+      "affectedAssertions": ["VAL-CROSS-006"]
+    },
+    {
+      "description": "WebGL/Three.js intro cannot render in headless Chromium (no WebGL support). Intro is auto-skipped, preventing visual verification of the intro animation.",
+      "resolved": true,
+      "resolution": "This is documented as a known limitation in user-testing.md. Intro skip is correct fallback behavior.",
+      "affectedAssertions": ["VAL-CROSS-001"]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 5 assertions: 4 passed, 1 failed. VAL-CROSS-001 (First Visit Flow): pass — landing page loads, navigating to /login redirects to /home dashboard via auth bypass. VAL-CROSS-005 (Color Consistency): FAIL — CSS --primary variable is still teal/green (HSL 168), not orange/amber. Landing page uses hardcoded orange (#FF6B4A) but Home page uses --primary for key actions (Create Project button, + icon), creating visible color inconsistency. VAL-CROSS-006 (Loading States): pass — source code confirms LoadingScreen uses wzrdtechlogo.png, PerfShell used as Suspense fallback. VAL-CROSS-012 (bgvid.mp4 Relocated): pass — file exists in /public, not at repo root, video src correctly references /bgvid.mp4. VAL-CROSS-013 (Three.js Lazy-Loaded): pass — CinematicIntro uses React.lazy() with dynamic import, Three.js packages isolated to lazy-loaded chunk."
+}

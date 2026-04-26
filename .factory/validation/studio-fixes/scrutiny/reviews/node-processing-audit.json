@@ -1,0 +1,56 @@
+{
+  "featureId": "node-processing-audit",
+  "reviewedAt": "2026-03-14T15:30:00.000Z",
+  "commitId": "9fcf40eb7ca3a9604d12c9eb526fcf032e6ad53d",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Solid implementation that adds missing Audio generation, Prompt kind delegation, proper idle→queued→running→succeeded/failed lifecycle for all 5 generator kinds, store-based port IDs for ReactFlowAudioNode and OutputNode, and pass-through data relay for Output/Gateway/Transform/Combine nodes. 33 well-structured tests validate node kind classification, status transitions, normalization, and port config completeness. The shared contract (computeContract.ts) and status machine (nodeStatusMachine.ts) are well-designed. All edge functions referenced (elevenlabs-tts, elevenlabs-sfx, elevenlabs-music) exist in the codebase. Minor inconsistencies noted below are non-blocking.",
+    "issues": [
+      {
+        "file": "src/hooks/studio/useStudioNodeGeneration.ts",
+        "line": 935,
+        "severity": "non_blocking",
+        "description": "Audio node generation (generateAudioNode) does not use prepareTargetsForModels like Text/Image/Video generators do, meaning Audio nodes cannot leverage multi-model variant support. This is likely intentional since the three audio model types (TTS, SFX, Music) are different APIs rather than interchangeable models, but it's an inconsistency worth documenting."
+      },
+      {
+        "file": "src/hooks/studio/useStudioNodeGeneration.ts",
+        "line": 938,
+        "severity": "non_blocking",
+        "description": "generateAudioNode reads node.params once at function start and doesn't re-read latest state from the store (unlike text/image/video generators which call useComputeFlowStore.getState().nodeDefinitions.find(...)). If user edits params while async generation is in-flight, the final succeeded/failed updateNode call will overwrite those changes with the stale captured params."
+      },
+      {
+        "file": "src/hooks/studio/useStudioNodeGeneration.ts",
+        "line": 988,
+        "severity": "non_blocking",
+        "description": "Audio preview type is 'json' instead of 'audio'. Text uses type:'text', Image uses type:'image', Video uses type:'video', but Audio uses type:'json' with audioUrl buried in data. This works because the pass-through relay in StudioCanvas specifically checks (preview as any)?.data?.audioUrl, but is semantically inconsistent and fragile."
+      },
+      {
+        "file": "src/components/studio/StudioCanvas.tsx",
+        "line": 459,
+        "severity": "non_blocking",
+        "description": "Pass-through relay logic uses 'break' after finding the first matching upstream input, so Combine nodes (which semantically should combine multiple inputs) only relay data from the first connected source. Acceptable for v1 but should be noted for future enhancement."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The fullstack-worker skill says 'implement backend first, then frontend' but this audit feature was purely frontend with no backend changes needed. Worker correctly noted this in skillFeedback.suggestedChanges. The skill procedure could add a note that audit/fix-type features may not have a backend component.",
+      "evidence": "Handoff skillFeedback.suggestedChanges: 'The fullstack-worker skill mentions implement backend first, then frontend but this feature was purely frontend audit/fix work with no edge function changes needed.'"
+    },
+    {
+      "area": "conventions",
+      "observation": "The preview.type field for different node kinds follows a convention (text→'text', image→'image', video→'video') but Audio breaks this by using type:'json'. This implicit convention is not documented in AGENTS.md. Future workers may not know to use the correct preview type.",
+      "evidence": "src/hooks/studio/useStudioNodeGeneration.ts:988 — Audio preview uses type:'json' while Image (line ~767) uses type:'image' and Video (line ~887) uses type:'video'"
+    },
+    {
+      "area": "conventions",
+      "observation": "The multi-model variant pattern (prepareTargetsForModels) is used by Text/Image/Video generators but not Audio. This architectural decision is not documented anywhere. Future workers may not understand why Audio is excluded or may try to add it incorrectly.",
+      "evidence": "src/hooks/studio/useStudioNodeGeneration.ts — generateTextNode/generateImageNode/generateVideoNode all call prepareTargetsForModels; generateAudioNode does not"
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Feature passes review. The implementation comprehensively audits and fixes all node processing logic: adds missing Audio generation support, adds Prompt→Text delegation, enforces proper idle→queued→running→succeeded/failed status lifecycle for all 5 generator kinds, rewrites ReactFlowAudioNode with store-based ports, fixes OutputNode port handling, adds pass-through data relay for Output/Gateway/Transform/Combine nodes, and includes 33 tests covering classification, lifecycle, normalization, and port configs. Four non-blocking issues noted: Audio generators lack multi-model variant support (likely intentional), Audio uses stale params during generation, Audio preview type is 'json' instead of 'audio', and Combine node pass-through only relays first input. The shared compute contract and status machine are well-designed reusable infrastructure."
+}

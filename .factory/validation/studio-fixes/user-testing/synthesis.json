@@ -1,0 +1,32 @@
+{
+  "milestone": "studio-fixes",
+  "round": 2,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 15,
+    "passed": 15,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-STUDIO-001",
+    "VAL-STUDIO-002",
+    "VAL-STUDIO-003",
+    "VAL-STUDIO-004",
+    "VAL-STUDIO-005",
+    "VAL-STUDIO-006",
+    "VAL-STUDIO-007",
+    "VAL-STUDIO-008",
+    "VAL-STUDIO-009",
+    "VAL-STUDIO-010",
+    "VAL-STUDIO-011",
+    "VAL-STUDIO-012",
+    "VAL-STUDIO-013",
+    "VAL-STUDIO-014",
+    "VAL-STUDIO-015"
+  ],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "previousRound": ".factory/validation/studio-fixes/user-testing/synthesis-round1.json"
+}

@@ -1,0 +1,40 @@
+{
+  "featureId": "worldview-gsplat-viewer",
+  "reviewedAt": "2026-03-13T08:25:00.000Z",
+  "commitId": "633432f62bb03a9d2ac7ffae518c6f5f18b3ee90",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "GSplatViewer component is well-implemented. It covers all 14 expected behaviors: 520px canvas with world thumbnail/vignette, 5-lens camera HUD with amber highlight, zoom +/- with mono font display, viewfinder frame with L-shaped corners/crosshair/badges/AF, viewfinder scaling with zoom, mouse drag orbit simulation, close button returning to canvas, reset camera to defaults, motion toggle with amber/zinc states, capture take flow with toast and View action, disabled capture button with Loader2 spinner. Code follows project conventions (cn(), @/ imports, sonner toasts, Framer Motion animations, amber theme, devtools middleware). 8 new store tests added covering setCapturing, updateCameraTransform, and updateTakeStatus. Two non-blocking issues found: an unused variable and a redundant state update pattern.",
+    "issues": [
+      {
+        "file": "src/components/worldview/WorldviewSection.tsx",
+        "line": 874,
+        "severity": "non_blocking",
+        "description": "Dead variable: `activeLens` is computed via `LENS_OPTIONS.find(...)` but never referenced in the JSX or any logic. Should be removed to keep code clean."
+      },
+      {
+        "file": "src/components/worldview/WorldviewSection.tsx",
+        "line": 831,
+        "severity": "non_blocking",
+        "description": "Redundant state update in capture flow: `updateTakeStatus(takeId, 'ready')` is called on line 831, then immediately followed by a direct `useWorldviewStore.setState(...)` on line 834 that also sets `status: 'ready'` (plus imageUrl). The first call is unnecessary since the second setState already covers the status update. Additionally, directly calling `useWorldviewStore.setState()` bypasses the store's action API pattern — a dedicated action like `updateTakeImageUrl` or extending `updateTakeStatus` to accept optional imageUrl would be more consistent."
+      },
+      {
+        "file": "src/components/worldview/WorldviewSection.tsx",
+        "line": 889,
+        "severity": "non_blocking",
+        "description": "Canvas ref callback is an inline arrow function, causing it to be called on every re-render (React calls ref callbacks when identity changes). During drag interactions this may redundantly call `initCanvas()` resizing and redrawing the canvas. A useEffect with a stable ref would be more efficient, though the impact is limited since the component only renders in world-viewer mode."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "Worker directly called `useWorldviewStore.setState()` inside a component to update take imageUrl after capture, bypassing the store's defined action API. The store has `updateTakeStatus` but lacks a way to update a take's imageUrl. AGENTS.md documents the Zustand pattern but doesn't explicitly state whether direct setState calls are acceptable in components vs. always using defined actions.",
+      "evidence": "src/components/worldview/WorldviewSection.tsx:834 — `useWorldviewStore.setState((state) => ...)` called directly in handleCaptureTake. Compare to all other store mutations in the same file which use defined store actions like updateCamera, updateCameraTransform, addTake, etc."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "GSplatViewer implementation passes review. All 14 expected behaviors are correctly implemented with proper UI, state management, and error handling. The component follows project conventions (amber theme, cn() utility, Framer Motion, sonner toasts, @/ imports). 8 new store tests cover the critical store actions. Three non-blocking issues found: an unused `activeLens` variable, a redundant state update in the capture flow (updateTakeStatus called before a direct setState that covers the same update), and an inline ref callback causing unnecessary canvas re-initialization. One shared state observation: direct useWorldviewStore.setState() usage bypasses the store action pattern, suggesting the store could benefit from an extended updateTakeStatus action or a new updateTakeImageUrl action."
+}

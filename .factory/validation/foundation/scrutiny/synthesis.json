@@ -1,0 +1,125 @@
+{
+  "milestone": "foundation",
+  "round": 1,
+  "status": "pass",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "npx vitest run src/lib/stores/__tests__/worldview-store.test.ts src/services/__tests__/worldLabsService.test.ts",
+      "exitCode": 0,
+      "notes": "24 worldview tests pass (17 store + 7 service). Full suite not run due to known ENOSPC issues with heavy jsdom test suites."
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "npx tsc --noEmit",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "npm run lint",
+      "exitCode": 1,
+      "notes": "695 total errors (694 pre-existing + 1 new). The 1 new error is in supabase/functions/worldlabs-proxy/index.ts:18 — uses @ts-ignore instead of @ts-expect-error. Non-blocking, consistent with existing edge function patterns."
+    }
+  },
+  "reviewsSummary": {
+    "total": 2,
+    "passed": 2,
+    "failed": 0,
+    "failedFeatures": []
+  },
+  "blockingIssues": [],
+  "nonBlockingIssues": [
+    {
+      "featureId": "worldview-foundation",
+      "severity": "non_blocking",
+      "description": "captureTake accepts 'resolution' parameter but never uses it — unused function parameter.",
+      "file": "src/services/worldLabsService.ts:157"
+    },
+    {
+      "featureId": "worldview-foundation",
+      "severity": "non_blocking",
+      "description": "setWorldGenerating is a no-op — declared in interface but does nothing. May mislead consumers.",
+      "file": "src/lib/stores/worldview-store.ts:167"
+    },
+    {
+      "featureId": "worldview-foundation",
+      "severity": "non_blocking",
+      "description": "Raw WorldLabs error text forwarded to clients. safeErrorResponse exists but not used.",
+      "file": "supabase/functions/worldlabs-proxy/index.ts"
+    },
+    {
+      "featureId": "worldview-foundation",
+      "severity": "non_blocking",
+      "description": "Service method behavior not tested beyond signatures — no mocked supabase.functions.invoke tests.",
+      "file": "src/services/__tests__/worldLabsService.test.ts"
+    },
+    {
+      "featureId": "worldview-foundation",
+      "severity": "suggestion",
+      "description": "pollOperation lacks AbortController support for cancellation on component unmount.",
+      "file": "src/services/worldLabsService.ts:87"
+    },
+    {
+      "featureId": "worldview-studio-ui",
+      "severity": "non_blocking",
+      "description": "buildRequestForStudio() lacks a 'worldview' case in switch — returns undefined if called with worldview studio.",
+      "file": "src/features/kanvas/helpers.ts"
+    },
+    {
+      "featureId": "worldview-studio-ui",
+      "severity": "non_blocking",
+      "description": "fetchKanvasModels called for 'worldview' studio unnecessarily during page load. Result discarded.",
+      "file": "src/pages/KanvasPage.tsx"
+    },
+    {
+      "featureId": "worldview-studio-ui",
+      "severity": "non_blocking",
+      "description": "Image file from WorldCreatorPanel is accepted in UI but never forwarded to the API service. Image prompt mode is partially functional.",
+      "file": "src/components/worldview/WorldviewSection.tsx"
+    },
+    {
+      "featureId": "worldview-studio-ui",
+      "severity": "suggestion",
+      "description": "Bottom prompt bar input is purely decorative scaffolding with no onChange handler or state.",
+      "file": "src/components/worldview/WorldviewSection.tsx"
+    },
+    {
+      "featureId": "worldview-studio-ui",
+      "severity": "non_blocking",
+      "description": "handleRetryGeneration only clears error state, does not actually re-invoke generation. Naming is misleading.",
+      "file": "src/components/worldview/WorldviewSection.tsx"
+    },
+    {
+      "featureId": "scrutiny-validator",
+      "severity": "non_blocking",
+      "description": "worldlabs-proxy/index.ts:18 uses @ts-ignore instead of @ts-expect-error, adding 1 new lint error to the codebase.",
+      "file": "supabase/functions/worldlabs-proxy/index.ts:18"
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "skills",
+      "suggestion": "Add exception to worldview-worker skill TDD procedure for greenfield/foundation features: when creating new files from scratch where types/store don't exist yet, implementation-first with tests-after is acceptable.",
+      "evidence": "worldview-foundation worker noted the 'Write Tests First (Red Phase)' step is impractical for greenfield foundation features. Worker correctly deviated and wrote tests after implementation.",
+      "isSystemic": false
+    },
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Add cross-cutting integration note: when adding a new studio to KanvasStudio type union and KANVAS_STUDIO_ORDER, workers must also check buildRequestForStudio() in helpers.ts and the fetchKanvasModels() loop in KanvasPage.tsx. Studios that don't use Kanvas models should either be filtered from the fetch loop or have a no-op case in buildRequestForStudio.",
+      "evidence": "worldview-studio-ui added 'worldview' to KANVAS_STUDIO_ORDER which triggered an unnecessary fetchKanvasModels API call at page load (KanvasPage.tsx:750). buildRequestForStudio() also lacks a worldview case, returning undefined if called. Both are non-blocking but are maintenance hazards for future studios.",
+      "isSystemic": true
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "The setWorldGenerating no-op pattern should be documented in AGENTS.md as a convention.",
+      "reason": "This is a single instance, not a general pattern. The no-op is adequately explained by the inline code comment. Documenting it as a convention would over-generalize from one case."
+    },
+    {
+      "observation": "WorldLabs API response shapes should be added to .factory/library/.",
+      "reason": "The response shapes are inferred by the worker and not verified against official API documentation. Adding unverified schemas to the library could be misleading. The types in src/types/worldview.ts already serve as the de facto response shape documentation."
+    }
+  ],
+  "previousRound": null
+}

@@ -1,0 +1,170 @@
+{
+  "groupId": "viewer",
+  "testedAt": "2026-03-13T12:00:00.000Z",
+  "isolation": {
+    "appUrl": "http://localhost:8080/kanvas?studio=worldview",
+    "browserSession": "c2ce5c8ea561__viewer",
+    "auth": "bypassed via VITE_BYPASS_AUTH_FOR_TESTS=true",
+    "storeState": "fresh on each navigation (in-memory Zustand), seeded mock world via browser console",
+    "apiKey": "none configured — API calls fail with error toast (expected)"
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-VIEWER-001",
+      "title": "Enter World activates viewer mode",
+      "status": "pass",
+      "steps": [
+        { "action": "Create a scene via New Scene button", "expected": "Scene chip appears with amber highlight", "observed": "Scene 1 chip appeared and became active with amber styling" },
+        { "action": "Seed mock world via browser console (import store, addWorld, assignWorldToScene)", "expected": "WorldCard renders with thumbnail and Enter World button", "observed": "WorldCard rendered with Test World thumbnail, Marble 0.1-plus badge, and Enter World button on hover" },
+        { "action": "Hover and click Enter World", "expected": "Switch to world-viewer mode with 520px canvas container", "observed": "Viewer mode activated. Container height confirmed at 520px via DOM inspection. Canvas renders with vignette gradient overlay. All HUD controls visible." }
+      ],
+      "evidence": {
+        "screenshots": ["modes/viewer/canvas-mode-with-worldcard.png", "modes/viewer/VAL-VIEWER-001-viewer-mode.png"],
+        "consoleErrors": "none",
+        "network": "N/A (store seeded directly)"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-VIEWER-002",
+      "title": "Camera HUD lens selector",
+      "status": "pass",
+      "steps": [
+        { "action": "Observe lens selector in HUD (top-left)", "expected": "Shows current lens (35mm default) with dropdown chevron", "observed": "Lens selector button shows '35mm' with ChevronDown icon" },
+        { "action": "Click lens selector to open dropdown", "expected": "Dropdown with 5 lens options: 24mm, 35mm, 50mm, 85mm, 135mm", "observed": "Dropdown opened with all 5 options: Lens 24mm, Lens 35mm, Lens 50mm, Lens 85mm, Lens 135mm. Each shows FOV value." },
+        { "action": "Verify active lens has amber highlight", "expected": "35mm has amber highlight (bg-amber-500/20 text-amber-300)", "observed": "35mm option has amber highlight styling confirmed" },
+        { "action": "Select 50mm lens", "expected": "Lens changes to 50mm, dropdown closes", "observed": "Lens selector now shows '50mm', dropdown closed" }
+      ],
+      "evidence": {
+        "screenshots": ["modes/viewer/VAL-VIEWER-002-lens-selector.png"],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-VIEWER-003",
+      "title": "Zoom controls",
+      "status": "pass",
+      "steps": [
+        { "action": "Verify default zoom percentage", "expected": "100% displayed in mono font", "observed": "Zoom displays '100%' in font-mono text-xs text-amber-400" },
+        { "action": "Click zoom in (+) button", "expected": "Zoom increases", "observed": "Zoom increased from 100% to 110%" },
+        { "action": "Click zoom out (-) button twice", "expected": "Zoom decreases", "observed": "Zoom decreased from 110% to 100% to 90%" }
+      ],
+      "evidence": {
+        "screenshots": ["modes/viewer/VAL-VIEWER-003-zoom-90.png"],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-VIEWER-004",
+      "title": "Viewfinder frame rendering",
+      "status": "pass",
+      "steps": [
+        { "action": "Inspect viewfinder frame in viewer", "expected": "White border frame centered with L-shaped corners, crosshair, badges, AF", "observed": "Frame found with border-2 border-white/30, aspect-ratio 1.77778 (16:9). 6 absolute child elements (4 corners + crosshair + badge container). Badges: ['35mm', 'f/1.8', '16:9', 'AF']" },
+        { "action": "Verify frame dimensions match 16:9 ratio", "expected": "Width/height ratio ≈ 1.78", "observed": "Frame dimensions 666x375, actual ratio 1.78, matching expected 16:9 (1.78)" },
+        { "action": "Verify pointer-events-none and aria-hidden", "expected": "pointer-events-none on container, aria-hidden='true'", "observed": "Both attributes confirmed present" }
+      ],
+      "evidence": {
+        "screenshots": ["modes/viewer/VAL-VIEWER-004-viewfinder.png"],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-VIEWER-005",
+      "title": "Capture Take creates take entry",
+      "status": "pass",
+      "steps": [
+        { "action": "Click Capture Take pill button", "expected": "Take created with status transitioning from capturing to ready, success toast appears", "observed": "Take created. Store shows take with status 'ready' and imageUrl populated. Toast 'Take captured!' appeared with 'View' action button." }
+      ],
+      "evidence": {
+        "screenshots": ["modes/viewer/VAL-VIEWER-005-capture-take.png"],
+        "consoleErrors": "none",
+        "network": "N/A (canvas capture via worldLabsService.captureTake)"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-VIEWER-006",
+      "title": "Close button returns to canvas",
+      "status": "pass",
+      "steps": [
+        { "action": "Click close (X) button in top-right of viewer", "expected": "Return to canvas mode, viewer no longer visible", "observed": "Returned to canvas mode. WorldCard visible again with Enter World button. DOM inspection confirmed canvas[aria-label='World viewer canvas'] no longer present." }
+      ],
+      "evidence": {
+        "screenshots": ["modes/viewer/VAL-VIEWER-006-close-to-canvas.png"],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-VIEWER-007",
+      "title": "Captured take in takes grid",
+      "status": "pass",
+      "steps": [
+        { "action": "After closing viewer, scroll down to see takes grid", "expected": "Captured take visible in grid-cols-3 layout with thumbnail and camera info badges", "observed": "TAKES section visible with grid layout (grid-cols-2 sm:grid-cols-3, resolved to 3 columns at current viewport). One take card showing Panorama thumbnail with camera info badges '35mm' and 'f/1.8'." }
+      ],
+      "evidence": {
+        "screenshots": ["modes/viewer/VAL-VIEWER-007-takes-grid.png"],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-VIEWER-008",
+      "title": "Bottom viewer controls",
+      "status": "pass",
+      "steps": [
+        { "action": "Verify bottom control bar elements", "expected": "Reset camera (RotateCcw), Motion toggle (Move3D), Capture Take pill", "observed": "All three controls present with correct aria-labels and SVG icons: 'Reset camera', 'Toggle motion', 'Capture Take'" },
+        { "action": "Zoom to 120% then click Reset camera", "expected": "Zoom returns to 100%, camera transform resets", "observed": "Zoom reset from 120% to 100%. Lens confirmed at 35mm (default)." },
+        { "action": "Click motion toggle when inactive", "expected": "Amber styling when active", "observed": "Motion toggled to true. Button class changed to 'border-amber-500/40 bg-amber-500/20 text-amber-400'" },
+        { "action": "Click motion toggle again", "expected": "Zinc styling when inactive", "observed": "Motion toggled back to false. Button class changed to 'border-zinc-700/40 bg-zinc-900/70 text-zinc-400'" }
+      ],
+      "evidence": {
+        "screenshots": ["modes/viewer/VAL-VIEWER-008-motion-active.png", "modes/viewer/VAL-VIEWER-008-bottom-controls.png"],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-VIEWER-009",
+      "title": "Mouse drag orbit simulation",
+      "status": "pass",
+      "steps": [
+        { "action": "Record initial camera rotation", "expected": "Rotation at {x:0, y:0, z:0} after reset", "observed": "Camera rotation confirmed at {x:0, y:0, z:0}" },
+        { "action": "Mouse down on canvas, drag 100px right and 50px down, mouse up", "expected": "Camera rotation values change", "observed": "Camera rotation changed to {x:0.15, y:0.3, z:0} after drag. Values updated proportionally to drag distance (sensitivity 0.003)." },
+        { "action": "Release mouse", "expected": "Orbit stops", "observed": "isDraggingRef set to false on mouseUp, no further rotation changes" }
+      ],
+      "evidence": {
+        "screenshots": ["modes/viewer/VAL-VIEWER-009-before-drag.png", "modes/viewer/VAL-VIEWER-009-after-drag.png"],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "The 'Enter World' button only appears on hover over the WorldCard. After scrolling, the hover state may be lost requiring explicit mouse move to the card area before clicking.",
+      "resolved": true,
+      "resolution": "Used agent-browser scroll + mouse move to trigger hover, or used the annotated screenshot which detected the button when it was visible",
+      "affectedAssertions": ["VAL-VIEWER-001", "VAL-VIEWER-008"]
+    },
+    {
+      "description": "Seeding the Zustand store required dynamic import via browser console since window.__ZUSTAND_DEVTOOLS__ was not directly accessible. Used 'await import(\"/src/lib/stores/worldview-store.ts\")' which works in Vite dev mode.",
+      "resolved": true,
+      "resolution": "Dynamic ESM import of the store module worked correctly in Vite HMR context",
+      "affectedAssertions": ["VAL-VIEWER-001"]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 9 assertions: 9 passed, 0 failed, 0 blocked. All viewer mode features working correctly — Enter World activation, camera HUD with 5 lens options, zoom controls, viewfinder frame with correct 16:9 aspect ratio and all UI elements, capture take with toast confirmation, close button returning to canvas, takes grid display, bottom controls (reset/motion/capture), and mouse drag orbit simulation. No console errors throughout all testing."
+}

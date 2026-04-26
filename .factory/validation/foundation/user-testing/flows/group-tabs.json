@@ -1,0 +1,80 @@
+{
+  "groupId": "group-tabs",
+  "testedAt": "2026-03-13T00:00:00.000Z",
+  "isolation": {
+    "appUrl": "http://localhost:8080/kanvas?studio=worldview",
+    "browserSession": "ba5792be7323__group-tabs",
+    "authBypass": true,
+    "stateModel": "in-memory Zustand, fresh per page load"
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-TAB-001",
+      "title": "Worldview tab visible in studio navigation",
+      "status": "pass",
+      "steps": [
+        { "action": "Navigate to http://localhost:8080/kanvas", "expected": "Kanvas page loads with studio tabs visible", "observed": "Kanvas page loaded with title 'MOG STUDIO - AI Music Video Generator'" },
+        { "action": "Inspect studio navigation tabs", "expected": "Tabs: Image, Video, Lip Sync, Cinema Studio, Worldview with Globe2 icon", "observed": "All 5 tabs visible: Image, Video, Lip Sync, Cinema Studio, Worldview. Worldview tab shows globe icon and 'Worldview' label." }
+      ],
+      "evidence": {
+        "screenshots": ["foundation/group-tabs/VAL-TAB-001-studio-tabs.png"],
+        "consoleErrors": "none",
+        "network": "GET /kanvas -> 200"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-TAB-002",
+      "title": "Worldview tab activates worldview UI",
+      "status": "pass",
+      "steps": [
+        { "action": "Click the Worldview tab button", "expected": "Main content switches to worldview interface", "observed": "Content switched to Worldview UI showing 'Worldview' header, '3D Worlds' badge, scene strip with 'New Scene' button" },
+        { "action": "Check URL after click", "expected": "URL updates to ?studio=worldview", "observed": "URL is http://localhost:8080/kanvas?studio=worldview" },
+        { "action": "Verify other studio content hidden", "expected": "Image Studio content no longer visible", "observed": "Image Studio content replaced by Worldview section with scene strip and 'Create a new scene to get started' message" },
+        { "action": "Check console for errors", "expected": "No console errors", "observed": "No console errors" }
+      ],
+      "evidence": {
+        "screenshots": ["foundation/group-tabs/VAL-TAB-002-worldview-active.png"],
+        "consoleErrors": "none",
+        "network": "N/A (client-side navigation)"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-TAB-003",
+      "title": "Direct URL navigation to worldview",
+      "status": "pass",
+      "steps": [
+        { "action": "Navigate directly to http://localhost:8080/kanvas?studio=worldview", "expected": "Page loads with Worldview tab selected and worldview UI rendered", "observed": "Page loaded with Worldview tab in pressed state, worldview UI displayed with scene strip and 'New Scene' button" },
+        { "action": "Verify Worldview tab is selected", "expected": "Worldview button shows pressed state", "observed": "Worldview button has [pressed] attribute, other tabs do not" },
+        { "action": "Check console for errors", "expected": "No console errors", "observed": "No console errors" }
+      ],
+      "evidence": {
+        "screenshots": ["foundation/group-tabs/VAL-TAB-003-direct-url.png"],
+        "consoleErrors": "none",
+        "network": "GET /kanvas?studio=worldview -> 200"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-003",
+      "title": "Clean empty state on first load",
+      "status": "pass",
+      "steps": [
+        { "action": "Load Worldview tab with no existing data (fresh page load)", "expected": "Empty scene strip with just 'New Scene' button and no errors", "observed": "Scene strip shows only '+ New Scene' button. Message: 'Create a new scene to get started'. No errors." },
+        { "action": "Click 'New Scene' button to create a scene", "expected": "Scene chip appears, 'Create a 3D World' CTA appears", "observed": "Scene 1 chip appeared with amber highlight and 'x' remove button. 'Create a 3D World' CTA displayed with Globe2 icon and dashed border. Bottom prompt bar with Sparkles icon visible." },
+        { "action": "Check console for errors after scene creation", "expected": "No console errors", "observed": "No console errors" }
+      ],
+      "evidence": {
+        "screenshots": ["foundation/group-tabs/VAL-CROSS-003-empty-state.png", "foundation/group-tabs/VAL-CROSS-003-after-scene-create.png"],
+        "consoleErrors": "none",
+        "network": "N/A (in-memory state only)"
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 4 assertions: 4 passed, 0 failed. All tab integration assertions verified successfully — Worldview tab is visible in navigation, activates the correct UI on click, supports direct URL navigation, and displays a clean empty state on first load with proper 'Create a 3D World' CTA after scene creation."
+}

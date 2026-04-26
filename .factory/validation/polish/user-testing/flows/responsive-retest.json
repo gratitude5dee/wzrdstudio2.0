@@ -1,0 +1,71 @@
+{
+  "groupId": "responsive-retest",
+  "testedAt": "2026-03-13T00:00:00.000Z",
+  "isolation": {
+    "appUrl": "http://localhost:8080/kanvas?studio=worldview",
+    "browserSession": "48d0851a8879__responsive",
+    "auth": "bypass (VITE_BYPASS_AUTH_FOR_TESTS=true)"
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-POLISH-005",
+      "title": "Responsive at 768px viewport",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Set viewport to 768px width, navigate to /kanvas?studio=worldview",
+          "expected": "Page renders correctly with no horizontal overflow",
+          "observed": "Page renders correctly. document.body.scrollWidth (768) === document.body.clientWidth (768). No horizontal scrollbar."
+        },
+        {
+          "action": "Check body overflow dimensions via JS eval at 768px",
+          "expected": "scrollWidth === clientWidth",
+          "observed": "scrollWidth=768, clientWidth=768, noOverflow=true. documentScrollWidth=768, documentClientWidth=768."
+        },
+        {
+          "action": "Create 10 scenes to overflow scene strip, verify horizontal scroll within strip container",
+          "expected": "Scene strip scrolls horizontally within its container without causing body overflow",
+          "observed": "Scene strip container: scrollWidth=1350 > clientWidth=696 (overflow-x-auto working). Body remains scrollWidth=768 === clientWidth=768. No body overflow."
+        },
+        {
+          "action": "Seed takes via store (addTake with sceneId) and set viewport to 600px",
+          "expected": "Takes grid switches to 2 columns below 640px (sm breakpoint)",
+          "observed": "Takes grid has classes 'grid grid-cols-2 gap-3 sm:grid-cols-3'. Computed gridTemplateColumns='270px 270px' (2 columns). 3 take cards display in 2+1 layout."
+        },
+        {
+          "action": "Verify no horizontal overflow at 600px",
+          "expected": "body.scrollWidth === body.clientWidth at 600px",
+          "observed": "scrollWidth=600, clientWidth=600, noOverflow=true."
+        },
+        {
+          "action": "Check console errors throughout all tests",
+          "expected": "No console errors",
+          "observed": "No console errors reported."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "polish/responsive-retest/VAL-POLISH-005-768px-width.png",
+          "polish/responsive-retest/VAL-POLISH-005-scene-strip-scroll.png",
+          "polish/responsive-retest/VAL-POLISH-005-640px-takes-grid.png",
+          "polish/responsive-retest/VAL-POLISH-005-640px-takes-grid-full.png",
+          "polish/responsive-retest/VAL-POLISH-005-640px-takes-grid-scrolled.png"
+        ],
+        "consoleErrors": "none",
+        "network": "N/A (no API calls in this test)"
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "The addTake store method requires a sceneId field on the take object, not a separate sceneId parameter as suggested in the task prompt. The task prompt provided addTake(sceneId, takeObj) but the actual API is addTake({ sceneId, ...takeObj }).",
+      "resolved": true,
+      "resolution": "Inspected store source code, corrected the addTake call to include sceneId in the take object.",
+      "affectedAssertions": ["VAL-POLISH-005"]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 1 assertion (VAL-POLISH-005): PASSED. The fix in commit 8acaf80 (adding min-w-0 to flex-1 content container) successfully resolves the horizontal overflow at 768px viewport. At 768px: body scrollWidth === clientWidth (768). Scene strip scrolls horizontally within its container (scrollWidth 1350 > clientWidth 696) without causing body overflow. At 600px: takes grid correctly uses 2 columns (grid-cols-2 with computed gridTemplateColumns='270px 270px'). No console errors detected."
+}

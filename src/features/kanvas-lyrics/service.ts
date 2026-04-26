@@ -1,0 +1,221 @@
+import { supabase } from '@/integrations/supabase/client';
+import type {
+  KanvasLyricTemplate,
+  ListTemplatesFilters,
+  TemplateStatus,
+  LyricBlock,
+  CutMarker,
+} from './types';
+
+const TEMPLATE_FN = 'kanvas-lyrics-template';
+const TRANSCRIBE_FN = 'kanvas-lyrics-transcribe';
+
+async function call<T = unknown>(fn: string, body: Record<string, unknown>): Promise<T> {
+  const { data, error } = await supabase.functions.invoke(fn, { body });
+  if (error) throw new Error(error.message ?? `${fn} failed`);
+  if (data && typeof data === 'object' && 'error' in data && data.error) {
+    throw new Error(String(data.error));
+  }
+  return data as T;
+}
+
+// ---------------------------------------------------------------------------
+// Audio upload (uses existing asset-upload edge function)
+// ---------------------------------------------------------------------------
+
+export interface UploadedTemplateAudio {
+  assetId: string;
+  url: string;
+  fileName: string;
+  size: number;
+  mimeType: string;
+  durationMs: number | null;
+}
+
+const AUDIO_BUCKET = 'project-assets';
+
+/**
+ * Upload an audio file directly from the browser to Storage, then register a
+ * project_assets row via a tiny edge function. The edge function never sees
+ * the file bytes, which avoids the WORKER_RESOURCE_LIMIT (150MB) crash that
+ * the old base64-through-JSON pattern hit on real audio files.
+ */
+export async function uploadTemplateAudio(
+  file: File,
+  projectId?: string
+): Promise<UploadedTemplateAudio> {
+  const { data: { user }, error: userErr } = await supabase.auth.getUser();
+  if (userErr || !user) throw new Error('You must be signed in to upload audio');
+
+  // RLS on storage.objects requires foldername(name)[1] === auth.uid().
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
+  const storagePath = `${user.id}/lyric-audio/${crypto.randomUUID()}-${safeName}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from(AUDIO_BUCKET)
+    .upload(storagePath, file, {
+      contentType: file.type || 'audio/mpeg',
+      cacheControl: '3600',
+      upsert: false,
+    });
+  if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
+
+  // Probe duration off the network — purely client-side, near-zero memory.
+  const durationMs = await probeAudioDurationMs(file).catch(() => null);
+
+  try {
+    const res = await call<{
+      success: boolean;
+      assetId?: string;
+      asset?: { url: string };
+      url?: string;
+      error?: string;
+    }>('kanvas-lyrics-audio-register', {
+      projectId: projectId ?? null,
+      storagePath,
+      fileName: file.name,
+      mimeType: file.type || 'audio/mpeg',
+      size: file.size,
+      durationMs,
+      visibility: projectId ? 'project' : 'private',
+    });
+
+    if (!res.success || !res.assetId) {
+      throw new Error(res.error ?? 'Failed to register audio asset');
+    }
+
+    return {
+      assetId: res.assetId,
+      url: res.url ?? res.asset?.url ?? '',
+      fileName: file.name,
+      size: file.size,
+      mimeType: file.type || 'audio/mpeg',
+      durationMs,
+    };
+  } catch (err) {
+    // Best-effort cleanup so we don't leak orphan storage objects.
+    await supabase.storage.from(AUDIO_BUCKET).remove([storagePath]).catch(() => {});
+    throw err;
+  }
+}
+
+function probeAudioDurationMs(file: File): Promise<number | null> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const audio = document.createElement('audio');
+    audio.preload = 'metadata';
+    const cleanup = () => {
+      URL.revokeObjectURL(url);
+      audio.removeAttribute('src');
+    };
+    audio.onloadedmetadata = () => {
+      const ms = Number.isFinite(audio.duration) ? Math.round(audio.duration * 1000) : null;
+      cleanup();
+      resolve(ms);
+    };
+    audio.onerror = () => {
+      cleanup();
+      reject(new Error('Could not read audio metadata'));
+    };
+    audio.src = url;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Template CRUD
+// ---------------------------------------------------------------------------
+
+export interface CreateTemplateInput {
+  title?: string;
+  projectId?: string | null;
+  sourceAudioAssetId: string;
+  totalDurationMs?: number;
+  waveformPeaks?: number[];
+  selectionStartMs: number;
+  selectionDurationMs: 15000 | 20000 | 25000 | 30000;
+}
+
+export async function createTemplate(input: CreateTemplateInput): Promise<KanvasLyricTemplate> {
+  const res = await call<{ template: KanvasLyricTemplate }>(TEMPLATE_FN, {
+    action: 'create',
+    ...input,
+  });
+  return res.template;
+}
+
+export async function getTemplate(templateId: string): Promise<KanvasLyricTemplate> {
+  const res = await call<{ template: KanvasLyricTemplate }>(TEMPLATE_FN, {
+    action: 'get',
+    templateId,
+  });
+  return res.template;
+}
+
+export async function listTemplates(
+  filters: ListTemplatesFilters = {}
+): Promise<KanvasLyricTemplate[]> {
+  const res = await call<{ templates: KanvasLyricTemplate[] }>(TEMPLATE_FN, {
+    action: 'list',
+    ...filters,
+  });
+  return res.templates;
+}
+
+export interface PatchTemplateInput {
+  title?: string;
+  selection?: { startMs: number; durationMs: 15000 | 20000 | 25000 | 30000 };
+  waveformPeaks?: number[];
+  lyricBlocks?: LyricBlock[];
+  cutMarkers?: CutMarker[];
+  renderDefaults?: Record<string, unknown>;
+  status?: TemplateStatus;
+}
+
+export async function updateTemplate(
+  templateId: string,
+  patch: PatchTemplateInput
+): Promise<KanvasLyricTemplate> {
+  const res = await call<{ template: KanvasLyricTemplate }>(TEMPLATE_FN, {
+    action: 'patch',
+    templateId,
+    ...patch,
+  });
+  return res.template;
+}
+
+export async function finalizeTemplate(templateId: string): Promise<KanvasLyricTemplate> {
+  const res = await call<{ template: KanvasLyricTemplate }>(TEMPLATE_FN, {
+    action: 'finalize',
+    templateId,
+  });
+  return res.template;
+}
+
+export async function archiveTemplate(templateId: string): Promise<KanvasLyricTemplate> {
+  const res = await call<{ template: KanvasLyricTemplate }>(TEMPLATE_FN, {
+    action: 'archive',
+    templateId,
+  });
+  return res.template;
+}
+
+// ---------------------------------------------------------------------------
+// Transcription
+// ---------------------------------------------------------------------------
+
+export interface TranscribeOptions {
+  provider?: 'gmi' | 'groq';
+  languageHint?: string | null;
+  force?: boolean;
+}
+
+export async function transcribeTemplate(
+  templateId: string,
+  options: TranscribeOptions = {}
+): Promise<KanvasLyricTemplate> {
+  const res = await call<{ template: KanvasLyricTemplate }>(TRANSCRIBE_FN, {
+    templateId,
+    ...options,
+  });
+  return res.template;
+}

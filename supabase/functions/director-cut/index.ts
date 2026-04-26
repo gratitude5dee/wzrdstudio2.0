@@ -1,0 +1,404 @@
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import {
+  ExportAsset,
+  ExportSettings,
+  processAssetsRemote,
+  type ShotFailure,
+} from '../_shared/export-helpers.ts';
+
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+const EXPORT_BUCKET = 'final-exports';
+const DEFAULT_IMAGE_DURATION_MS = 5000;
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+interface TimelineAssetRow {
+  id: string;
+  position_order: number;
+  asset_type: 'image' | 'video' | 'audio';
+  source_url: string | null;
+  duration_ms: number | null;
+  metadata: Record<string, unknown> | null;
+}
+
+interface RequestBody {
+  action: 'sync' | 'create' | 'status';
+  projectId?: string;
+  jobId?: string;
+  settings?: ExportSettings;
+}
+
+
+type TimelineAssetRole = 'shot_visual' | 'voiceover' | 'sfx' | 'music';
+
+const mapRoleToSubtype = (role: TimelineAssetRole) => {
+  if (role === 'voiceover' || role === 'sfx' || role === 'music') {
+    return role;
+  }
+  return 'visual';
+};
+
+const mapTimelineAssetsToExportAssets = (assets: TimelineAssetRow[]): ExportAsset[] =>
+  assets
+    .filter((asset) => !!asset.source_url)
+    .map((asset) => {
+      const meta = (asset.metadata ?? {}) as Record<string, unknown>;
+      const role = (meta.asset_role as TimelineAssetRole) ?? 'shot_visual';
+      return {
+        id: asset.id,
+        type: asset.asset_type,
+        subtype: mapRoleToSubtype(role),
+        url: asset.source_url!,
+        duration_ms: asset.duration_ms ?? undefined,
+        order_index: asset.position_order,
+        metadata: meta,
+      };
+    });
+
+
+
+const syncTimelineAssets = async (supabaseAdmin: any, userId: string, projectId: string) => {
+  const { data: project, error: projectError } = await supabaseAdmin
+    .from('projects')
+    .select('id, user_id')
+    .eq('id', projectId)
+    .single();
+
+  if (projectError || !project || project.user_id !== userId) {
+    throw new Error('Project not found or access denied');
+  }
+
+  const { data: scenes, error: scenesError } = await supabaseAdmin
+    .from('scenes')
+    .select('id, scene_number')
+    .eq('project_id', projectId)
+    .order('scene_number', { ascending: true });
+
+  if (scenesError) {
+    throw new Error(`Failed to fetch scenes: ${scenesError.message}`);
+  }
+
+  const { data: shots, error: shotsError } = await supabaseAdmin
+    .from('shots')
+    .select(
+      'id, scene_id, shot_number, image_url, video_url, image_status, video_status, prompt_idea, visual_prompt'
+    )
+    .eq('project_id', projectId);
+
+  if (shotsError) {
+    throw new Error(`Failed to fetch shots: ${shotsError.message}`);
+  }
+
+  await supabaseAdmin.from('timeline_assets').delete().eq('project_id', projectId);
+
+  let sequenceIndex = 0;
+  let missingShots = 0;
+  let readyVideos = 0;
+  let fallbackImages = 0;
+  const rowsToInsert: Record<string, unknown>[] = [];
+
+  for (const scene of scenes || []) {
+    const sceneShots = (shots || [])
+      .filter((shot: any) => shot.scene_id === scene.id)
+      .sort((a: any, b: any) => (a.shot_number ?? 0) - (b.shot_number ?? 0));
+
+    for (const shot of sceneShots) {
+      const hasVideo = !!shot.video_url;
+      const hasImage = !!shot.image_url;
+
+      if (!hasVideo && !hasImage) {
+        missingShots += 1;
+        continue;
+      }
+
+      if (hasVideo) {
+        readyVideos += 1;
+      } else {
+        fallbackImages += 1;
+      }
+
+      rowsToInsert.push({
+        project_id: projectId,
+        scene_id: shot.scene_id,
+        shot_id: shot.id,
+        position_order: sequenceIndex,
+        asset_type: hasVideo ? 'video' : 'image',
+        source_url: hasVideo ? shot.video_url : shot.image_url,
+        duration_ms: hasVideo ? null : DEFAULT_IMAGE_DURATION_MS,
+        metadata: {
+          asset_role: 'shot_visual',
+          thumbnail_url: shot.image_url,
+          scene_number: scene.scene_number,
+          shot_number: shot.shot_number,
+          prompt_idea: shot.prompt_idea,
+          visual_prompt: shot.visual_prompt,
+          fallback_image_segment: !hasVideo,
+        },
+        user_id: userId,
+      });
+      sequenceIndex += 1;
+    }
+  }
+
+  if (rowsToInsert.length > 0) {
+    const { error: insertError } = await supabaseAdmin
+      .from('timeline_assets')
+      .insert(rowsToInsert);
+
+    if (insertError) {
+      throw new Error(`Failed to write timeline assets: ${insertError.message}`);
+    }
+  }
+
+  return {
+    totalShots: (shots || []).length,
+    syncedAssets: rowsToInsert.length,
+    readyVideos,
+    fallbackImages,
+    missingShots,
+  };
+};
+
+const runDirectorCutJob = async (
+  supabaseAdmin: any,
+  projectId: string,
+  jobId: string,
+  assets: ExportAsset[],
+  settings?: ExportSettings
+) => {
+  try {
+    await supabaseAdmin
+      .from('export_jobs')
+      .update({
+        provider: 'fal_remote',
+        provider_status: 'processing',
+        progress: 10,
+        provider_payload: { stage: 'remote_processing' },
+      })
+      .eq('id', jobId);
+
+    const { publicUrl, shotFailures } = await processAssetsRemote(
+      supabaseAdmin,
+      projectId,
+      assets,
+      jobId,
+      EXPORT_BUCKET,
+      settings
+    );
+
+    const completedPayload: Record<string, unknown> = { stage: 'completed' };
+    if (shotFailures.length > 0) {
+      completedPayload.shotFailures = shotFailures;
+      completedPayload.partialSuccess = true;
+      completedPayload.failedShotCount = shotFailures.length;
+    }
+
+    await supabaseAdmin
+      .from('export_jobs')
+      .update({
+        status: 'completed',
+        progress: 100,
+        output_url: publicUrl,
+        provider: 'fal_remote',
+        provider_status: 'completed',
+        completed_at: new Date().toISOString(),
+        provider_payload: completedPayload,
+      })
+      .eq('id', jobId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Processing failed';
+    console.error('Director cut processing failed:', message);
+    await supabaseAdmin
+      .from('export_jobs')
+      .update({
+        status: 'failed',
+        error_message: message,
+        provider_status: 'failed',
+        completed_at: new Date().toISOString(),
+      })
+      .eq('id', jobId);
+  }
+};
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Missing authorization header' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    const {
+      data: { user },
+      error: authError,
+    } = await supabaseAdmin.auth.getUser(token);
+
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const body = (await req.json()) as RequestBody;
+    const { action, projectId, jobId, settings } = body;
+
+    if (!action) {
+      return new Response(JSON.stringify({ error: 'action is required' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (action === 'status') {
+      if (!jobId) {
+        return new Response(JSON.stringify({ error: 'jobId is required for status' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const { data: job, error } = await supabaseAdmin
+        .from('export_jobs')
+        .select('*')
+        .eq('id', jobId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (error || !job) {
+        return new Response(JSON.stringify({ error: 'Job not found' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      return new Response(
+        JSON.stringify({
+          status: job.status,
+          progress: job.progress,
+          outputUrl: job.output_url,
+          error: job.error_message,
+          provider: job.provider,
+          providerStatus: job.provider_status,
+          fallbackUsed: job.fallback_used,
+          providerPayload: job.provider_payload,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (!projectId) {
+      return new Response(JSON.stringify({ error: 'projectId is required' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (action === 'sync') {
+      const summary = await syncTimelineAssets(supabaseAdmin, user.id, projectId);
+      return new Response(JSON.stringify({ success: true, summary }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (action === 'create') {
+      await syncTimelineAssets(supabaseAdmin, user.id, projectId);
+
+      const { data: timelineAssets, error: timelineError } = await supabaseAdmin
+        .from('timeline_assets')
+        .select('id, position_order, asset_type, source_url, duration_ms, metadata')
+        .eq('project_id', projectId)
+        .eq('user_id', user.id)
+        .order('position_order', { ascending: true });
+
+      if (timelineError) {
+        throw new Error(`Failed to load timeline assets: ${timelineError.message}`);
+      }
+
+      const exportAssets = mapTimelineAssetsToExportAssets(
+        (timelineAssets || []) as TimelineAssetRow[]
+      );
+      if (exportAssets.length === 0) {
+        throw new Error("No timeline assets available for Director's Cut");
+      }
+
+      const { data: job, error: jobError } = await supabaseAdmin
+        .from('export_jobs')
+        .insert({
+          project_id: projectId,
+          user_id: user.id,
+          status: 'processing',
+          progress: 5,
+          settings: settings ?? {},
+          started_at: new Date().toISOString(),
+           provider: 'fal_remote',
+          provider_status: 'queued',
+          fallback_used: false,
+          provider_payload: { stage: 'remote_processing' },
+        })
+        .select()
+        .single();
+
+      if (jobError || !job) {
+        throw new Error(`Failed to create export job: ${jobError?.message}`);
+      }
+
+      // runDirectorCutJob handles its own error recording
+      const runPromise = runDirectorCutJob(
+        supabaseAdmin,
+        projectId,
+        job.id,
+        exportAssets,
+        settings
+      );
+
+      // Edge Runtime background execution
+      // deno-lint-ignore no-explicit-any
+      const maybeEdgeRuntime = (globalThis as any).EdgeRuntime;
+      if (maybeEdgeRuntime?.waitUntil) {
+        maybeEdgeRuntime.waitUntil(runPromise);
+      } else {
+        runPromise.catch(() => undefined);
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          status: 'processing',
+          jobId: job.id,
+          progress: 5,
+          provider: 'fal_remote',
+          providerStatus: 'queued',
+          fallbackUsed: false,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    return new Response(JSON.stringify({ error: `Unsupported action: ${action}` }), {
+      status: 400,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (error) {
+    console.error('director-cut error:', error);
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+});

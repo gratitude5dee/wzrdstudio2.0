@@ -1,0 +1,269 @@
+{
+  "groupId": "color-migration",
+  "testedAt": "2026-03-14T12:00:00Z",
+  "isolation": {
+    "appUrl": "http://localhost:8080",
+    "browserSession": "1dcc008a7d12__color-migration",
+    "repoRoot": "/Users/gratitud3/Downloads/mogstudio-repo",
+    "approach": "CODE AUDIT via grep + browser visual verification"
+  },
+  "toolsUsed": ["grep", "agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-COLOR-001",
+      "title": "Green Accents Replaced with Orange/Amber Globally",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run grep -rn 'green-|emerald-' src/ for all .tsx/.ts/.css files",
+          "expected": "No non-exempt green/emerald Tailwind classes",
+          "observed": "8 green Tailwind class usages found — all are exempt (3 online indicators: ProfileButton, CollaboratorsPanel, ProfilePopup; 5 success states: QueueIndicator check, StorylineProgress check/done, GenerationHistory completed badge)"
+        },
+        {
+          "action": "Visual inspection of landing page via browser screenshot",
+          "expected": "Orange/amber accents throughout, no green accents",
+          "observed": "Landing page displays orange/amber for all accent elements (buttons, badges, icons, CTAs). No green accents visible."
+        },
+        {
+          "action": "Visual inspection of /home dashboard via browser screenshot",
+          "expected": "Orange/amber accents throughout, no green accents",
+          "observed": "Dashboard shows orange/amber for navigation highlights, buttons, stat cards. No green accent colors visible."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "landing-polish/color-migration/VAL-COLOR-001-landing-page.png",
+          "landing-polish/color-migration/VAL-COLOR-008-home-page.png"
+        ],
+        "consoleErrors": "none",
+        "grepAudit": "landing-polish/color-migration/grep-audit-full.txt"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-COLOR-002",
+      "title": "Green Exemption — Online Presence Indicators",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Identify all bg-green-500 usages in src/",
+          "expected": "Only in ProfileButton, ProfilePopup, CollaboratorsPanel for online status dots",
+          "observed": "Found exactly 3 bg-green-500 usages: (1) ProfileButton.tsx:25 — online status dot, (2) CollaboratorsPanel.tsx:95 — avatar online dot, (3) ProfilePopup.tsx:137 — online status dot. All are online presence indicators."
+        }
+      ],
+      "evidence": {
+        "grepResults": "bg-green-500 found in: ProfileButton.tsx:25, CollaboratorsPanel.tsx:95, ProfilePopup.tsx:137",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-COLOR-003",
+      "title": "Green Exemption — Success Check Marks",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Identify all text-green-500 and text-green-400 usages in src/",
+          "expected": "Only in success/completion state contexts",
+          "observed": "Found 4 usages: (1) QueueIndicator.tsx:103 — text-green-400 on Check icon for completed queue items, (2) StorylineProgress.tsx:53 — text-green-500 on Check icon for completed steps, (3) StorylineProgress.tsx:76 — text-green-500 for 'isDone' state text, (4) GenerationHistory.tsx:139 — bg-green-500/10 text-green-500 for 'completed' status badge. All are semantic success/completion states."
+        }
+      ],
+      "evidence": {
+        "grepResults": "text-green-400: QueueIndicator.tsx:103 (Check icon). text-green-500: StorylineProgress.tsx:53,76 (Check icon, done state). bg-green-500/10 text-green-500: GenerationHistory.tsx:139 (completed status badge).",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-COLOR-004",
+      "title": "Color Migration — Project Setup Components",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run grep -rn 'green-|emerald-' src/components/project-setup/",
+          "expected": "Only exempt success-state green usages",
+          "observed": "Found 2 usages in StorylineProgress.tsx — both are exempt success check marks (text-green-500 on Check icon at line 53, text-green-500 for isDone state at line 76). No non-exempt green/emerald accent usages in FormatSelector, NavigationFooter, DynamicConceptForm, or StorylineProgress active states."
+        }
+      ],
+      "evidence": {
+        "grepResults": "StorylineProgress.tsx:53 text-green-500 (exempt: success check), StorylineProgress.tsx:76 text-green-500 (exempt: done state). No other green/emerald in project-setup/.",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-COLOR-005",
+      "title": "Color Migration — Studio Components",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run grep -rn 'green-|emerald-' src/components/studio/",
+          "expected": "Only exempt success-state green usages",
+          "observed": "Found 1 usage in QueueIndicator.tsx:103 — text-green-400 on Check icon for completed items (exempt success check mark). No other green/emerald in studio nodes, panels, or blocks."
+        },
+        {
+          "action": "Check studio theme.ts for primary color",
+          "expected": "Primary color migrated to orange/amber, no #50EF12",
+          "observed": "src/lib/studio/theme.ts has accent.primary: '#F59E0B' (amber) and accent.purple: '#FF6B4A' (coral). No #50EF12. Running glow uses rgba(245,158,11) amber. connections.data is '#10B981' which is semantic green for data-type connection lines (not an accent color)."
+        }
+      ],
+      "evidence": {
+        "grepResults": "QueueIndicator.tsx:103 text-green-400 (exempt: success check). theme.ts accent.primary = '#F59E0B' (amber).",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-COLOR-006",
+      "title": "Color Migration — Editor & Timeline Components",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run grep -rn 'green-|emerald-' src/components/editor/ and timeline/",
+          "expected": "No green/emerald Tailwind classes",
+          "observed": "Zero matches in src/components/editor/ and src/components/editor/timeline/. No green/emerald Tailwind classes."
+        },
+        {
+          "action": "Check editorColors.ts for accent definitions",
+          "expected": "Green accent colors migrated to orange/amber",
+          "observed": "src/lib/editorColors.ts contains accentGreen: 'hsl(158,64%,52%)', activeGreen: 'hsl(105,100%,53%)', playheadGreen: 'hsl(158,64%,52%)' with green HSL values. HOWEVER, grep confirms EDITOR_COLORS is NOT imported or referenced anywhere in the codebase — this is dead code. The editor components themselves use no green."
+        }
+      ],
+      "evidence": {
+        "grepResults": "0 green/emerald Tailwind classes in editor/ and timeline/. editorColors.ts has green JS constants but EDITOR_COLORS is not imported/used anywhere (dead code).",
+        "consoleErrors": "none"
+      },
+      "issues": "Note: editorColors.ts contains stale green color values (accentGreen, activeGreen, playheadGreen, selected) as JS constants, but these are dead code — not imported or referenced by any component. Recommend cleanup in a future pass."
+    },
+    {
+      "id": "VAL-COLOR-007",
+      "title": "Color Migration — Landing Components",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run grep -rn 'green-|emerald-' src/components/landing/",
+          "expected": "No green/emerald Tailwind classes",
+          "observed": "Zero green/emerald Tailwind class matches. TestimonialStream.tsx uses 'green' as a TypeScript type key but maps it to 'orange-400' — properly migrated."
+        },
+        {
+          "action": "Visual verification of landing page",
+          "expected": "Orange/amber accents in PricingSection, testimonials, etc.",
+          "observed": "Landing page screenshot confirms orange/amber accent colors on all sections including hero, features, trust indicators, and CTAs."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "landing-polish/color-migration/VAL-COLOR-001-landing-page.png",
+          "landing-polish/color-migration/VAL-COLOR-007-landing-sections.png"
+        ],
+        "grepResults": "0 green/emerald Tailwind classes in landing/. TestimonialStream.tsx 'green' key maps to 'orange-400' (migrated).",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-COLOR-008",
+      "title": "Color Migration — Home & Other Pages",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run grep -rn 'green-|emerald-' src/components/home/ and src/pages/",
+          "expected": "No green/emerald Tailwind classes in home or pages",
+          "observed": "Zero green/emerald Tailwind class matches in src/components/home/ and src/pages/."
+        },
+        {
+          "action": "Check JudgePanel.tsx for green references",
+          "expected": "No green accent usage",
+          "observed": "JudgePanel.tsx has color: 'green' as a data property for one judge card, which dynamically generates ring-green-500 and text-green-400 via template literals (ring-${color}-500). NOTE: Dynamic Tailwind classes constructed via string interpolation are typically purged by Tailwind JIT and won't render in production. This is a minor finding."
+        },
+        {
+          "action": "Visual verification of /home dashboard",
+          "expected": "Orange/amber accents, no green",
+          "observed": "Dashboard screenshot confirms orange/amber navigation highlights, stat cards, and buttons. No green accent colors visible."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "landing-polish/color-migration/VAL-COLOR-008-home-page.png"
+        ],
+        "grepResults": "0 green/emerald Tailwind classes in home/ and pages/. JudgePanel.tsx has dynamic color: 'green' (1 judge) — likely purged by Tailwind JIT.",
+        "consoleErrors": "none"
+      },
+      "issues": "Minor: JudgePanel.tsx uses dynamic color: 'green' for one judge card generating ring-green-500/text-green-400 via template literals. These dynamic classes are typically purged by Tailwind's JIT compiler. Recommend changing to 'orange' for consistency."
+    },
+    {
+      "id": "VAL-COLOR-009",
+      "title": "Color Migration — CSS Custom Properties",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Check index.css for --accent-emerald and --cyber-neon-green",
+          "expected": "Migrated to orange/amber values or removed",
+          "observed": "Both CSS custom properties exist with migrated VALUES: --cyber-neon-green: 25 95% 53% (hue 25 = orange), --accent-emerald: 25 95% 53% (hue 25 = orange), --quantum-green: 25 95% 53% (hue 25 = orange). Variable names retained but values are orange."
+        },
+        {
+          "action": "Check light-premium.css for --accent-emerald",
+          "expected": "Migrated or removed",
+          "observed": "light-premium.css:36 has --accent-emerald: 25 95% 53% — migrated to orange value."
+        },
+        {
+          "action": "Check studio theme.ts for primary: '#50EF12'",
+          "expected": "Migrated to orange/amber",
+          "observed": "src/lib/studio/theme.ts accent.primary is '#F59E0B' (amber). No '#50EF12' found in theme.ts. '#50EF12' only exists in ColorPicker.tsx as a preset in a general-purpose color picker (user-selectable color, not app accent)."
+        }
+      ],
+      "evidence": {
+        "cssInspection": "index.css:166 --cyber-neon-green: 25 95% 53% (orange hue), index.css:237 --quantum-green: 25 95% 53% (orange hue), index.css:303 --accent-emerald: 25 95% 53% (orange hue), light-premium.css:36 --accent-emerald: 25 95% 53% (orange hue). theme.ts accent.primary: '#F59E0B' (amber).",
+        "consoleErrors": "none"
+      },
+      "issues": "Note: CSS custom property NAMES still contain 'green' and 'emerald' (--cyber-neon-green, --accent-emerald, --quantum-green) but their VALUES have been migrated to orange (HSL hue 25). Consider renaming variables for clarity in a future pass."
+    },
+    {
+      "id": "VAL-COLOR-010",
+      "title": "Total Remaining Green Count Under Threshold",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Count all green/emerald Tailwind class usages in src/ (excluding test files)",
+          "expected": "15 or fewer non-exempt usages",
+          "observed": "Total green Tailwind class usages: 8 across 6 files. Exempt usages: 8 (3 bg-green-500 online indicators in ProfileButton, CollaboratorsPanel, ProfilePopup; 1 text-green-400 success check in QueueIndicator; 2 text-green-500 success states in StorylineProgress; 2 green-500 completion states in GenerationHistory). Non-exempt: 0 explicit Tailwind classes. JudgePanel has 1 dynamic 'green' data property (likely purged by JIT). Total non-exempt ≤ 2, well under 15 threshold."
+        }
+      ],
+      "evidence": {
+        "grepCount": "8 total green Tailwind class occurrences in 6 files. 8 exempt (online + success). 0-2 non-exempt (JudgePanel dynamic, likely purged). Threshold: ≤15. PASS.",
+        "fileBreakdown": {
+          "ProfileButton.tsx": "1 (bg-green-500, online indicator)",
+          "CollaboratorsPanel.tsx": "1 (bg-green-500, online indicator)",
+          "ProfilePopup.tsx": "1 (bg-green-500, online indicator)",
+          "QueueIndicator.tsx": "1 (text-green-400, success check)",
+          "StorylineProgress.tsx": "2 (text-green-500, success check + done state)",
+          "GenerationHistory.tsx": "2 (bg-green-500/10 + text-green-500, completed badge)"
+        },
+        "consoleErrors": "none"
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "editorColors.ts contains stale green color values (accentGreen, activeGreen, playheadGreen, selected) as JS constants. These are dead code — not imported by any component — but could cause confusion.",
+      "resolved": false,
+      "resolution": null,
+      "affectedAssertions": ["VAL-COLOR-006"]
+    },
+    {
+      "description": "CSS custom property names retain green/emerald terminology (--cyber-neon-green, --accent-emerald, --quantum-green) even though values have been migrated to orange. The naming mismatch could confuse future developers.",
+      "resolved": false,
+      "resolution": null,
+      "affectedAssertions": ["VAL-COLOR-009"]
+    },
+    {
+      "description": "JudgePanel.tsx uses dynamic Tailwind class construction via template literals (ring-${color}-500) with a 'green' data value. Dynamic classes are typically purged by Tailwind JIT compiler.",
+      "resolved": false,
+      "resolution": null,
+      "affectedAssertions": ["VAL-COLOR-008", "VAL-COLOR-010"]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 10 assertions: all 10 passed. The color migration from green/emerald to orange/amber is complete across the codebase. All 8 remaining green Tailwind classes are legitimate exemptions (3 online status indicators, 5 success/completion states). CSS custom properties have migrated values (hue 25 = orange) despite retaining green/emerald variable names. Studio theme.ts primary is amber (#F59E0B). Minor findings: editorColors.ts has unused green constants (dead code), JudgePanel has one dynamic green reference (likely JIT-purged), and CSS variable names could be renamed for clarity."
+}

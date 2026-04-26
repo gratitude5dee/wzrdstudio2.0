@@ -1,0 +1,33 @@
+{
+  "milestone": "misc-polish-1",
+  "round": 1,
+  "status": "pass",
+  "validatorsRun": {
+    "test": { "passed": true, "command": "npx vitest run src/lib/stores/__tests__/worldview-store.test.ts src/services/__tests__/worldLabsService.test.ts", "exitCode": 0 },
+    "typecheck": { "passed": true, "command": "npx tsc --noEmit", "exitCode": 0 },
+    "lint": { "passed": true, "command": "npm run lint", "exitCode": 1, "note": "694 pre-existing errors, 60 warnings — zero new errors from worldview files" }
+  },
+  "reviewsSummary": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "failedFeatures": []
+  },
+  "blockingIssues": [],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Clarify that mission-created files (worldLabsService.ts, worldview-store.ts, WorldviewSection.tsx, etc.) are modifiable in subsequent milestones. The current wording 'Do NOT modify existing services (src/services/) — only create the new worldLabsService.ts' was written for the foundation milestone and doesn't account for polish/fix milestones where mission-created files need updating.",
+      "evidence": "The misc-scrutiny-fixes feature correctly modified src/services/worldLabsService.ts to add imageUrl parameter to generateWorld(), which technically conflicts with the AGENTS.md boundary. The worker proceeded correctly — the boundary needs rewording.",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "Edge function generateBody object has inconsistent indentation after refactoring to support conditional image_url field",
+      "reason": "Cosmetic indentation in a Deno edge function file that isn't covered by the project's prettier/eslint formatting pipeline. Too minor and localized to warrant a shared state update."
+    }
+  ],
+  "previousRound": null
+}

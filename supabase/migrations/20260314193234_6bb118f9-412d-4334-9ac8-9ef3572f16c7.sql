@@ -1,0 +1,1 @@
+ALTER TABLE public.projects ADD COLUMN short_film_data jsonb DEFAULT NULL;

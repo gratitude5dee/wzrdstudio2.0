@@ -1,0 +1,34 @@
+{
+  "featureId": "studio-ui-layout-fixes",
+  "reviewedAt": "2026-03-14T14:30:00.000Z",
+  "commitId": "f09254a",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "All three layout changes are correctly implemented. (1) Shortcuts button moved 28px left (left-[84px] → left-[56px]), within the 25-30px requirement; overlay was already viewport-centered via translate-x/y-1/2. (2) QueueIndicator relocated from fixed bottom-right to fixed top-[74px] left-4 (top-left of canvas area); animation direction appropriately flipped from y:20 to y:-20; all expand/collapse, progress bars, and item listing functionality retained. (3) WorkflowGeneratorTab integrated as a new 'Generate' tab in StudioRightPanel with Sparkles icon, proper type union extension, and onWorkflowGenerated prop threading; old floating StudioWorkflowLauncher import and rendering removed from StudioCanvas; StudioPage correctly routes onWorkflowGenerated to StudioRightPanel instead of StudioCanvas.",
+    "issues": [
+      {
+        "file": "src/components/studio/QueueIndicator.tsx",
+        "line": 16,
+        "severity": "non_blocking",
+        "description": "The 'rightOffsetPx' prop remains in the QueueIndicatorProps interface but is no longer destructured or used anywhere in the component. This is dead interface code that should be cleaned up."
+      },
+      {
+        "file": "src/components/studio/StudioWorkflowLauncher.tsx",
+        "line": 1,
+        "severity": "non_blocking",
+        "description": "StudioWorkflowLauncher component file still exists but is no longer imported by any production code (only its test file). It is effectively dead code. The feature description only required removing it from StudioCanvas, so this is acceptable, but the file could be cleaned up in a follow-up."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "Worker left the unused 'rightOffsetPx' prop in QueueIndicatorProps interface after removing its usage. AGENTS.md does not explicitly mention cleaning up dead interface props when removing features. This is a minor convention gap — could note that prop interfaces should be cleaned up when removing usage sites.",
+      "evidence": "src/components/studio/QueueIndicator.tsx:16 — 'rightOffsetPx?: number' still in interface but not destructured at line 23"
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Feature passes review. All three layout requirements are correctly implemented: shortcuts button moved 28px left, QueueIndicator relocated to top-left with all functionality intact, and workflow generator moved from floating popover to a new 'Generate' tab in the right panel. The old floating popover was properly removed from StudioCanvas. Two non-blocking cleanup issues noted: a dead interface prop in QueueIndicator and the now-unused StudioWorkflowLauncher component file. TypeScript typecheck passed, existing tests continue to pass, and worker performed interactive verification."
+}

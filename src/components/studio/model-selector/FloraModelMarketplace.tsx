@@ -1,0 +1,611 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Check, ChevronDown, ChevronRight, Info, Pin, Search } from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Switch } from '@/components/ui/switch';
+import {
+  useCatalogModels,
+  type CatalogMediaType,
+  type CatalogModelSummary,
+  type CatalogUiGroup,
+} from '@/hooks/useCatalogModels';
+import { cn } from '@/lib/utils';
+
+interface MarketplaceModel extends CatalogModelSummary {
+  capabilities: string[];
+  isNew?: boolean;
+  isPinned?: boolean;
+  multiModelEligible: boolean;
+  providerKey: string;
+  providerLabel: string;
+}
+
+interface MarketplaceProviderGroup {
+  key: string;
+  label: string;
+  models: MarketplaceModel[];
+}
+
+export interface FloraModelMarketplaceValue {
+  auto: boolean;
+  selectedModelIds: string[];
+  useMultipleModels: boolean;
+}
+
+interface FloraModelMarketplaceProps {
+  mediaType: CatalogMediaType;
+  value: FloraModelMarketplaceValue;
+  onChange: (value: FloraModelMarketplaceValue) => void;
+  uiGroup?: CatalogUiGroup;
+  className?: string;
+  compact?: boolean;
+  align?: 'start' | 'center' | 'end';
+  triggerVariant?: 'toolbar' | 'dock';
+  collisionBoundary?: HTMLElement | null;
+  portalContainer?: HTMLElement | null;
+  maxContentHeight?: number | string;
+}
+
+const PINNED_MODELS: Partial<Record<CatalogMediaType, string[]>> = {
+  image: [
+    'gmi/seedream-5.0-lite',
+    'gmi/gemini-3.1-flash-image-preview',
+    'fal-ai/nano-banana-pro',
+  ],
+  video: [
+    'gmi/veo3',
+    'gmi/kling-v3-omni',
+    'fal-ai/kling-video/o3/standard/text-to-video',
+  ],
+  text: [
+    'gmi/deepseek-r1',
+    'google/gemini-2.5-flash',
+    'openai/gpt-5',
+  ],
+  audio: [
+    'gmi/minime-talks-workflow',
+    'fal-ai/elevenlabs/tts/turbo-v2.5',
+  ],
+};
+
+const NEW_MODELS = new Set<string>([
+  'gmi/seedream-5.0-lite',
+  'gmi/gemini-3.1-flash-image-preview',
+  'gmi/kling-v3-omni',
+  'gmi/deepseek-r1',
+  'gmi/openai-o4-mini',
+  'gmi/wan2.6-t2v',
+  'gmi/minimax-hailuo-2.3',
+  'gmi/pixverse-v5-t2v',
+  'gmi/veo3',
+  'gmi/veo3-fast',
+  'gmi/luma-ray2',
+]);
+
+function getProviderLabel(provider?: string, modelId?: string): string {
+  if (provider === 'gmi-cloud' || modelId?.startsWith('gmi/')) {
+    return 'GMI Cloud';
+  }
+  if (provider === 'lovable-ai') {
+    return 'Lovable AI';
+  }
+  if (!provider) {
+    return 'Other';
+  }
+
+  return provider
+    .split(/[-_/\s]+/)
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ');
+}
+
+function inferCapabilities(model: CatalogModelSummary): string[] {
+  const capabilities = new Set<string>();
+
+  if (model.media_type === 'text') capabilities.add('T');
+  if (model.media_type === 'image') capabilities.add('I');
+  if (model.media_type === 'video') capabilities.add('V');
+  if (model.media_type === 'audio') capabilities.add('A');
+  if (model.supports.includes('image_url') || model.supports.includes('image_urls')) capabilities.add('R');
+  if (model.supports.includes('num_images') || model.supports.includes('batch')) capabilities.add('B');
+  if (model.supports.includes('style') || model.workflow_type.includes('edit')) capabilities.add('S');
+  if (model.supports.includes('prompt')) capabilities.add('P');
+
+  return Array.from(capabilities);
+}
+
+function toMarketplaceModel(mediaType: CatalogMediaType, model: CatalogModelSummary): MarketplaceModel {
+  const providerLabel = getProviderLabel(model.provider, model.id);
+  const providerKey = providerLabel.toLowerCase();
+
+  return {
+    ...model,
+    capabilities: inferCapabilities(model),
+    isPinned: (PINNED_MODELS[mediaType] ?? []).includes(model.id),
+    isNew: NEW_MODELS.has(model.id),
+    multiModelEligible: model.ui_group === 'generation',
+    providerKey,
+    providerLabel,
+  };
+}
+
+function groupProviders(models: MarketplaceModel[]): MarketplaceProviderGroup[] {
+  const grouped = new Map<string, MarketplaceProviderGroup>();
+
+  for (const model of models) {
+    const existing = grouped.get(model.providerKey);
+    if (existing) {
+      existing.models.push(model);
+      continue;
+    }
+
+    grouped.set(model.providerKey, {
+      key: model.providerKey,
+      label: model.providerLabel,
+      models: [model],
+    });
+  }
+
+  return Array.from(grouped.values()).sort((left, right) => {
+    if (left.key === 'gmi cloud') return -1;
+    if (right.key === 'gmi cloud') return 1;
+    return left.label.localeCompare(right.label);
+  });
+}
+
+function getSummaryLabel(value: FloraModelMarketplaceValue, models: MarketplaceModel[]): string {
+  const primary = value.selectedModelIds[0];
+  const primaryModel = primary ? models.find((model) => model.id === primary) : undefined;
+  const primaryLabel = primaryModel?.name ?? primary ?? 'Select model';
+
+  if (value.useMultipleModels && value.selectedModelIds.length > 1) {
+    return `${primaryLabel} +${value.selectedModelIds.length - 1}`;
+  }
+
+  return primaryLabel;
+}
+
+function getSummaryModel(value: FloraModelMarketplaceValue, models: MarketplaceModel[]) {
+  const primary = value.selectedModelIds[0];
+  return primary ? models.find((model) => model.id === primary) : undefined;
+}
+
+function filterModel(model: MarketplaceModel, query: string): boolean {
+  if (!query) {
+    return true;
+  }
+
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+
+  return [
+    model.name,
+    model.description,
+    model.providerLabel,
+    model.id,
+  ].some((value) => value.toLowerCase().includes(normalized));
+}
+
+export function FloraModelMarketplace({
+  mediaType,
+  value,
+  onChange,
+  uiGroup = 'generation',
+  className,
+  compact = false,
+  align = 'start',
+  triggerVariant = 'dock',
+  collisionBoundary,
+  portalContainer,
+  maxContentHeight,
+}: FloraModelMarketplaceProps) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [activeProviderKey, setActiveProviderKey] = useState<string | null>(null);
+  const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
+  const { models: catalogModels } = useCatalogModels({
+    mediaType,
+    uiGroup,
+    autoFetch: true,
+  });
+
+  const togglePin = useCallback((modelId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setPinnedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(modelId)) {
+        next.delete(modelId);
+      } else {
+        next.add(modelId);
+      }
+      return next;
+    });
+  }, []);
+
+  const allModels = useMemo(
+    () => catalogModels.map((model) => toMarketplaceModel(mediaType, model)),
+    [catalogModels, mediaType]
+  );
+  const pinnedModels = useMemo(
+    () => allModels.filter((model) => model.isPinned && filterModel(model, search)),
+    [allModels, search]
+  );
+  const providers = useMemo(() => {
+    const raw = groupProviders(allModels)
+      .map((provider) => ({
+        ...provider,
+        models: provider.models.filter((model) => filterModel(model, search)),
+      }))
+      .filter((provider) => provider.models.length > 0);
+    return raw;
+  }, [allModels, search]);
+  const featuredModels = useMemo(() => {
+    const allModels = providers.flatMap((provider) => provider.models);
+    const pinned = pinnedModels.slice(0, 3);
+    if (pinned.length > 0) {
+      return pinned;
+    }
+    return allModels.slice(0, 4);
+  }, [pinnedModels, providers]);
+
+  useEffect(() => {
+    if (providers.length === 0) {
+      setActiveProviderKey(null);
+      return;
+    }
+
+    const selectedProviderKey = value.selectedModelIds
+      .map((modelId) => allModels.find((model) => model.id === modelId)?.providerKey)
+      .find(Boolean);
+
+    const nextProviderKey =
+      selectedProviderKey && providers.some((provider) => provider.key === selectedProviderKey)
+        ? selectedProviderKey
+        : activeProviderKey && providers.some((provider) => provider.key === activeProviderKey)
+          ? activeProviderKey
+          : providers[0]?.key ?? null;
+
+    if (nextProviderKey !== activeProviderKey) {
+      setActiveProviderKey(nextProviderKey);
+    }
+  }, [activeProviderKey, allModels, providers, value.selectedModelIds]);
+
+  const updateSelection = (next: Partial<FloraModelMarketplaceValue>) => {
+    const merged: FloraModelMarketplaceValue = {
+      auto: value.auto,
+      selectedModelIds: value.selectedModelIds,
+      useMultipleModels: value.useMultipleModels,
+      ...next,
+    };
+
+    const uniqueIds = Array.from(new Set(merged.selectedModelIds.filter(Boolean)));
+    const normalizedIds =
+      merged.useMultipleModels || uniqueIds.length <= 1 ? uniqueIds : uniqueIds.slice(0, 1);
+    onChange({
+      ...merged,
+      selectedModelIds: normalizedIds,
+      useMultipleModels: merged.useMultipleModels,
+    });
+  };
+
+  const toggleModel = (modelId: string) => {
+    if (!value.useMultipleModels) {
+      updateSelection({
+        selectedModelIds: [modelId],
+      });
+      setOpen(false);
+      return;
+    }
+
+    const nextIds = value.selectedModelIds.includes(modelId)
+      ? value.selectedModelIds.filter((id) => id !== modelId)
+      : [...value.selectedModelIds, modelId];
+
+    updateSelection({
+      selectedModelIds: nextIds.length > 0 ? nextIds : [modelId],
+      useMultipleModels: nextIds.length > 1,
+    });
+  };
+
+  const summaryModel = getSummaryModel(value, allModels);
+  const isToolbarVariant = triggerVariant === 'toolbar';
+  const resolvedMaxHeight = maxContentHeight ?? (isToolbarVariant ? 'min(432px, calc(100vh - 168px))' : 'min(560px, calc(100vh - 144px))');
+  const providerListMaxHeight = isToolbarVariant ? 'min(248px, calc(100vh - 336px))' : 'min(360px, calc(100vh - 300px))';
+  const rightPaneMaxHeight = isToolbarVariant ? 'min(352px, calc(100vh - 240px))' : 'min(452px, calc(100vh - 220px))';
+  const resolvedWidth = isToolbarVariant ? 'min(760px, calc(100vw - 48px))' : 'min(860px, calc(100vw - 64px))';
+  const activeProvider = providers.find((provider) => provider.key === activeProviderKey) ?? providers[0] ?? null;
+
+  const renderModelRow = (model: MarketplaceModel, compactRow = false) => {
+    const isSelected = value.selectedModelIds.includes(model.id);
+    const isPinned = pinnedIds.has(model.id) || model.isPinned;
+
+    return (
+      <button
+        key={model.id}
+        type="button"
+        onClick={() => toggleModel(model.id)}
+        className={cn(
+          'group relative flex w-full items-start gap-3 text-left transition-all duration-150',
+          compactRow
+            ? 'rounded-[14px] px-3 py-2'
+            : isToolbarVariant
+              ? 'rounded-[16px] px-3 py-2.5'
+              : 'rounded-[18px] px-3.5 py-3',
+          isSelected
+            ? 'border-l-[3px] border-l-[#f97316] border-y border-r border-y-[rgba(249,115,22,0.12)] border-r-[rgba(249,115,22,0.12)] bg-[#1a1510]'
+            : 'border border-[rgba(249,115,22,0.06)] bg-[#121212] hover:border-[rgba(249,115,22,0.15)] hover:bg-[#161616]'
+        )}
+      >
+        <div className={cn(
+          'mt-0.5 flex flex-none items-center justify-center rounded-xl border border-[rgba(249,115,22,0.1)] bg-[#1D1D1D] text-[10px] font-semibold tracking-wide text-zinc-300',
+          compactRow ? 'h-8 w-8' : 'h-9 w-9'
+        )}>
+          {model.providerLabel.slice(0, 2).toUpperCase()}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <span className={cn('truncate font-medium text-white', compactRow ? 'text-[13px]' : 'text-sm')}>{model.name}</span>
+            {model.credits === 0 ? (
+              <span className="inline-flex h-[18px] items-center rounded-full border border-emerald-500/25 bg-emerald-950 px-1.5 text-[9px] font-semibold uppercase tracking-wider text-emerald-300">
+                Free
+              </span>
+            ) : null}
+            {model.isNew ? (
+              <span className="inline-flex h-[18px] items-center rounded-full border border-[#fb923c]/25 bg-[#251c0e] px-1.5 text-[9px] font-semibold uppercase tracking-wider text-[#fdba74]">
+                New
+              </span>
+            ) : null}
+          </div>
+          <div className={cn('text-xs leading-relaxed text-zinc-500', compactRow ? 'mt-0.5 line-clamp-1' : 'mt-0.5 line-clamp-2')}>
+            {model.description}
+          </div>
+          <div className={cn('flex items-center gap-0 text-[10px] text-zinc-500', compactRow ? 'mt-1' : 'mt-1.5')}>
+            <span className="text-zinc-400">⊕{model.credits}</span>
+            <span className="mx-1.5 text-zinc-600">·</span>
+            <span>{model.time}</span>
+            {model.capabilities.map((capability, i) => (
+              <span key={`${model.id}-${capability}`} className="contents">
+                <span className="mx-1.5 text-zinc-600">·</span>
+                <span>{capability}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="flex flex-col items-end gap-1.5 pt-0.5">
+          <button
+            type="button"
+            onClick={(e) => togglePin(model.id, e)}
+            className={cn(
+              'flex h-5 w-5 items-center justify-center rounded-md transition-all',
+              isPinned
+                ? 'text-[#f97316]'
+                : 'text-zinc-600 opacity-0 group-hover:opacity-100 hover:text-zinc-400'
+            )}
+          >
+            <Pin className={cn('h-3 w-3', isPinned && 'fill-current')} />
+          </button>
+          {isSelected ? (
+            <div className="flex h-4.5 w-4.5 items-center justify-center rounded-full bg-[#f97316]">
+              <Check className="h-3 w-3 text-black" />
+            </div>
+          ) : (
+            <div className="h-4.5 w-4.5 rounded-full border border-[rgba(249,115,22,0.12)] bg-[#101010]" />
+          )}
+        </div>
+      </button>
+    );
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          className={cn(
+            'justify-between gap-2 border border-[rgba(249,115,22,0.15)] text-left text-xs font-medium text-zinc-200 hover:bg-[#1D1D1D]',
+            isToolbarVariant
+              ? 'h-9 min-w-[164px] rounded-[13px] bg-[#121212] px-2.5 shadow-[0_10px_24px_rgba(0,0,0,0.2)]'
+              : 'h-12 min-w-[220px] rounded-[18px] bg-[#181818] px-3 shadow-[0_10px_24px_rgba(0,0,0,0.25)]',
+            compact ? 'min-w-[156px]' : null,
+            className
+          )}
+        >
+          <span className="flex min-w-0 items-center gap-2">
+            <span
+              className={cn(
+                'flex flex-none items-center justify-center border border-[rgba(249,115,22,0.12)] bg-[#232323] text-[10px] font-semibold text-zinc-200',
+                isToolbarVariant ? 'h-5 w-5 rounded-full' : 'h-6 w-6 rounded-full'
+              )}
+            >
+              {(summaryModel?.providerLabel ?? 'M').slice(0, 1)}
+            </span>
+            <span className="truncate">{getSummaryLabel(value, allModels)}</span>
+          </span>
+          <ChevronDown className="h-3.5 w-3.5 flex-none text-zinc-500" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align={align}
+        side="bottom"
+        alignOffset={isToolbarVariant ? 0 : 2}
+        collisionBoundary={collisionBoundary ?? undefined}
+        container={portalContainer ?? undefined}
+        collisionPadding={{ top: 12, left: 16, right: 16, bottom: 16 }}
+        sideOffset={isToolbarVariant ? 8 : 10}
+        className={cn(
+          'border border-[rgba(249,115,22,0.12)] bg-[#0f0f0f]/98 p-0 text-white shadow-[0_0_12px_rgba(249,115,22,0.06),0_28px_90px_rgba(0,0,0,0.58)] backdrop-blur-2xl',
+          isToolbarVariant ? 'rounded-[22px]' : 'rounded-[28px]'
+        )}
+        style={{ maxHeight: resolvedMaxHeight, width: resolvedWidth }}
+      >
+        <div className={cn('flex max-h-full flex-col gap-3 overflow-hidden', isToolbarVariant ? 'p-3' : 'p-3.5')}>
+          {/* Search bar with keyboard hint */}
+          <div className="flex items-center gap-2 rounded-[16px] border border-[rgba(249,115,22,0.1)] bg-[#171717] px-3">
+            <Search className="h-4.5 w-4.5 flex-none text-zinc-500" />
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search models…"
+              className={cn(
+                'border-0 bg-transparent px-0 text-sm text-white placeholder:text-zinc-600 focus-visible:ring-0',
+                isToolbarVariant ? 'h-10' : 'h-11'
+              )}
+            />
+            <kbd className="hidden flex-none rounded-md border border-[rgba(249,115,22,0.08)] bg-[#1a1a1a] px-1.5 py-0.5 text-[10px] text-zinc-600 sm:inline-flex">
+              ⌘K
+            </kbd>
+          </div>
+
+          <div
+            className="grid min-h-0 gap-3"
+            style={{
+              gridTemplateColumns: isToolbarVariant ? '300px minmax(0, 1fr)' : '320px minmax(0, 1fr)',
+            }}
+          >
+            {/* Left pane */}
+            <ScrollArea className="min-h-0" style={{ maxHeight: rightPaneMaxHeight }}>
+              <div className="space-y-2.5 pr-2">
+              {/* Settings panel */}
+              <div className={cn('grid gap-2.5 rounded-[20px] border border-[rgba(249,115,22,0.08)] bg-[#141414]', isToolbarVariant ? 'p-3' : 'p-3.5')}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-1.5 text-[13px] text-zinc-200">
+                      <span>Auto select</span>
+                      <Info className="h-3 w-3 text-zinc-600" />
+                    </div>
+                    <div className="mt-0.5 text-[10px] leading-tight text-zinc-600">Let WZRD pick the best model</div>
+                  </div>
+                  <Switch
+                    checked={value.auto}
+                    onCheckedChange={(checked) => updateSelection({ auto: checked })}
+                  />
+                </div>
+                <div className="h-px bg-[rgba(249,115,22,0.06)]" />
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-1.5 text-[13px] text-zinc-200">
+                      <span>Multi-model</span>
+                      <Info className="h-3 w-3 text-zinc-600" />
+                    </div>
+                    <div className="mt-0.5 text-[10px] leading-tight text-zinc-600">Generate with multiple models at once</div>
+                  </div>
+                  <Switch
+                    checked={value.useMultipleModels}
+                    onCheckedChange={(checked) =>
+                      updateSelection({
+                        useMultipleModels: checked,
+                        selectedModelIds: checked ? value.selectedModelIds : value.selectedModelIds.slice(0, 1),
+                      })
+                    }
+                  />
+                </div>
+              </div>
+
+              {/* Pinned models */}
+              <section className="space-y-1.5">
+                <div className="px-1 text-[10px] font-medium uppercase tracking-[0.2em] text-zinc-600">
+                  Pinned
+                </div>
+                {pinnedModels.length > 0 ? (
+                  <div className="space-y-1.5">{pinnedModels.map((model) => renderModelRow(model, true))}</div>
+                ) : (
+                  <div className="rounded-[14px] border border-dashed border-[rgba(249,115,22,0.08)] bg-[#131313] px-3 py-2.5 text-[11px] leading-relaxed text-zinc-600">
+                    Pin models for quick access
+                  </div>
+                )}
+              </section>
+
+              {/* Featured models */}
+              {featuredModels.length > 0 ? (
+                <section className="space-y-1.5">
+                  <div className="px-1 text-[10px] font-medium uppercase tracking-[0.2em] text-zinc-600">
+                    Featured
+                  </div>
+                  <div className="space-y-1.5">{featuredModels.map((model) => renderModelRow(model, true))}</div>
+                </section>
+              ) : null}
+
+              {/* Providers */}
+              <section className="space-y-1.5">
+                <div className="px-1 text-[10px] font-medium uppercase tracking-[0.2em] text-zinc-600">
+                  Providers
+                </div>
+                <div className="space-y-1.5">
+                  {providers.map((provider) => {
+                      const isActive = provider.key === activeProvider?.key;
+                      return (
+                        <button
+                          key={provider.key}
+                          type="button"
+                          onClick={() => setActiveProviderKey(provider.key)}
+                          className={cn(
+                            'relative flex w-full items-center justify-between rounded-[14px] border px-3 py-2.5 text-left transition-all duration-150 overflow-hidden',
+                            isActive
+                              ? 'border-[rgba(249,115,22,0.15)] bg-[#1B1B1B]'
+                              : 'border-[rgba(249,115,22,0.06)] bg-[#131313] hover:border-[rgba(249,115,22,0.12)] hover:bg-[#171717]'
+                          )}
+                        >
+                          {isActive && (
+                            <div className="absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-r-full bg-[#f97316]" />
+                          )}
+                          <div className="flex items-center gap-2.5">
+                            <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-[rgba(249,115,22,0.1)] bg-[#1D1D1D] text-[10px] font-semibold tracking-wide text-zinc-400">
+                              {provider.label.slice(0, 2).toUpperCase()}
+                            </div>
+                            <div>
+                              <div className="text-[13px] font-medium text-white">{provider.label}</div>
+                              <div className="text-[10px] text-zinc-600">
+                                {provider.models.length} model{provider.models.length === 1 ? '' : 's'}
+                              </div>
+                            </div>
+                          </div>
+                          <ChevronRight className={cn(
+                            'h-3.5 w-3.5 text-zinc-600 transition-transform duration-150',
+                            isActive && 'rotate-90 text-zinc-400'
+                          )} />
+                        </button>
+                      );
+                    })}
+                </div>
+              </section>
+              </div>
+            </ScrollArea>
+
+            {/* Right pane */}
+            <div className="min-h-0 flex flex-col overflow-hidden rounded-[20px] border border-[rgba(249,115,22,0.08)] bg-[#131313]" style={{ maxHeight: rightPaneMaxHeight }}>
+              {activeProvider ? (
+                <>
+                  <div className="flex-shrink-0 flex items-center justify-between px-3.5 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="text-[13px] font-medium text-white">{activeProvider.label}</div>
+                      <span className="inline-flex h-[18px] items-center rounded-full border border-[rgba(249,115,22,0.1)] bg-[#1a1a1a] px-1.5 text-[10px] tabular-nums text-zinc-500">
+                        {activeProvider.models.length}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex-shrink-0 mx-3.5 h-px bg-[rgba(249,115,22,0.06)]" />
+                  <ScrollArea className="min-h-0 flex-1 pr-2.5">
+                    <div className="space-y-1.5 p-2.5">
+                      {activeProvider.models.map((model) => renderModelRow(model))}
+                    </div>
+                  </ScrollArea>
+                </>
+              ) : (
+                <div className="flex h-full min-h-[260px] items-center justify-center px-6 text-sm text-zinc-600">
+                  No models match this search.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}

@@ -1,0 +1,176 @@
+{
+  "milestone": "project-setup",
+  "round": 1,
+  "status": "pass",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "npm run test",
+      "exitCode": 1,
+      "note": "Exit code 1 from 9 pre-existing failing test files (8 with no test suite + 1 with 2 pre-existing assertion failures). 45 files passing, 353 tests passing, 2 tests failing — matches baseline pattern (9 files failing, 2 tests failing). New tests added by project-setup workers increased passing count from 279 (post-landing-polish) to 353."
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "npx tsc --noEmit",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "npm run lint",
+      "exitCode": 1,
+      "note": "Exit code 1 from 765 lint errors (705 errors, 60 warnings). Baseline from landing-polish was 758 (698 errors, 60 warnings). Delta of 7 new errors are all @typescript-eslint/no-explicit-any in new feature files, consistent with the established codebase pattern of using 'any' types. No new categories of lint errors introduced."
+    }
+  },
+  "reviewsSummary": {
+    "total": 8,
+    "passed": 8,
+    "failed": 0,
+    "failedFeatures": []
+  },
+  "blockingIssues": [],
+  "nonBlockingIssues": [
+    {
+      "featureId": "concept-format-improvements",
+      "severity": "non_blocking",
+      "description": "conceptPayloadService.ts is dead code — built and tested (9 test cases) but never imported or called anywhere in the app. The edge function constructs its own JSON payloads. Maintenance burden without functional value."
+    },
+    {
+      "featureId": "concept-format-improvements",
+      "severity": "non_blocking",
+      "description": "Commercial product image upload uses ephemeral URL.createObjectURL() blob URLs instead of Supabase Storage upload pattern. Image is lost on page reload since blob URLs don't persist."
+    },
+    {
+      "featureId": "voice-clone-popup",
+      "severity": "non_blocking",
+      "description": "elevenlabs-voices edge function lacks authenticateRequest() from _shared/auth.ts and uses inline corsHeaders instead of shared response helpers. Inconsistent with other edge functions and potentially allows unauthenticated voice cloning."
+    },
+    {
+      "featureId": "voice-clone-popup",
+      "severity": "non_blocking",
+      "description": "50MB MAX_FILE_SIZE_MB for voice clone audio will create ~67MB base64 JSON payloads, likely exceeding Supabase edge function body limits. Practical limit should be much lower or use direct storage upload."
+    },
+    {
+      "featureId": "voice-clone-popup",
+      "severity": "non_blocking",
+      "description": "CharacterCard 'Ready' status badge uses bg-green-500/20 text-green-400 which may stretch the AGENTS.md color rule (green only for online indicators and success check marks)."
+    },
+    {
+      "featureId": "breakdown-improvements",
+      "severity": "non_blocking",
+      "description": "SceneCard defined as component inside BreakdownTab render function — React anti-pattern that causes remounts on every parent re-render and breaks Framer Motion exit animations."
+    },
+    {
+      "featureId": "breakdown-improvements",
+      "severity": "non_blocking",
+      "description": "Unused imports in BreakdownTab.tsx: 'supabase' import and destructured props 'projectData'/'updateProjectData' are never used (data comes from useProjectContext() instead)."
+    },
+    {
+      "featureId": "timeline-improvements",
+      "severity": "non_blocking",
+      "description": "DIRECTORS_CUT_CREDITS = 12 is hardcoded in credits.ts rather than derived from the studio-model-constants.ts catalog, violating the 'single source of truth' convention."
+    },
+    {
+      "featureId": "timeline-improvements",
+      "severity": "non_blocking",
+      "description": "getShotImageCredits()/getShotVideoCredits() called without model ID in ShotsRow/ShotImage/ShotImageActions — always returns default model credits. Displayed costs won't match actual cost if user selects non-default model."
+    },
+    {
+      "featureId": "timeline-improvements",
+      "severity": "non_blocking",
+      "description": "userEditedShotsRef is never cleared — once a shot is marked as edited, server updates for that shot's content fields are permanently blocked even if user later wants to regenerate."
+    },
+    {
+      "featureId": "timeline-improvements",
+      "severity": "non_blocking",
+      "description": "Characters and storyline enrichment data fetched in finalize-project-setup and attached to projectData are never consumed by prompt functions in _shared/prompts.ts. Dead code that adds unnecessary DB queries."
+    },
+    {
+      "featureId": "directors-cut-optimization",
+      "severity": "non_blocking",
+      "description": "Audio download failures in export-helpers.ts throw errors that abort the entire export, unlike visual assets which are handled gracefully with shotFailures. Inconsistent partial failure approach."
+    },
+    {
+      "featureId": "directors-cut-optimization",
+      "severity": "non_blocking",
+      "description": "'downloading_assets' stage only set in fallback path, never in primary Fal path — causes stage indicator to skip a step visually."
+    },
+    {
+      "featureId": "storyline-improvements",
+      "severity": "non_blocking",
+      "description": "Two debug console.log statements left in StorylineTab.tsx realtime subscription handlers (lines 152, 171)."
+    },
+    {
+      "featureId": "document-parse-edge-function",
+      "severity": "non_blocking",
+      "description": "Header comment in document-parse edge function mentions 'storagePath' input mode that was never implemented. Misleading documentation."
+    }
+  ],
+  "appliedUpdates": [
+    {
+      "target": "library",
+      "description": "Updated pre-existing lint error count from 758 to 765 (7 new @typescript-eslint/no-explicit-any in project-setup feature files, consistent with codebase pattern).",
+      "sourceFeature": "scrutiny-validator-project-setup"
+    }
+  ],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Add to Edge Functions convention: 'All edge functions MUST use authenticateRequest() from _shared/auth.ts and shared response helpers (handleCors, errorResponse, successResponse) from _shared/response.ts. Do not define inline corsHeaders or skip authentication.' The elevenlabs-voices function was shipped without auth, creating an unauthenticated endpoint.",
+      "evidence": "voice-clone-popup review: supabase/functions/elevenlabs-voices/index.ts defines inline corsHeaders and lacks authenticateRequest(). Compare to create-project, upload, billing-checkout which all use shared auth.",
+      "isSystemic": false
+    },
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Add to Coding Conventions: 'Never define React components inside other components' render functions. This causes remounts on every parent re-render, breaks AnimatePresence exit animations, and degrades performance. Always extract sub-components to module scope.' This anti-pattern was found in BreakdownTab.tsx and is not documented.",
+      "evidence": "breakdown-improvements review: SceneCard defined as arrow function inside BreakdownTab body (line 183). Causes all cards to re-animate on any state change.",
+      "isSystemic": false
+    },
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Add to Color Scheme section: 'Blue (blue-500/600/900/950) is used extensively in project-setup components for secondary buttons and form elements. This is a pre-existing pattern that predates the orange/amber convention. Workers should follow the existing pattern in project-setup files but prefer orange/amber for new pages.' Multiple features correctly used blue for project-setup UI elements consistent with existing code, but this conflicts with the stated orange/amber convention.",
+      "evidence": "storyline-improvements, breakdown-improvements, and voice-clone-popup reviews all flagged blue accent usage. Blue is used in StorylineTab, BreakdownTab, SettingsTab, NavigationFooter, DynamicConceptForm — consistent pre-existing pattern across project-setup module.",
+      "isSystemic": true
+    },
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Add to Coding Conventions: 'Remove debug console.log statements before committing. Use conditional debug logging if persistent logging is needed.' Two features shipped with leftover console.log debug statements.",
+      "evidence": "storyline-improvements review: StorylineTab.tsx lines 152, 171 have console.log('New scene received:', payload) and console.log('New character received:', payload).",
+      "isSystemic": false
+    },
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Clarify Credit Costs convention: 'DIRECTORS_CUT_CREDITS and other pipeline-level credit costs must be derived from the studio-model-constants.ts catalog using getModelById(), not hardcoded as separate constants. The catalog is the single source of truth for ALL credit values.'",
+      "evidence": "timeline-improvements review: DIRECTORS_CUT_CREDITS = 12 is hardcoded in credits.ts while studio-model-constants.ts has FFmpeg Compose at 12 credits. If catalog changes, constant becomes stale.",
+      "isSystemic": false
+    },
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Add to Services/Edge Functions: 'File upload patterns: For user-uploaded files that need persistence (product images, reference images), use Supabase Storage upload (see StyleReferenceUploader pattern). Do not use URL.createObjectURL() for data that must survive page reloads.' The commercial product image upload used ephemeral blob URLs.",
+      "evidence": "concept-format-improvements review: DynamicConceptForm.tsx uses URL.createObjectURL() for product images. Compare to StyleReferenceUploader which uploads to Supabase Storage.",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "Groq storyline models hardcoded outside studio-model-constants.ts",
+      "reason": "This is a reasonable design choice. Groq models use a different provider (not fal.ai) and have a different API contract. The studio-model-constants.ts is specifically the fal.ai catalog. Keeping non-fal models separate is correct architectural separation."
+    },
+    {
+      "observation": "Worker followedProcedure claims inconsistent with actual behavior (breakdown-improvements worker claimed followedProcedure:true but skipped browser verification)",
+      "reason": "This is a worker transcript accuracy issue, not a codebase or convention gap. The skill procedure itself is clear about requiring verification — the worker just didn't follow it for visual-only changes. Already addressed by the existing skill guidance."
+    },
+    {
+      "observation": "Edge functions don't validate HTTP method (no POST check)",
+      "reason": "This is a pre-existing pattern across all edge functions, not specific to this milestone. The CORS preflight handles OPTIONS, and other methods would fail on content-type parsing anyway. Documenting this as a gap would require changes to many existing functions."
+    },
+    {
+      "observation": "storagePath input mode for document-parse edge function not implemented",
+      "reason": "The feature description mentioned it but the client-side always has the file object, making storagePath unnecessary. The misleading comment is already flagged as a non-blocking issue."
+    },
+    {
+      "observation": "Singular '1 credits' grammar issue in credit display",
+      "reason": "Matches the spec format literally ('{model.credits} credits'). This is a spec clarity issue, not a code quality issue. Not worth flagging as a convention change."
+    }
+  ],
+  "previousRound": null
+}

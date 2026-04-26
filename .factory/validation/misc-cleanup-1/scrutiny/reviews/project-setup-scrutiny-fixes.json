@@ -1,0 +1,39 @@
+{
+  "featureId": "project-setup-scrutiny-fixes",
+  "reviewedAt": "2026-03-14T18:05:00.000Z",
+  "commitId": "8f90a73c875fb89e2a0dca0ddb04b0c22a6665ba",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "All 6 non-blocking issues from the project-setup scrutiny are properly addressed. The elevenlabs-voices edge function now uses authenticateRequest() and shared CORS/response helpers. SceneCard is extracted to module scope with proper prop drilling. conceptPayloadService.ts is wired into both generate-storylines and finalize-project-setup. Commercial product image upload uses Supabase Storage with graceful fallback. DIRECTORS_CUT_CREDITS is derived from the studio-model-constants catalog. Credit buttons use useProjectSettingsStore for selected model credits. The implementation is clean, follows existing patterns, and introduces no regressions. Two minor non-blocking observations noted.",
+    "issues": [
+      {
+        "file": "src/components/project-setup/DynamicConceptForm.tsx",
+        "line": 150,
+        "severity": "non_blocking",
+        "description": "handleRemoveProductImage calls URL.revokeObjectURL(productImagePreview) even when productImagePreview holds a Supabase Storage URL (not a blob URL). This is a no-op on non-blob URLs so it's harmless, but technically the revoke should be conditional on whether the URL is a blob URL (e.g., startsWith('blob:'))."
+      },
+      {
+        "file": "src/components/project-setup/BreakdownTab.tsx",
+        "line": 9,
+        "severity": "non_blocking",
+        "description": "Pre-existing unused import 'supabase' from '@/integrations/supabase/client' and unused destructured props 'projectData'/'updateProjectData' (line 113) were not cleaned up as part of the SceneCard extraction. These were noted in the original scrutiny as non-blocking issues in breakdown-improvements. Not in scope of this fix feature's description, but a missed opportunity."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "AGENTS.md now documents 'MANDATORY: Every edge function MUST call await authenticateRequest(req.headers)' which directly addresses the elevenlabs-voices auth gap. The worker correctly followed this updated convention. The convention update appears to have been applied between the project-setup scrutiny and this fix.",
+      "evidence": "AGENTS.md Edge Functions section contains the mandatory auth rule. elevenlabs-voices/index.ts now imports and calls authenticateRequest() at line 12."
+    },
+    {
+      "area": "conventions",
+      "observation": "The persist middleware in useProjectSettingsStore means that when StoryboardPage fetches settings (line 49), the store may serve stale cached data from a different project before the async fetch resolves. This is a pre-existing concern but now affects credit display accuracy since the feature relies on this store for dynamic credit calculations.",
+      "evidence": "src/store/projectSettingsStore.ts uses persist middleware with name 'wzrd-project-settings'. StoryboardPage.tsx line 49 calls fetchProjectSettings(projectId).catch(() => undefined) in useEffect. Between mount and fetch resolution, credits display from cached settings."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "PASS — All 6 scrutiny-identified non-blocking issues are properly resolved. (1) elevenlabs-voices edge function: authenticateRequest() added with AuthError handling and shared response helpers replacing inline corsHeaders — follows the pattern of all other authenticated edge functions. (2) SceneCard: extracted to module scope as a proper functional component with onEdit/onDelete props, animation variants also at module scope — eliminates the remount anti-pattern. (3) conceptPayloadService: buildConceptPayload() now called in both generate-storylines and finalize-project-setup flows, replacing the inline concept object construction — dead code is now live. (4) Commercial product image: uploads to Supabase Storage (project-media bucket) with immediate blob preview, persistent URL on success, and graceful fallback on failure — includes upload progress indicator. (5) DIRECTORS_CUT_CREDITS: now derived via getModelCredits('fal-ai/ffmpeg-api/compose') ?? 12, keeping it in sync with the catalog. (6) Credit buttons: StoryboardPage, ShotsRow, ShotImage, and ShotImageActions all use useProjectSettingsStore to pass selected model IDs to getShotImageCredits()/getShotVideoCredits(). TypeScript compiles cleanly, tests pass at baseline, no new lint errors introduced."
+}

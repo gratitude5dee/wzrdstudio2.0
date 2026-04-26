@@ -1,0 +1,28 @@
+{
+  "featureId": "credit-costs-in-dropdowns",
+  "reviewedAt": "2026-03-14T12:05:00.000Z",
+  "commitId": "b36b12db6b8a736ede8765de6c92db5f163d591e",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Clean implementation that fully covers all three required dropdowns (storyline, image, video) with credit costs displayed in the '{model.name} ({credits} credits)' format. Created a well-structured shared constants file (credits.ts) that re-exports from studio-model-constants.ts as the single source of truth. Storyline Groq models are appropriately defined separately since they aren't in the fal.ai catalog. Select element values remain model IDs so projectData updates correctly. 15 comprehensive unit tests cover all exported functions and constants.",
+    "issues": [
+      {
+        "file": "src/lib/constants/credits.ts",
+        "line": 72,
+        "severity": "non_blocking",
+        "description": "Grammar: storyline models with credits=1 render as '(1 credits)' instead of '(1 credit)'. The format matches the feature spec literally ('{model.credits} credits'), but is grammatically incorrect for singular values. Same applies to formatModelLabel for any model with credits=1. Consider pluralization helper, though this matches the spec as written."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "AGENTS.md already documents the credit costs convention ('Display format: \"{model.name} ({model.credits} credits)\"' and 'Single source of truth — never hardcode credit values elsewhere'). The worker followed this correctly. The Groq/storyline models are not in studio-model-constants.ts since they use a different provider, so hardcoding them in credits.ts is a reasonable design choice, but AGENTS.md doesn't mention this exception pattern.",
+      "evidence": "src/lib/constants/credits.ts:70-73 — STORYLINE_MODEL_OPTIONS hardcoded with credits, while AGENTS.md says 'Model catalog with credits: src/lib/studio-model-constants.ts'. These Groq models are absent from that file."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "PASS. The credit-costs-in-dropdowns feature is correctly implemented across 3 new files (credits.ts constants, ConceptTab.tsx component, credits.test.ts tests). All three model dropdowns (storyline/Groq, image, video) display credit costs in the specified format. The shared credits.ts file properly re-exports from studio-model-constants.ts as the single source of truth, with a separate definition for Groq storyline models that aren't in the fal.ai catalog. Select values remain model IDs for correct projectData updates. 15 unit tests pass, typecheck is clean, no lint errors. One non-blocking grammar issue with singular '1 credits' but this matches the spec format literally."
+}

@@ -1,0 +1,70 @@
+{
+  "groupId": "studio-004",
+  "testedAt": "2026-03-14T00:00:00.000Z",
+  "isolation": {
+    "appUrl": "http://localhost:8080",
+    "authBypassed": true,
+    "browserSession": "cef8fac2d9f5__studio-004"
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-STUDIO-004",
+      "title": "Shortcuts Overlay Centered on Page",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Navigate to http://localhost:8080/projects/test-project/studio",
+          "expected": "Studio page loads with node editor canvas",
+          "observed": "Studio page loaded successfully with ReactFlow canvas, node palette, and prompt bar"
+        },
+        {
+          "action": "Click 'Shortcuts ?' button at bottom of page",
+          "expected": "Keyboard shortcuts overlay opens",
+          "observed": "Keyboard Shortcuts overlay panel opened with Canvas and Selection sections visible"
+        },
+        {
+          "action": "Measure overlay panel position via JavaScript (getBoundingClientRect)",
+          "expected": "Panel center within 5px of viewport center on both axes",
+          "observed": "Panel center at (640, 360), viewport center at (640, 360). OffsetX: 0px, OffsetY: 0px. Panel dimensions: 600x576px"
+        },
+        {
+          "action": "Verify flex container implementation (commit c879145)",
+          "expected": "Parent uses fixed+inset-0+flex+items-center+justify-center",
+          "observed": "Parent classes: 'fixed inset-0 z-[101] flex items-center justify-center pointer-events-none'. Computed styles confirm: position=fixed, display=flex, alignItems=center, justifyContent=center, inset=0px"
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "studio-fixes/studio-004/VAL-STUDIO-004-initial-page.png",
+          "studio-fixes/studio-004/VAL-STUDIO-004-overlay-open.png"
+        ],
+        "consoleErrors": "none",
+        "domMeasurement": {
+          "panelCenterX": 640,
+          "panelCenterY": 360,
+          "viewportCenterX": 640,
+          "viewportCenterY": 360,
+          "offsetX": 0,
+          "offsetY": 0,
+          "panelWidth": 600,
+          "panelHeight": 576,
+          "left": 340,
+          "top": 72
+        },
+        "flexContainerStyles": {
+          "parentClasses": "fixed inset-0 z-[101] flex items-center justify-center pointer-events-none",
+          "position": "fixed",
+          "display": "flex",
+          "alignItems": "center",
+          "justifyContent": "center",
+          "inset": "0px"
+        }
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 1 assertion: 1 passed. VAL-STUDIO-004 confirms the shortcuts overlay is perfectly centered (0px offset on both axes) using the flex container approach from commit c879145."
+}

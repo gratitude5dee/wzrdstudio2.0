@@ -1,0 +1,177 @@
+{
+  "groupId": "group-worlds",
+  "testedAt": "2026-03-13T00:15:00.000Z",
+  "isolation": {
+    "appUrl": "http://localhost:8080/kanvas?studio=worldview",
+    "browserSession": "ba5792be7323__group-worlds",
+    "authBypass": true,
+    "stateType": "in-memory Zustand"
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-WORLD-001",
+      "title": "World creator panel UI",
+      "status": "pass",
+      "steps": [
+        { "action": "Navigate to /kanvas?studio=worldview", "expected": "Worldview tab active", "observed": "Worldview tab active with 3D Worlds badge and green pulse dot" },
+        { "action": "Click 'New Scene' button", "expected": "Scene created", "observed": "Scene 1 chip created with amber highlight" },
+        { "action": "Click 'Create a 3D World' CTA", "expected": "World creator panel opens", "observed": "Creator panel opened with all expected elements" }
+      ],
+      "evidence": {
+        "screenshots": [
+          "foundation/group-worlds/VAL-WORLD-001-creator-panel.png"
+        ],
+        "consoleErrors": "none (no unhandled errors)",
+        "network": "N/A for this assertion"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-WORLD-002",
+      "title": "Model selector options",
+      "status": "pass",
+      "steps": [
+        { "action": "Inspect model selector dropdown options via DOM", "expected": "Exactly two options: Marble 0.1-plus and Marble 0.1-mini", "observed": "Found 2 options: 'Marble 0.1-plus' (default selected) and 'Marble 0.1-mini'" },
+        { "action": "Select Marble 0.1-mini", "expected": "Selection changes", "observed": "Model selector updated to Marble 0.1-mini" }
+      ],
+      "evidence": {
+        "screenshots": [
+          "foundation/group-worlds/VAL-WORLD-002-model-dropdown.png",
+          "foundation/group-worlds/VAL-WORLD-002-model-mini-selected.png"
+        ],
+        "consoleErrors": "none",
+        "network": "N/A",
+        "domInspection": "document.querySelector('select[aria-label=\"Select model\"]').options returned 2 options: {value: 'Marble 0.1-plus', text: 'Marble 0.1-plus'}, {value: 'Marble 0.1-mini', text: 'Marble 0.1-mini'}"
+      },
+      "issues": "Native <select> dropdown cannot be visually captured in headless browser screenshots. DOM inspection confirms both options exist."
+    },
+    {
+      "id": "VAL-WORLD-003",
+      "title": "World generation request fires",
+      "status": "pass",
+      "steps": [
+        { "action": "Enter text prompt 'A mystical forest with glowing mushrooms and floating islands'", "expected": "Generate World button becomes enabled (amber)", "observed": "Button turned amber with Zap icon, enabled state confirmed" },
+        { "action": "Click Generate World", "expected": "API call to worldlabs-proxy fires, error toast appears", "observed": "API call attempted to supabase worldlabs-proxy endpoint, CORS error caught. Inline error state displayed: 'World generation failed' + 'Failed to send a request to the Edge Function' + Retry button" },
+        { "action": "Check console for unhandled errors", "expected": "No unhandled promise rejections", "observed": "Only expected CORS and 401 errors from failed API calls - no unhandled promise rejections" }
+      ],
+      "evidence": {
+        "screenshots": [
+          "foundation/group-worlds/VAL-WORLD-003-prompt-entered.png",
+          "foundation/group-worlds/VAL-WORLD-003-after-generate.png"
+        ],
+        "consoleErrors": "CORS error for worldlabs-proxy (expected - no API key). No unhandled promise rejections.",
+        "network": "POST to https://ixkkrousepsiorwlaycp.supabase.co/functions/v1/worldlabs-proxy -> CORS blocked (expected)"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-WORLD-004",
+      "title": "World generating progress state",
+      "status": "pass",
+      "steps": [
+        { "action": "Intercept fetch to add 30s delay for worldlabs-proxy calls", "expected": "API call hangs long enough to see generating state", "observed": "Fetch intercepted successfully" },
+        { "action": "Enter prompt and click Generate World", "expected": "WorldGeneratingCard appears with spinner and progress bar", "observed": "Card displayed with: spinning Loader2 icon, 'Generating world…' text, 'This may take a few minutes' subtitle, amber progress bar at ~10%" }
+      ],
+      "evidence": {
+        "screenshots": [
+          "foundation/group-worlds/VAL-WORLD-004-generating-card.png"
+        ],
+        "consoleErrors": "none during generation phase",
+        "network": "POST to worldlabs-proxy (held by fetch intercept)"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-WORLD-005",
+      "title": "World card display",
+      "status": "pass",
+      "steps": [
+        { "action": "Reload page and inject world data via store (addWorld + assignWorldToScene)", "expected": "WorldCard displays", "observed": "WorldCard rendered with all expected elements" },
+        { "action": "Verify card contents", "expected": "Thumbnail/placeholder, display name, model badge, Enter World on hover", "observed": "Globe2 placeholder (no thumbnail URL), 'Mystical Forest World' name, 'Marble 0.1-plus' amber badge, 'Enter World' button with Eye icon on hover" },
+        { "action": "Scroll to see full card info section", "expected": "All card info visible", "observed": "Display name, model badge, and Open in Marble link all visible below thumbnail" }
+      ],
+      "evidence": {
+        "screenshots": [
+          "foundation/group-worlds/VAL-WORLD-005-world-card.png",
+          "foundation/group-worlds/VAL-WORLD-005-world-card-scrolled.png"
+        ],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-WORLD-006",
+      "title": "Image upload path for world creation",
+      "status": "pass",
+      "steps": [
+        { "action": "Click 'Image' toggle in creator panel", "expected": "Image mode activates, file upload button appears", "observed": "Image toggle highlighted amber, 'Select image file' button with Upload icon appeared" },
+        { "action": "Upload test PNG image via hidden file input", "expected": "Image preview appears", "observed": "Upload button updated to show filename 'test-world-image.png', orange image preview (100x100 test image) displayed below" },
+        { "action": "Verify Generate World button is present", "expected": "Button available for image+text prompt submission", "observed": "Generate World button present (disabled until text prompt entered)" }
+      ],
+      "evidence": {
+        "screenshots": [
+          "foundation/group-worlds/VAL-WORLD-006-image-mode.png",
+          "foundation/group-worlds/VAL-WORLD-006-image-preview.png"
+        ],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-WORLD-007",
+      "title": "Open in Marble external link",
+      "status": "pass",
+      "steps": [
+        { "action": "Inject world with viewerUrl into store", "expected": "WorldCard shows Open in Marble link", "observed": "'Open in Marble' link visible below model badge" },
+        { "action": "Inspect link DOM attributes", "expected": "target='_blank' and rel='noopener'", "observed": "href='https://worldlabs.ai/viewer/test-world-marble-007', target='_blank', rel='noopener noreferrer'" },
+        { "action": "Verify link conditional rendering (code review)", "expected": "Link only shows when viewerUrl is truthy", "observed": "Code uses {world.assets.viewerUrl && (<a ...>Open in Marble</a>)} - correctly conditional" }
+      ],
+      "evidence": {
+        "screenshots": [
+          "foundation/group-worlds/VAL-WORLD-007-marble-link.png"
+        ],
+        "consoleErrors": "none",
+        "network": "N/A",
+        "domInspection": "a[aria-label='Open in Marble']: href='https://worldlabs.ai/viewer/test-world-marble-007', target='_blank', rel='noopener noreferrer'"
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "Native HTML <select> dropdown for model selector cannot be visually captured open in headless browser screenshots. Had to verify options via DOM inspection instead.",
+      "resolved": true,
+      "resolution": "Used browser eval to query select options and confirmed both 'Marble 0.1-plus' and 'Marble 0.1-mini' exist",
+      "affectedAssertions": ["VAL-WORLD-002"]
+    },
+    {
+      "description": "WorldGeneratingCard only visible briefly before API error (CORS failure is near-instant). Required intercepting fetch() to add artificial delay.",
+      "resolved": true,
+      "resolution": "Overrode window.fetch to add 30s delay for worldlabs-proxy URLs, allowing screenshot capture of generating state",
+      "affectedAssertions": ["VAL-WORLD-004"]
+    },
+    {
+      "description": "Hidden file input (class='hidden') cannot be directly targeted by agent-browser upload command on the button element. Required temporarily making the input visible.",
+      "resolved": true,
+      "resolution": "Used eval to remove 'hidden' class from file input, uploaded file, then restored hidden class",
+      "affectedAssertions": ["VAL-WORLD-006"]
+    },
+    {
+      "description": "WorldCard is taller than viewport - had to scroll down to see info section (name, model badge, Open in Marble link)",
+      "resolved": true,
+      "resolution": "Scrolled down 200-300px to capture the full card info section",
+      "affectedAssertions": ["VAL-WORLD-005", "VAL-WORLD-007"]
+    },
+    {
+      "description": "React DOM nesting warning: <button> cannot appear as a descendant of <button> in SceneChip component (remove button nested inside select button)",
+      "resolved": false,
+      "resolution": "Pre-existing issue - not in scope for this validation",
+      "affectedAssertions": []
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 7 assertions: all 7 passed. VAL-WORLD-001 through VAL-WORLD-007 all verified successfully. The world creation UI, model selector, API error handling, generating progress state, world card display, image upload mode, and Open in Marble link all function as specified."
+}

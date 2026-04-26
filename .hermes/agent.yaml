@@ -1,0 +1,11 @@
+name: wzrd-studio
+version: 1.0.0
+build: bun run build
+test: bunx vitest run
+skills: agent-skills/index.json
+mcp:
+  url: https://ixkkrousepsiorwlaycp.supabase.co/functions/v1/mcp-server
+  transport: streamable-http
+forbidden:
+  - src/integrations/supabase/types.ts
+  - supabase/migrations/**

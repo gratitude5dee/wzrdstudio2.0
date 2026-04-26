@@ -1,0 +1,39 @@
+{
+  "featureId": "concept-format-improvements",
+  "reviewedAt": "2026-03-14T12:30:00.000Z",
+  "commitId": "09e8688",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Implementation covers all five format-specific UIs (Commercial, Music Video, Infotainment, Short Film, Custom) with correct fields, structured JSON payloads in the edge function prompts, and a comprehensive test suite. The Commercial form has drag-and-drop product image upload with preview/remove; Music Video has audio upload with web-audio-beat-detector BPM detection, beat timeline visualization, and manual BPM override; Infotainment adds key facts and visual style fields; Short Film gets a dedicated form with genre/tone/duration/visual style dropdowns. The edge function prompts.ts builds structured JSON briefs per format using JSON.stringify. Types, ProjectContext defaults, and tests are all well-structured. Two non-blocking issues noted below.",
+    "issues": [
+      {
+        "file": "src/services/conceptPayloadService.ts",
+        "line": 1,
+        "severity": "non_blocking",
+        "description": "Dead code: buildConceptPayload service is created and tested but never imported or called anywhere in the application outside of its own test file. The edge function generate-storylines/prompts.ts constructs its own structured JSON payloads directly using JSON.stringify. The service should either be wired into the generation flow (e.g., called before invoking the edge function) or removed to avoid maintenance burden."
+      },
+      {
+        "file": "src/components/project-setup/DynamicConceptForm.tsx",
+        "line": 96,
+        "severity": "non_blocking",
+        "description": "Product image upload uses URL.createObjectURL() producing an ephemeral blob URL, unlike the existing StyleReferenceUploader pattern which uploads to Supabase Storage for persistence. The blob URL stored in adBrief.productImageUrl will be serialized to the database but is only valid in the current browser session — it won't survive page reloads. The feature description specified 'using existing StyleReferenceUploader pattern' which implies persistent storage upload. Currently the edge function only uses hasProductImage as a boolean hint, so there's no functional breakage, but the image data itself is lost on reload."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "AGENTS.md states 'All generation prompts MUST use structured JSON with explicit field mapping — Never concatenate strings for prompts'. The worker implemented structured JSON in prompts.ts using JSON.stringify blocks for each format, which satisfies the intent. However, the worker also created a client-side conceptPayloadService.ts that mirrors this logic but is not wired into any code path, creating duplicate payload-building logic. AGENTS.md could clarify whether the structured JSON convention applies at the edge function level (where it's done) or at the client level before invocation (where the unused service lives).",
+      "evidence": "supabase/functions/generate-storylines/prompts.ts uses JSON.stringify for each format block. src/services/conceptPayloadService.ts defines buildConceptPayload but is only imported in its test file."
+    },
+    {
+      "area": "conventions",
+      "observation": "The product image upload in CommercialForm uses URL.createObjectURL() for a local preview blob URL, while the existing StyleReferenceUploader uploads to Supabase Storage and persists the URL. This inconsistency in file upload patterns could confuse future workers. AGENTS.md doesn't explicitly document the file upload pattern (upload to Supabase Storage → media_items → persistent URL).",
+      "evidence": "Compare src/components/project-setup/DynamicConceptForm.tsx:96 (URL.createObjectURL) with src/components/project-setup/StyleReferenceUploader.tsx:30-78 (supabase.storage.upload + media_items insert)."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Feature passes review. All five format-specific UIs are implemented with the required fields, BPM detection works via web-audio-beat-detector with beat timeline visualization, and the edge function uses structured JSON briefs. Two non-blocking issues: (1) conceptPayloadService.ts is dead code — created and tested but never wired into the generation flow, and (2) the commercial product image upload uses ephemeral blob URLs instead of the persistent Supabase Storage pattern used by StyleReferenceUploader. Neither issue causes functional breakage in the current flow."
+}
