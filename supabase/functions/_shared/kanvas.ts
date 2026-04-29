@@ -1621,7 +1621,30 @@ export async function refreshKanvasJob(
   }
 
   if (!job.externalRequestId) {
-    throw new Error('Kanvas job is missing its Fal request ID.');
+    // Self-heal orphaned jobs (provider never returned a request ID) so the
+    // client stops polling instead of hammering the function with 500s.
+    const now = deps.now();
+    const failed = await repository.updateJob(job.id, {
+      status: 'failed',
+      progress: 100,
+      errorMessage: 'Generation never received a provider request ID. Please retry.',
+      updatedAt: now,
+      completedAt: now,
+    });
+    try {
+      await deps.credits.release({
+        userId,
+        holdId: job.config.billing.holdId,
+        skipped: job.config.billing.skipped,
+        amount: job.config.billing.amount,
+        reason: 'orphaned_job',
+        requestId: null,
+        modelId: job.modelId,
+      });
+    } catch (releaseError) {
+      console.warn('[kanvas] Failed to release credits for orphaned job:', releaseError);
+    }
+    return failed;
   }
 
   const polled = await deps.fal.poll(job.externalRequestId, job.config.queue.statusUrl);
