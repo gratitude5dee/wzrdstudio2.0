@@ -79,9 +79,10 @@ function Dropzone({
             className="absolute inset-0 h-full w-full object-cover opacity-80 transition-opacity group-hover:opacity-100"
             muted
             playsInline
+            preload="metadata"
           />
         ) : previewUrl ? (
-          <img src={previewUrl} alt={label} className="absolute inset-0 h-full w-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" loading="lazy" />
+          <img src={previewUrl} alt={label} className="absolute inset-0 h-full w-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" loading="lazy" decoding="async" />
         ) : uploading ? (
           <Loader2 className="h-6 w-6 animate-spin text-[#f97316]" />
         ) : (
