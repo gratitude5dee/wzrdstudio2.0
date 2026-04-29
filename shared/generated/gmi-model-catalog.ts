@@ -7680,5 +7680,852 @@ export const GENERATED_GMI_MODEL_CATALOG: GeneratedGmiCatalogEntry[] = [
     "time": "~3s",
     "sortRank": 90,
     "rawApiExample": "# Chat Completions Example\n  curl https://api.gmi-serving.com/v1/chat/completions           -H \"Content-Type: application/json\"           -H \"Authorization: Bearer $GMI_API_KEY\"           -d '{\n      \"model\": \"zai-org/GLM-5-FP8\",\n      \"messages\": [\n        {\"role\": \"system\", \"content\": \"You are a helpful assistant.\"},\n        {\"role\": \"user\", \"content\": \"Hello!\"}\n      ]\n    }'"
-  }
+  },
+
+    {
+      "id": "gmi/deepseek-v4-pro",
+      "endpointId": "deepseek-ai/DeepSeek-V4-Pro",
+      "provider": "gmi-cloud",
+      "providerLabel": "DeepSeek",
+      "name": "DeepSeek V4 Pro",
+      "description": "DeepSeek V4 Pro: hybrid Compressed + Heavily Compressed Attention for efficient long-context (1M tokens), Manifold-Constrained Hyper-Connections, trained with Muon optimizer. Strong reasoning + tool use.",
+      "category": "llm",
+      "pricingText": "Input: $1.392 per 1M tokens; Output: $2.784 per 1M tokens",
+      "transport": "chat_completion",
+      "mediaType": "text",
+      "workflowType": "text-to-text",
+      "uiGroup": "generation",
+      "supports": [
+        "prompt",
+        "messages",
+        "max_tokens",
+        "temperature",
+        "tools"
+      ],
+      "payloadKeys": [],
+      "requiresAssets": [],
+      "defaults": {},
+      "controls": [],
+      "aliases": [
+        "deepseek-ai/DeepSeek-V4-Pro",
+        "deepseek-ai/deepseek-v4-pro",
+        "deepseek-v4-pro"
+      ],
+      "enabled": true,
+      "credits": 0,
+      "time": "~6s",
+      "sortRank": 85,
+      "rawApiExample": "curl https://api.gmi-serving.com/v1/chat/completions -H 'Authorization: Bearer $GMI_API_KEY' -d '{\"model\":\"deepseek-ai/DeepSeek-V4-Pro\",\"messages\":[...]}'"
+    },
+    {
+      "id": "gmi/openai-gpt-5.5",
+      "endpointId": "openai/gpt-5.5",
+      "provider": "gmi-cloud",
+      "providerLabel": "OpenAI",
+      "name": "GPT-5.5",
+      "description": "OpenAI GPT-5.5 frontier model. 1M+ token context (922K input, 128K output), text + image inputs, advanced reasoning and tool use for complex professional workloads.",
+      "category": "llm",
+      "pricingText": "See OpenAI pricing",
+      "transport": "chat_completion",
+      "mediaType": "text",
+      "workflowType": "text-to-text",
+      "uiGroup": "generation",
+      "supports": [
+        "prompt",
+        "messages",
+        "max_tokens",
+        "temperature",
+        "tools",
+        "image_url",
+        "reasoning"
+      ],
+      "payloadKeys": [],
+      "requiresAssets": [],
+      "defaults": {},
+      "controls": [],
+      "aliases": [
+        "openai-gpt-5.5",
+        "openai/gpt-5.5"
+      ],
+      "enabled": true,
+      "credits": 0,
+      "time": "~8s",
+      "sortRank": 80,
+      "rawApiExample": "curl https://api.gmi-serving.com/v1/chat/completions -H 'Authorization: Bearer $GMI_API_KEY' -d '{\"model\":\"openai/gpt-5.5\",\"messages\":[...]}'"
+    },
+    {
+      "id": "gmi/glm-5",
+      "endpointId": "zai-org/GLM-5-FP8",
+      "provider": "gmi-cloud",
+      "providerLabel": "Z.ai",
+      "name": "GLM-5",
+      "description": "Z.ai flagship open-source foundation model for complex systems design and long-horizon agent workflows. Production-grade coding, agentic planning, deep backend reasoning.",
+      "category": "llm",
+      "pricingText": "Open-source, hosted via GMI",
+      "transport": "chat_completion",
+      "mediaType": "text",
+      "workflowType": "text-to-text",
+      "uiGroup": "generation",
+      "supports": [
+        "prompt",
+        "messages",
+        "max_tokens",
+        "temperature",
+        "tools"
+      ],
+      "payloadKeys": [],
+      "requiresAssets": [],
+      "defaults": {},
+      "controls": [],
+      "aliases": [
+        "glm-5",
+        "zai-org/GLM-5-FP8",
+        "zai-org/glm-5-fp8"
+      ],
+      "enabled": true,
+      "credits": 0,
+      "time": "~6s",
+      "sortRank": 88,
+      "rawApiExample": "curl https://api.gmi-serving.com/v1/chat/completions -H 'Authorization: Bearer $GMI_API_KEY' -d '{\"model\":\"zai-org/GLM-5-FP8\",\"messages\":[...]}'"
+    },
+    {
+      "id": "gmi/glm-5.1",
+      "endpointId": "zai-org/GLM-5.1-FP8",
+      "provider": "gmi-cloud",
+      "providerLabel": "Z.ai",
+      "name": "GLM-5.1",
+      "description": "GLM-5.1: cutting-edge LLM with strong reasoning, code generation, and multilingual capabilities. Optimized for general-purpose AI applications.",
+      "category": "llm",
+      "pricingText": "Open-source, hosted via GMI",
+      "transport": "chat_completion",
+      "mediaType": "text",
+      "workflowType": "text-to-text",
+      "uiGroup": "generation",
+      "supports": [
+        "prompt",
+        "messages",
+        "max_tokens",
+        "temperature",
+        "tools"
+      ],
+      "payloadKeys": [],
+      "requiresAssets": [],
+      "defaults": {},
+      "controls": [],
+      "aliases": [
+        "glm-5.1",
+        "zai-org/GLM-5.1-FP8",
+        "zai-org/glm-5.1-fp8"
+      ],
+      "enabled": true,
+      "credits": 0,
+      "time": "~6s",
+      "sortRank": 87,
+      "rawApiExample": "curl https://api.gmi-serving.com/v1/chat/completions -H 'Authorization: Bearer $GMI_API_KEY' -d '{\"model\":\"zai-org/GLM-5.1-FP8\",\"messages\":[...]}'"
+    },
+    {
+      "id": "gmi/gpt-image-2",
+      "endpointId": "gpt-image-2",
+      "provider": "gmi-cloud",
+      "providerLabel": "OpenAI",
+      "name": "GPT Image 2",
+      "description": "OpenAI's latest image model \u2014 excels at complex prompts, accurate text rendering, photorealism. Supports text-to-image and image edits with optional inpainting masks.",
+      "category": "Image",
+      "pricingText": "From $0.011/image (low 1024) up to $0.250/image (high 1536)",
+      "transport": "request_queue",
+      "mediaType": "image",
+      "workflowType": "text-to-image",
+      "uiGroup": "generation",
+      "supports": [
+        "prompt",
+        "size",
+        "quality",
+        "n",
+        "output_format",
+        "image",
+        "mask"
+      ],
+      "payloadKeys": [
+        "prompt",
+        "size",
+        "quality",
+        "n",
+        "output_format",
+        "image",
+        "mask"
+      ],
+      "requiresAssets": [],
+      "defaults": {
+        "size": "1024x1024",
+        "quality": "medium",
+        "output_format": "png",
+        "n": 1
+      },
+      "controls": [
+        {
+          "key": "size",
+          "label": "Size",
+          "type": "select",
+          "defaultValue": "1024x1024",
+          "options": [
+            {
+              "label": "1024\u00d71024",
+              "value": "1024x1024"
+            },
+            {
+              "label": "1024\u00d71536",
+              "value": "1024x1536"
+            },
+            {
+              "label": "1536\u00d71024",
+              "value": "1536x1024"
+            }
+          ]
+        },
+        {
+          "key": "quality",
+          "label": "Quality",
+          "type": "select",
+          "defaultValue": "medium",
+          "options": [
+            {
+              "label": "Low",
+              "value": "low"
+            },
+            {
+              "label": "Medium",
+              "value": "medium"
+            },
+            {
+              "label": "High",
+              "value": "high"
+            },
+            {
+              "label": "Auto",
+              "value": "auto"
+            }
+          ]
+        },
+        {
+          "key": "output_format",
+          "label": "Format",
+          "type": "select",
+          "defaultValue": "png",
+          "options": [
+            {
+              "label": "PNG",
+              "value": "png"
+            },
+            {
+              "label": "JPEG",
+              "value": "jpeg"
+            }
+          ]
+        },
+        {
+          "key": "n",
+          "label": "Count",
+          "type": "number",
+          "defaultValue": 1,
+          "min": 1,
+          "max": 10,
+          "step": 1
+        }
+      ],
+      "aliases": [
+        "gpt-image-2"
+      ],
+      "enabled": true,
+      "credits": 5,
+      "time": "~15s",
+      "sortRank": 250,
+      "rawApiExample": "curl -X POST https://console.gmicloud.ai/api/v1/ie/requestqueue/apikey/requests -H 'Authorization: Bearer YOUR_API_KEY' -d '{\"model\":\"gpt-image-2\",\"payload\":{\"prompt\":\"...\",\"size\":\"1024x1024\",\"quality\":\"medium\"}}'"
+    },
+    {
+      "id": "gmi/happyhorse-1.0-t2v",
+      "endpointId": "happyhorse1.0-t2v",
+      "provider": "gmi-cloud",
+      "providerLabel": "Wan AI",
+      "name": "HappyHorse 1.0 (Text\u2192Video)",
+      "description": "Wan AI text-to-video with improved visual quality, separate resolution + aspect-ratio selection, continuous 2-15s duration, optional audio-driven generation.",
+      "category": "Video",
+      "pricingText": "$0.28 per second",
+      "transport": "request_queue",
+      "mediaType": "video",
+      "workflowType": "text-to-video",
+      "uiGroup": "generation",
+      "supports": [
+        "prompt",
+        "negative_prompt",
+        "resolution",
+        "ratio",
+        "duration",
+        "audio_url",
+        "prompt_extend",
+        "watermark",
+        "seed"
+      ],
+      "payloadKeys": [
+        "prompt",
+        "negative_prompt",
+        "resolution",
+        "ratio",
+        "duration",
+        "audio_url",
+        "prompt_extend",
+        "watermark",
+        "seed"
+      ],
+      "requiresAssets": [],
+      "defaults": {
+        "resolution": "1080P",
+        "ratio": "16:9",
+        "duration": 5,
+        "prompt_extend": true,
+        "watermark": false
+      },
+      "controls": [
+        {
+          "key": "resolution",
+          "label": "Resolution",
+          "type": "select",
+          "defaultValue": "1080P",
+          "options": [
+            {
+              "label": "720P",
+              "value": "720P"
+            },
+            {
+              "label": "1080P",
+              "value": "1080P"
+            }
+          ]
+        },
+        {
+          "key": "ratio",
+          "label": "Aspect Ratio",
+          "type": "select",
+          "defaultValue": "16:9",
+          "options": [
+            {
+              "label": "16:9",
+              "value": "16:9"
+            },
+            {
+              "label": "9:16",
+              "value": "9:16"
+            },
+            {
+              "label": "1:1",
+              "value": "1:1"
+            },
+            {
+              "label": "4:3",
+              "value": "4:3"
+            },
+            {
+              "label": "3:4",
+              "value": "3:4"
+            }
+          ]
+        },
+        {
+          "key": "duration",
+          "label": "Duration (s)",
+          "type": "number",
+          "defaultValue": 5,
+          "min": 2,
+          "max": 15,
+          "step": 1
+        },
+        {
+          "key": "prompt_extend",
+          "label": "Prompt Extend",
+          "type": "boolean",
+          "defaultValue": true
+        },
+        {
+          "key": "watermark",
+          "label": "Watermark",
+          "type": "boolean",
+          "defaultValue": false
+        }
+      ],
+      "aliases": [
+        "happyhorse-1.0-t2v",
+        "happyhorse1.0-t2v"
+      ],
+      "enabled": true,
+      "credits": 30,
+      "time": "~60s",
+      "sortRank": 160,
+      "rawApiExample": "curl -X POST https://console.gmicloud.ai/api/v1/ie/requestqueue/apikey/requests -H 'Authorization: Bearer YOUR_API_KEY' -d '{\"model\":\"happyhorse1.0-t2v\",\"payload\":{\"prompt\":\"...\",\"resolution\":\"1080P\",\"ratio\":\"16:9\",\"duration\":10}}'"
+    },
+    {
+      "id": "gmi/happyhorse-1.0-i2v",
+      "endpointId": "happyhorse1.0-i2v",
+      "provider": "gmi-cloud",
+      "providerLabel": "Wan AI",
+      "name": "HappyHorse 1.0 (Image\u2192Video)",
+      "description": "Wan AI image-to-video. First/last frame, driving audio, first clip references. Continuous 2-15s duration.",
+      "category": "Video",
+      "pricingText": "$0.28 per second",
+      "transport": "request_queue",
+      "mediaType": "video",
+      "workflowType": "image-to-video",
+      "uiGroup": "generation",
+      "supports": [
+        "prompt",
+        "negative_prompt",
+        "first_frame",
+        "last_frame",
+        "image",
+        "image_url",
+        "resolution",
+        "duration",
+        "prompt_extend",
+        "watermark",
+        "seed"
+      ],
+      "payloadKeys": [
+        "prompt",
+        "negative_prompt",
+        "first_frame",
+        "last_frame",
+        "resolution",
+        "duration",
+        "prompt_extend",
+        "watermark",
+        "seed"
+      ],
+      "requiresAssets": [
+        "image"
+      ],
+      "defaults": {
+        "resolution": "1080P",
+        "duration": 5,
+        "prompt_extend": true,
+        "watermark": false
+      },
+      "controls": [
+        {
+          "key": "resolution",
+          "label": "Resolution",
+          "type": "select",
+          "defaultValue": "1080P",
+          "options": [
+            {
+              "label": "720P",
+              "value": "720P"
+            },
+            {
+              "label": "1080P",
+              "value": "1080P"
+            }
+          ]
+        },
+        {
+          "key": "duration",
+          "label": "Duration (s)",
+          "type": "number",
+          "defaultValue": 5,
+          "min": 2,
+          "max": 15,
+          "step": 1
+        },
+        {
+          "key": "prompt_extend",
+          "label": "Prompt Extend",
+          "type": "boolean",
+          "defaultValue": true
+        },
+        {
+          "key": "watermark",
+          "label": "Watermark",
+          "type": "boolean",
+          "defaultValue": false
+        }
+      ],
+      "aliases": [
+        "happyhorse-1.0-i2v",
+        "happyhorse1.0-i2v"
+      ],
+      "enabled": true,
+      "credits": 30,
+      "time": "~60s",
+      "sortRank": 161,
+      "rawApiExample": "curl -X POST https://console.gmicloud.ai/api/v1/ie/requestqueue/apikey/requests -H 'Authorization: Bearer YOUR_API_KEY' -d '{\"model\":\"happyhorse1.0-i2v\",\"payload\":{\"prompt\":\"...\",\"first_frame\":\"https://...\",\"resolution\":\"1080P\",\"duration\":10}}'"
+    },
+    {
+      "id": "gmi/wan-2.7-i2v",
+      "endpointId": "wan2.7-i2v",
+      "provider": "gmi-cloud",
+      "providerLabel": "Wan AI",
+      "name": "Wan 2.7 (Image\u2192Video)",
+      "description": "Wan 2.7 image-to-video with improved fidelity and temporal consistency. First/last frame, driving audio, first clip refs. 2-15s duration.",
+      "category": "Video",
+      "pricingText": "$0.15 per second",
+      "transport": "request_queue",
+      "mediaType": "video",
+      "workflowType": "image-to-video",
+      "uiGroup": "generation",
+      "supports": [
+        "prompt",
+        "negative_prompt",
+        "first_frame",
+        "last_frame",
+        "image",
+        "image_url",
+        "driving_audio",
+        "first_clip",
+        "resolution",
+        "duration",
+        "prompt_extend",
+        "watermark",
+        "seed"
+      ],
+      "payloadKeys": [
+        "prompt",
+        "negative_prompt",
+        "first_frame",
+        "last_frame",
+        "driving_audio",
+        "first_clip",
+        "resolution",
+        "duration",
+        "prompt_extend",
+        "watermark",
+        "seed"
+      ],
+      "requiresAssets": [
+        "image"
+      ],
+      "defaults": {
+        "resolution": "1080P",
+        "duration": 5,
+        "prompt_extend": true,
+        "watermark": false
+      },
+      "controls": [
+        {
+          "key": "resolution",
+          "label": "Resolution",
+          "type": "select",
+          "defaultValue": "1080P",
+          "options": [
+            {
+              "label": "720P",
+              "value": "720P"
+            },
+            {
+              "label": "1080P",
+              "value": "1080P"
+            }
+          ]
+        },
+        {
+          "key": "duration",
+          "label": "Duration (s)",
+          "type": "number",
+          "defaultValue": 5,
+          "min": 2,
+          "max": 15,
+          "step": 1
+        },
+        {
+          "key": "prompt_extend",
+          "label": "Prompt Extend",
+          "type": "boolean",
+          "defaultValue": true
+        },
+        {
+          "key": "watermark",
+          "label": "Watermark",
+          "type": "boolean",
+          "defaultValue": false
+        }
+      ],
+      "aliases": [
+        "wan-2.7-i2v",
+        "wan2.7-i2v"
+      ],
+      "enabled": true,
+      "credits": 18,
+      "time": "~50s",
+      "sortRank": 155,
+      "rawApiExample": "curl -X POST https://console.gmicloud.ai/api/v1/ie/requestqueue/apikey/requests -H 'Authorization: Bearer YOUR_API_KEY' -d '{\"model\":\"wan2.7-i2v\",\"payload\":{\"prompt\":\"...\",\"first_frame\":\"https://...\",\"resolution\":\"1080P\",\"duration\":10}}'"
+    },
+    {
+      "id": "gmi/wan-2.7-r2v",
+      "endpointId": "wan2.7-r2v",
+      "provider": "gmi-cloud",
+      "providerLabel": "Wan AI",
+      "name": "Wan 2.7 (Reference\u2192Video)",
+      "description": "Wan 2.7 reference-to-video. Preserves character appearance, object identity, scene layout, and vocal timbre using up to 5 reference images/videos.",
+      "category": "Video",
+      "pricingText": "$0.15 per second",
+      "transport": "request_queue",
+      "mediaType": "video",
+      "workflowType": "image-to-video",
+      "uiGroup": "generation",
+      "supports": [
+        "prompt",
+        "negative_prompt",
+        "first_frame",
+        "reference_image",
+        "reference_video",
+        "image",
+        "image_url",
+        "video",
+        "video_url",
+        "resolution",
+        "ratio",
+        "duration",
+        "prompt_extend",
+        "watermark",
+        "seed"
+      ],
+      "payloadKeys": [
+        "prompt",
+        "negative_prompt",
+        "first_frame",
+        "reference_image",
+        "reference_video",
+        "resolution",
+        "ratio",
+        "duration",
+        "prompt_extend",
+        "watermark",
+        "seed"
+      ],
+      "requiresAssets": [
+        "image"
+      ],
+      "defaults": {
+        "resolution": "1080P",
+        "ratio": "16:9",
+        "duration": 5,
+        "prompt_extend": false,
+        "watermark": false
+      },
+      "controls": [
+        {
+          "key": "resolution",
+          "label": "Resolution",
+          "type": "select",
+          "defaultValue": "1080P",
+          "options": [
+            {
+              "label": "720P",
+              "value": "720P"
+            },
+            {
+              "label": "1080P",
+              "value": "1080P"
+            }
+          ]
+        },
+        {
+          "key": "ratio",
+          "label": "Aspect Ratio",
+          "type": "select",
+          "defaultValue": "16:9",
+          "options": [
+            {
+              "label": "16:9",
+              "value": "16:9"
+            },
+            {
+              "label": "9:16",
+              "value": "9:16"
+            },
+            {
+              "label": "1:1",
+              "value": "1:1"
+            },
+            {
+              "label": "4:3",
+              "value": "4:3"
+            },
+            {
+              "label": "3:4",
+              "value": "3:4"
+            }
+          ]
+        },
+        {
+          "key": "duration",
+          "label": "Duration (s)",
+          "type": "number",
+          "defaultValue": 5,
+          "min": 2,
+          "max": 15,
+          "step": 1
+        },
+        {
+          "key": "prompt_extend",
+          "label": "Prompt Extend",
+          "type": "boolean",
+          "defaultValue": false
+        },
+        {
+          "key": "watermark",
+          "label": "Watermark",
+          "type": "boolean",
+          "defaultValue": false
+        }
+      ],
+      "aliases": [
+        "wan-2.7-r2v",
+        "wan2.7-r2v"
+      ],
+      "enabled": true,
+      "credits": 18,
+      "time": "~60s",
+      "sortRank": 156,
+      "rawApiExample": "curl -X POST https://console.gmicloud.ai/api/v1/ie/requestqueue/apikey/requests -H 'Authorization: Bearer YOUR_API_KEY' -d '{\"model\":\"wan2.7-r2v\",\"payload\":{\"prompt\":\"...\",\"reference_image\":[\"https://...\"],\"resolution\":\"1080P\",\"duration\":10}}'"
+    },
+    {
+      "id": "gmi/seedance-2.0-fast",
+      "endpointId": "seedance-2-0-fast-260128",
+      "provider": "gmi-cloud",
+      "providerLabel": "Seedance",
+      "name": "Seedance 2.0 Fast",
+      "description": "Next-gen video generation supporting text, first/last frame images, reference images/videos/audios. 4-15s duration up to 1080p.",
+      "category": "Video",
+      "pricingText": "$0.022 per second",
+      "transport": "request_queue",
+      "mediaType": "video",
+      "workflowType": "text-to-video",
+      "uiGroup": "generation",
+      "supports": [
+        "prompt",
+        "duration",
+        "resolution",
+        "ratio",
+        "seed",
+        "watermark",
+        "generate_audio",
+        "web_search",
+        "first_frame",
+        "last_frame",
+        "reference_images",
+        "reference_videos",
+        "reference_audios",
+        "image",
+        "image_url"
+      ],
+      "payloadKeys": [
+        "prompt",
+        "duration",
+        "resolution",
+        "ratio",
+        "seed",
+        "watermark",
+        "generate_audio",
+        "web_search",
+        "first_frame",
+        "last_frame",
+        "reference_images",
+        "reference_videos",
+        "reference_audios"
+      ],
+      "requiresAssets": [],
+      "defaults": {
+        "duration": 5,
+        "resolution": "720p",
+        "ratio": "16:9",
+        "watermark": false,
+        "generate_audio": true,
+        "web_search": false
+      },
+      "controls": [
+        {
+          "key": "resolution",
+          "label": "Resolution",
+          "type": "select",
+          "defaultValue": "720p",
+          "options": [
+            {
+              "label": "480p",
+              "value": "480p"
+            },
+            {
+              "label": "720p",
+              "value": "720p"
+            },
+            {
+              "label": "1080p",
+              "value": "1080p"
+            }
+          ]
+        },
+        {
+          "key": "ratio",
+          "label": "Aspect Ratio",
+          "type": "select",
+          "defaultValue": "16:9",
+          "options": [
+            {
+              "label": "16:9",
+              "value": "16:9"
+            },
+            {
+              "label": "4:3",
+              "value": "4:3"
+            },
+            {
+              "label": "1:1",
+              "value": "1:1"
+            },
+            {
+              "label": "3:4",
+              "value": "3:4"
+            },
+            {
+              "label": "9:16",
+              "value": "9:16"
+            },
+            {
+              "label": "21:9",
+              "value": "21:9"
+            },
+            {
+              "label": "adaptive",
+              "value": "adaptive"
+            }
+          ]
+        },
+        {
+          "key": "duration",
+          "label": "Duration (s)",
+          "type": "number",
+          "defaultValue": 5,
+          "min": 4,
+          "max": 15,
+          "step": 1
+        },
+        {
+          "key": "generate_audio",
+          "label": "Generate Audio",
+          "type": "boolean",
+          "defaultValue": true
+        },
+        {
+          "key": "watermark",
+          "label": "Watermark",
+          "type": "boolean",
+          "defaultValue": false
+        }
+      ],
+      "aliases": [
+        "seedance-2-0-fast-260128",
+        "seedance-2.0-fast"
+      ],
+      "enabled": true,
+      "credits": 4,
+      "time": "~30s",
+      "sortRank": 150,
+      "rawApiExample": "curl -X POST https://console.gmicloud.ai/api/v1/ie/requestqueue/apikey/requests -H 'Authorization: Bearer YOUR_API_KEY' -d '{\"model\":\"seedance-2-0-fast-260128\",\"payload\":{\"prompt\":\"...\",\"duration\":8,\"resolution\":\"720p\"}}'"
+    }
 ] as GeneratedGmiCatalogEntry[];
