@@ -371,9 +371,9 @@ export function VideoStudioSection({
         {selectedJob && (
           <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/40">
             {previewUrl && selectedJob.resultPayload?.mediaType === "video" ? (
-              <video src={previewUrl} controls autoPlay loop muted playsInline className="aspect-video w-full bg-black object-cover" />
+              <video src={previewUrl} controls autoPlay loop muted playsInline preload="metadata" poster={selectedJob.resultPayload?.thumbnailUrl ?? undefined} className="aspect-video w-full bg-black object-cover" />
             ) : previewUrl ? (
-              <img src={previewUrl} alt="Output" className="aspect-video w-full object-cover" />
+              <img src={previewUrl} alt="Output" className="aspect-video w-full object-cover" decoding="async" />
             ) : isJobActive(selectedJob) ? (
               <div className="flex aspect-video flex-col items-center justify-center gap-4">
                 <Loader2 className="h-10 w-10 animate-spin text-[#f97316]" />
