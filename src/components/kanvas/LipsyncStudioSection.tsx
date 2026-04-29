@@ -436,9 +436,9 @@ function LipsyncDashboard({
               <div className="h-24 w-24 rounded-xl overflow-hidden bg-white/5 shrink-0">
                 {latestUrl ? (
                   latestCompleted.resultPayload?.mediaType === "video" ? (
-                    <video src={latestUrl} muted className="h-full w-full object-cover" />
+                    <video src={latestUrl} muted playsInline preload="metadata" className="h-full w-full object-cover" />
                   ) : (
-                    <img src={latestUrl} alt="Latest render" className="h-full w-full object-cover" />
+                    <img src={latestUrl} alt="Latest render" className="h-full w-full object-cover" loading="lazy" decoding="async" />
                   )
                 ) : (
                   <div className="h-full w-full flex items-center justify-center">
