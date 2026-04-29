@@ -1520,6 +1520,21 @@ export async function submitKanvasJob(
     throw new Error(submission.error || 'Fal submission failed.');
   }
 
+  // Fail fast: a successful submission with no requestId AND no inline data
+  // would create an unpollable job. Release the hold and surface a clear error.
+  if (!submission.requestId && !submission.data) {
+    await deps.credits.release({
+      userId,
+      holdId: reservation.holdId,
+      skipped: reservation.skipped,
+      amount: cost,
+      reason: 'submission_missing_request_id',
+      requestId: null,
+      modelId: model.id,
+    });
+    throw new Error('Provider accepted the request but returned no request ID. Please retry.');
+  }
+
   const config: KanvasJobConfig = {
     request,
     queue: {
