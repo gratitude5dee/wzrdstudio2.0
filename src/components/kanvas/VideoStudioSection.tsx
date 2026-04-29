@@ -538,7 +538,7 @@ export function VideoStudioSection({
       <div className="min-w-0 flex-1 space-y-8">
         <div className="overflow-hidden rounded-2xl border border-white/5 bg-black/40">
           {previewUrl ? (
-            <video src={previewUrl} controls autoPlay loop muted playsInline className="aspect-video w-full bg-black object-cover" />
+            <video src={previewUrl} controls autoPlay loop muted playsInline preload="metadata" className="aspect-video w-full bg-black object-cover" />
           ) : (
             <div className="flex aspect-video flex-col items-center justify-center gap-4">
               <Eye className="h-12 w-12 text-zinc-800" />
