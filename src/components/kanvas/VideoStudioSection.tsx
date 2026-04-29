@@ -79,9 +79,10 @@ function Dropzone({
             className="absolute inset-0 h-full w-full object-cover opacity-80 transition-opacity group-hover:opacity-100"
             muted
             playsInline
+            preload="metadata"
           />
         ) : previewUrl ? (
-          <img src={previewUrl} alt={label} className="absolute inset-0 h-full w-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" loading="lazy" />
+          <img src={previewUrl} alt={label} className="absolute inset-0 h-full w-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" loading="lazy" decoding="async" />
         ) : uploading ? (
           <Loader2 className="h-6 w-6 animate-spin text-[#f97316]" />
         ) : (
@@ -370,9 +371,9 @@ export function VideoStudioSection({
         {selectedJob && (
           <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/40">
             {previewUrl && selectedJob.resultPayload?.mediaType === "video" ? (
-              <video src={previewUrl} controls autoPlay loop muted playsInline className="aspect-video w-full bg-black object-cover" />
+              <video src={previewUrl} controls autoPlay loop muted playsInline preload="metadata" poster={selectedJob.resultPayload?.thumbnailUrl ?? undefined} className="aspect-video w-full bg-black object-cover" />
             ) : previewUrl ? (
-              <img src={previewUrl} alt="Output" className="aspect-video w-full object-cover" />
+              <img src={previewUrl} alt="Output" className="aspect-video w-full object-cover" decoding="async" />
             ) : isJobActive(selectedJob) ? (
               <div className="flex aspect-video flex-col items-center justify-center gap-4">
                 <Loader2 className="h-10 w-10 animate-spin text-[#f97316]" />
@@ -457,9 +458,9 @@ export function VideoStudioSection({
                 return (
                   <div key={job.id} className="group relative aspect-[9/16] overflow-hidden rounded-xl bg-[#1a1919]">
                     {job.resultPayload?.mediaType === "video" ? (
-                      <video src={url} muted className="h-full w-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500" />
+                      <video src={url} muted playsInline preload="metadata" poster={job.resultPayload?.thumbnailUrl ?? undefined} className="h-full w-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500" />
                     ) : (
-                      <img src={url} alt="Creation" className="h-full w-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500" loading="lazy" />
+                      <img src={url} alt="Creation" className="h-full w-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500" loading="lazy" decoding="async" />
                     )}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
                     <div className="absolute right-2 top-2">
@@ -537,7 +538,7 @@ export function VideoStudioSection({
       <div className="min-w-0 flex-1 space-y-8">
         <div className="overflow-hidden rounded-2xl border border-white/5 bg-black/40">
           {previewUrl ? (
-            <video src={previewUrl} controls autoPlay loop muted playsInline className="aspect-video w-full bg-black object-cover" />
+            <video src={previewUrl} controls autoPlay loop muted playsInline preload="metadata" className="aspect-video w-full bg-black object-cover" />
           ) : (
             <div className="flex aspect-video flex-col items-center justify-center gap-4">
               <Eye className="h-12 w-12 text-zinc-800" />
