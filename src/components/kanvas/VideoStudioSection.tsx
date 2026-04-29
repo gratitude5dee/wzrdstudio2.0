@@ -458,9 +458,9 @@ export function VideoStudioSection({
                 return (
                   <div key={job.id} className="group relative aspect-[9/16] overflow-hidden rounded-xl bg-[#1a1919]">
                     {job.resultPayload?.mediaType === "video" ? (
-                      <video src={url} muted className="h-full w-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500" />
+                      <video src={url} muted playsInline preload="metadata" poster={job.resultPayload?.thumbnailUrl ?? undefined} className="h-full w-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500" />
                     ) : (
-                      <img src={url} alt="Creation" className="h-full w-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500" loading="lazy" />
+                      <img src={url} alt="Creation" className="h-full w-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500" loading="lazy" decoding="async" />
                     )}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
                     <div className="absolute right-2 top-2">
