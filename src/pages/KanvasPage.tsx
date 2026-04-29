@@ -1041,6 +1041,8 @@ export default function KanvasPage() {
     }
   }, [currentStudioJobs, selectedJobId]);
 
+  const pollFailureCountsRef = useRef<Record<string, number>>({});
+
   useEffect(() => {
     const activeJobs = jobs.filter(isJobActive);
     if (activeJobs.length === 0) {
@@ -1048,19 +1050,43 @@ export default function KanvasPage() {
     }
 
     const intervalId = window.setInterval(() => {
-      void Promise.allSettled(activeJobs.slice(0, 5).map((job) => refreshKanvasJobStatus(job.id)))
+      const pollable = activeJobs
+        .slice(0, 5)
+        .filter((job) => (pollFailureCountsRef.current[job.id] ?? 0) < 3);
+
+      if (pollable.length === 0) return;
+
+      void Promise.allSettled(pollable.map((job) => refreshKanvasJobStatus(job.id)))
         .then((results) => {
-          const updatedJobs = results
-            .filter((r): r is PromiseFulfilledResult<KanvasJob> => r.status === "fulfilled")
-            .map((r) => r.value);
-          if (updatedJobs.length > 0) {
-            setJobs((current) => mergeJobs(current, updatedJobs));
-          }
+          const updatedJobs: KanvasJob[] = [];
+          const locallyFailed: KanvasJob[] = [];
+
           results.forEach((r, i) => {
-            if (r.status === "rejected") {
-              console.warn(`Failed to refresh job ${activeJobs[i]?.id}:`, r.reason);
+            const job = pollable[i];
+            if (!job) return;
+            if (r.status === "fulfilled") {
+              pollFailureCountsRef.current[job.id] = 0;
+              updatedJobs.push(r.value);
+            } else {
+              const next = (pollFailureCountsRef.current[job.id] ?? 0) + 1;
+              pollFailureCountsRef.current[job.id] = next;
+              console.warn(`Failed to refresh job ${job.id} (attempt ${next}):`, r.reason);
+              if (next >= 3) {
+                // Stop polling; mark locally failed so UI clears the spinner.
+                locallyFailed.push({
+                  ...job,
+                  status: "failed",
+                  errorMessage:
+                    job.errorMessage ?? "Lost connection to generation status. Please retry.",
+                });
+              }
             }
           });
+
+          const merged = [...updatedJobs, ...locallyFailed];
+          if (merged.length > 0) {
+            setJobs((current) => mergeJobs(current, merged));
+          }
         });
     }, 4000);
 
