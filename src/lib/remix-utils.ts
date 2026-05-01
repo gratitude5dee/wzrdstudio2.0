@@ -138,21 +138,30 @@ export function seededShuffle<T>(items: T[], seed = 1): T[] {
 
 /**
  * Build timeline slots from duration and cut markers.
- * Each slot is ~1 second, split at marker boundaries.
- * Returns `ceil(durationMs / 1000)` slots.
+ * Each cut marker defines a segment boundary — the slots are the gaps between
+ * consecutive boundaries (including 0 and durationMs as implicit edges).
+ * If no markers exist, a single slot spanning the full duration is returned.
  */
 export function buildRemixTimelineSlots(
   durationMs: number,
   cutMarkers: Array<{ timestampMs: number }> = []
 ): RemixTimelineSlot[] {
-  const totalSlots = Math.max(1, Math.ceil(durationMs / 1000));
-  const slotDurationMs = durationMs / totalSlots;
+  if (durationMs <= 0) return [{ slotIndex: 0, startMs: 0, endMs: 0, clipId: null }];
+
+  // Collect unique, sorted boundary points
+  const boundaries = new Set<number>([0, durationMs]);
+  for (const m of cutMarkers) {
+    const t = Math.max(0, Math.min(durationMs, m.timestampMs));
+    boundaries.add(t);
+  }
+  const sorted = Array.from(boundaries).sort((a, b) => a - b);
+
   const slots: RemixTimelineSlot[] = [];
-  for (let i = 0; i < totalSlots; i++) {
+  for (let i = 0; i < sorted.length - 1; i++) {
     slots.push({
       slotIndex: i,
-      startMs: Math.round(i * slotDurationMs),
-      endMs: Math.round((i + 1) * slotDurationMs),
+      startMs: sorted[i],
+      endMs: sorted[i + 1],
       clipId: null,
     });
   }
