@@ -344,9 +344,9 @@ const KanvasRemix = () => {
   );
 
   return (
-    <div className="min-h-screen flex flex-col overflow-hidden bg-black text-white">
+    <div className="h-screen flex flex-col overflow-hidden bg-black text-white">
       <KanvasLyricsHeader />
-      <div className="flex-1 grid min-h-0 grid-cols-1 lg:grid-cols-[480px_1fr]">
+      <div className="flex-1 grid min-h-0 grid-cols-1 lg:grid-cols-[400px_1fr]">
         {/* ── Left rail ── */}
         <aside className="flex flex-col border-r border-white/[0.06] bg-[#0A0A0A]">
           <div className="px-8 pt-6">
