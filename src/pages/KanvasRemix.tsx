@@ -585,8 +585,8 @@ const KanvasRemix = () => {
             ))}
           </div>
 
-          {/* Preview player — fills available space */}
-          <div className="flex flex-1 min-h-0 items-center justify-center px-4 py-3">
+          {/* Preview player */}
+          <div className="flex items-center justify-center px-4 py-3" style={{ height: 'calc(100vh - 240px)', minHeight: '300px' }}>
             <div
               className="relative overflow-hidden rounded-xl border border-white/10 bg-[#050505]"
               style={{
