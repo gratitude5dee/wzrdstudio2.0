@@ -31,6 +31,7 @@ import {
 import type { KanvasLyricTemplate } from '@/features/kanvas-lyrics/types';
 import { useAudioEngine } from '@/features/kanvas-lyrics/useAudioEngine';
 import { decodeWaveform } from '@/features/kanvas-lyrics/decodeWaveform';
+import { sliceAudioToWav } from '@/features/kanvas-lyrics/clipAudio';
 import { supabase } from '@/integrations/supabase/client';
 
 type ClipDurationMs = 15000 | 30000 | 45000 | 60000;
