@@ -1,39 +1,32 @@
-## Plan
+I found two likely root causes in the Kanvas Lyrics flow:
 
-Fix the Kanvas Lyrics audio pipeline so starting a fresh template no longer clears newly selected audio, and so playback/waveform stay available through the wizard.
+1. Existing templates are hydrated into a confirmed/draft state but the Audio panel hides the waveform once `confirmed` is true, so the stored `waveformPeaks` can exist but never render in the Audio section.
+2. Playback for saved/uploaded template audio relies on the public asset URL and applies `crossOrigin`, which can fail silently depending on storage/CORS behavior. The backend already stores `metadata.storage_path`, so the client can use a signed storage URL instead.
 
-### What I’ll change
+Plan:
 
-1. **Prevent the “new template” reset from wiping a file immediately after upload**
-   - The current reset effect runs any time `/kanvas/lyrics?mode=new` is active.
-   - After selecting an audio file, the page is still on that route, so the reset can re-run and clear `audioPlaybackUrl`, `sourceFileRef`, waveform peaks, and engine source.
-   - I’ll gate the reset so it only runs when entering a new-template session, not after local audio has already been selected.
+1. Fix template hydration state in `src/pages/KanvasLyrics.tsx`
+   - Treat draft/audio-ready templates as editable audio step state, not as a hidden confirmed panel.
+   - Keep `waveformPeaks` from the server in `audio.peaks` and keep the waveform visible for loaded templates.
+   - Set the correct `currentStep`/`appState` so the Audio section shows the waveform and controls immediately after loading a template.
 
-2. **Load audio into the engine immediately when a file is selected**
-   - After creating the `blob:` URL, explicitly load it into the audio engine in the upload handler instead of relying only on the later effect.
-   - This makes playback readiness deterministic and avoids timing issues with state/effect ordering.
+2. Resolve playback URLs more robustly
+   - Add a helper that takes a `project_assets` row and prefers `metadata.storage_bucket` + `metadata.storage_path` to generate a signed URL with Supabase Storage.
+   - Fall back to the stored `asset.url` only if signing fails or metadata is unavailable.
+   - Use the same resolver after direct upload/register and during template hydration.
 
-3. **Re-point playback to the uploaded trimmed clip after confirm**
-   - `uploadTemplateAudio()` returns the hosted clip URL, but the page currently stores the asset id without updating `audioPlaybackUrl`.
-   - I’ll set `audioPlaybackUrl` to the uploaded URL after confirm so Lyrics, Cut Markers, and Preview steps play the trimmed hosted clip.
-   - I’ll only revoke the previous local object URL after the hosted URL is active, so playback doesn’t lose its source mid-flow.
+3. Harden `useAudioEngine.ts`
+   - Make `load(url)` reset the media element deterministically before assigning a new URL.
+   - Avoid applying `crossOrigin` for Supabase signed/private URLs to prevent CORS-related media load failures.
+   - Surface a clear toast/log when metadata cannot load or `play()` is rejected, instead of leaving the UI disabled or appearing dead.
+   - Set readiness from `loadedmetadata/canplaythrough` and duration fallback so controls become available when audio is playable.
 
-4. **Make waveform display robust**
-   - Ensure waveform peaks are retained when confirmation resets the clip to a trimmed duration.
-   - If decode fails or returns empty peaks, continue showing generated fallback bars rather than an empty-looking waveform.
+4. Preserve waveform during local-to-hosted transition
+   - When confirming selection, keep the decoded `audio.peaks` in state after the URL changes from `blob:` to hosted/signed URL.
+   - If no peaks are present for any reason, let `WaveformView` show its fallback bars instead of rendering an empty/blank-looking waveform.
 
-5. **Improve visible failure feedback**
-   - If the audio engine rejects play or fails to load, surface a concise toast and keep state consistent so the play button doesn’t appear silently broken.
+5. Add regression coverage
+   - Update `KanvasLyrics.test.tsx` mocks to cover template hydration with stored waveform peaks.
+   - Add assertions that loading an existing template renders the waveform/trimmer controls and does not clear audio state.
 
-### Files in scope
-
-- `src/pages/KanvasLyrics.tsx`
-- `src/features/kanvas-lyrics/useAudioEngine.ts`
-- Possibly `src/features/kanvas-lyrics/decodeWaveform.ts` if decode fallback needs a guard
-
-### Expected result
-
-- Starting “New Template” opens a clean wizard.
-- Selecting audio shows the waveform reliably.
-- Pressing play in the Audio panel works for the selected local file.
-- Confirming the selection uploads the trimmed clip and subsequent Lyrics / Cut Markers / Preview playback continues to work using the hosted clip.
+After approval, I’ll implement these changes and keep the scope focused on restoring waveform visibility and playback in the Audio section.

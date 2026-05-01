@@ -157,6 +157,13 @@ const KanvasLyrics = () => {
         if (cancelled) return;
         setTemplateId(t.id);
         setAudioAssetId(t.sourceAudioAssetId);
+        // Always show the waveform/trimmer for hydrated templates so the
+        // user can preview audio. `confirmed` only locks the trim controls
+        // once the user has explicitly moved past the audio step.
+        const isPastAudio =
+          t.status === 'lyrics_ready' ||
+          t.status === 'markers_ready' ||
+          t.status === 'saved';
         setAudio({
           fileName: t.title,
           fileUrl: null,
@@ -164,7 +171,7 @@ const KanvasLyrics = () => {
           selectionStart: t.selectionStartMs / 1000,
           selectionDuration: (t.selectionDurationMs / 1000) as ClipDuration,
           zoom: 1,
-          confirmed: t.status !== 'draft',
+          confirmed: isPastAudio,
           peaks: t.waveformPeaks ?? [],
         });
         setLyrics(blocksFromServer(t));
