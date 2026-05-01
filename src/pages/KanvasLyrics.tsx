@@ -203,10 +203,8 @@ const KanvasLyrics = () => {
     return null;
   }, [playheadTime, lyrics]);
 
-  // Audio handlers
+  // Audio handlers — local-first. Upload is deferred to Confirm.
   const handleAudioSelected = useCallback(async (file: File) => {
-    // Fast client-side validation so users get immediate feedback rather
-    // than a 413 from Storage.
     const MAX_BYTES = 50 * 1024 * 1024;
     const isAudio = file.type.startsWith('audio/') ||
       /\.(mp3|wav|m4a|mp4|aac|flac|ogg|oga)$/i.test(file.name);
@@ -223,9 +221,12 @@ const KanvasLyrics = () => {
     if (lastUrlRef.current) URL.revokeObjectURL(lastUrlRef.current);
     const url = URL.createObjectURL(file);
     lastUrlRef.current = url;
+    sourceFileRef.current = file;
     setAudioPlaybackUrl(url);
+    // Reset any previous server-side state — the wizard is now fully local.
+    setAudioAssetId(null);
+    setTemplateId(null);
 
-    // Decode peaks + duration in parallel with upload
     const decoded = await decodeWaveform(file);
     const probedDuration = decoded.durationSec || 60;
 
@@ -240,36 +241,8 @@ const KanvasLyrics = () => {
       confirmed: false,
     });
     setAppState('trim');
-
-    // Upload + create draft template in background
-    const toastId = 'kanvas-lyrics-upload';
-    toast.loading('Uploading audio…', { id: toastId });
-    setTranscribeStatus('uploading');
-    try {
-      const uploaded = await uploadTemplateAudio(file);
-      setAudioAssetId(uploaded.assetId);
-      const draft = await createTemplate({
-        title: file.name.replace(/\.[^.]+$/, '').slice(0, 80) || 'Untitled Template',
-        sourceAudioAssetId: uploaded.assetId,
-        totalDurationMs: Math.round(probedDuration * 1000),
-        selectionStartMs: 0,
-        selectionDurationMs: 15000,
-        waveformPeaks: decoded.peaks,
-      });
-      setTemplateId(draft.id);
-      setSearchParams({ templateId: draft.id }, { replace: true });
-      setTranscribeStatus('idle');
-      toast.success('Audio uploaded', { id: toastId });
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Upload failed', { id: toastId });
-      setTranscribeStatus('idle');
-      // Reset back to dropzone so the user can retry without reload.
-      if (lastUrlRef.current) { URL.revokeObjectURL(lastUrlRef.current); lastUrlRef.current = null; }
-      setAudio(INITIAL_AUDIO);
-      setAudioPlaybackUrl(null);
-      setAppState('upload');
-    }
-  }, [setSearchParams]);
+    setTranscribeStatus('idle');
+  }, []);
 
   // Debounced server patch helper
   const patchTimer = useRef<number | null>(null);
