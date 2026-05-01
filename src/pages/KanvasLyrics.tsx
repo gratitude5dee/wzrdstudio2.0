@@ -200,14 +200,28 @@ const KanvasLyrics = () => {
 
   // Audio handlers
   const handleAudioSelected = useCallback(async (file: File) => {
+    // Fast client-side validation so users get immediate feedback rather
+    // than a 413 from Storage.
+    const MAX_BYTES = 50 * 1024 * 1024;
+    const isAudio = file.type.startsWith('audio/') ||
+      /\.(mp3|wav|m4a|mp4|aac|flac|ogg|oga)$/i.test(file.name);
+    if (!isAudio) {
+      toast.error('Unsupported file type. Use MP3, WAV, M4A, AAC, FLAC, or OGG.');
+      return;
+    }
+    if (file.size > MAX_BYTES) {
+      const mb = (file.size / (1024 * 1024)).toFixed(1);
+      toast.error(`Audio file is too large (${mb} MB). Max 50 MB.`);
+      return;
+    }
+
     if (lastUrlRef.current) URL.revokeObjectURL(lastUrlRef.current);
     const url = URL.createObjectURL(file);
     lastUrlRef.current = url;
     setAudioPlaybackUrl(url);
 
     // Decode peaks + duration in parallel with upload
-    const decodePromise = decodeWaveform(file);
-    const decoded = await decodePromise;
+    const decoded = await decodeWaveform(file);
     const probedDuration = decoded.durationSec || 60;
 
     setAudio({
@@ -223,6 +237,8 @@ const KanvasLyrics = () => {
     setAppState('trim');
 
     // Upload + create draft template in background
+    const toastId = 'kanvas-lyrics-upload';
+    toast.loading('Uploading audio…', { id: toastId });
     setTranscribeStatus('uploading');
     try {
       const uploaded = await uploadTemplateAudio(file);
@@ -238,9 +254,15 @@ const KanvasLyrics = () => {
       setTemplateId(draft.id);
       setSearchParams({ templateId: draft.id }, { replace: true });
       setTranscribeStatus('idle');
+      toast.success('Audio uploaded', { id: toastId });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Upload failed');
+      toast.error(e instanceof Error ? e.message : 'Upload failed', { id: toastId });
       setTranscribeStatus('idle');
+      // Reset back to dropzone so the user can retry without reload.
+      if (lastUrlRef.current) { URL.revokeObjectURL(lastUrlRef.current); lastUrlRef.current = null; }
+      setAudio(INITIAL_AUDIO);
+      setAudioPlaybackUrl(null);
+      setAppState('upload');
     }
   }, [setSearchParams]);
 
