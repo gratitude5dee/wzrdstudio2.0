@@ -144,6 +144,7 @@ const KanvasRemix = () => {
   // Build timeline slots when template changes
   const durationMs = template?.selectionDurationMs ?? 15000;
   useEffect(() => {
+    hasAutoPopulated.current = false;
     const markers = template?.cutMarkers ?? [];
     const slots = buildRemixTimelineSlots(durationMs, markers);
     setTimelineSlots(slots);
