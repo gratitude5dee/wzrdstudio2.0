@@ -442,7 +442,7 @@ const KanvasLyrics = () => {
       toast.error(e instanceof Error ? e.message : 'Failed to prepare clip', { id: toastId });
       setTranscribeStatus('idle');
     }
-  }, [audio.selectionStart, audio.selectionDuration, audio.peaks, engine, runTranscribe, setSearchParams]);
+  }, [audio.selectionStart, audio.selectionDuration, audio.peaks, engine, engineLoad, runTranscribe, setSearchParams]);
 
   const handleAudioReset = useCallback(() => {
     if (lastUrlRef.current) { URL.revokeObjectURL(lastUrlRef.current); lastUrlRef.current = null; }
