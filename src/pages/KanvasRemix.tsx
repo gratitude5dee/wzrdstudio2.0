@@ -31,7 +31,6 @@ import { appRoutes } from '@/lib/routes';
 import { getTemplate, listTemplates } from '@/features/kanvas-lyrics/service';
 import type { KanvasLyricTemplate } from '@/features/kanvas-lyrics/types';
 import {
-  createRemixJob,
   listFootageAssets,
   listFootageCategories,
   listLyricStyles,
@@ -49,6 +48,7 @@ import {
 } from '@/lib/remix-utils';
 import { LyricRemixComposition } from '@/components/remix/LyricRemixComposition';
 import { KanvasLyricsHeader } from '@/components/kanvas-lyrics/KanvasLyricsHeader';
+import { ExportModal } from '@/features/remix/ExportModal';
 
 type RatioFilter = 'all' | AspectRatio;
 type SortKey = 'newest' | 'oldest' | 'shortest' | 'longest';
