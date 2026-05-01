@@ -103,6 +103,10 @@ const KanvasLyrics = () => {
   const [lyrics, setLyrics] = useState<LyricBlock[]>([]);
   const [markers, setMarkers] = useState<CutMarker[]>([]);
 
+  // Local source File kept for the entire wizard so we can slice + upload
+  // only the trimmed clip on Confirm. Never written to network until then.
+  const sourceFileRef = useRef<File | null>(null);
+
   const engine = useAudioEngine();
 
   const lastUrlRef = useRef<string | null>(null);
