@@ -137,6 +137,7 @@ export function MarkersPanel({
           onSeekPercent={handleSeekPct}
           markers={markers}
           duration={duration}
+          zoom={zoom}
           onMarkerDrag={onMarkerDrag}
           onMarkerClick={onMarkerDelete}
         />
