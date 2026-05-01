@@ -132,7 +132,7 @@ export interface CreateTemplateInput {
   totalDurationMs?: number;
   waveformPeaks?: number[];
   selectionStartMs: number;
-  selectionDurationMs: 15000 | 20000 | 25000 | 30000;
+  selectionDurationMs: 15000 | 30000 | 45000 | 60000;
 }
 
 export async function createTemplate(input: CreateTemplateInput): Promise<KanvasLyricTemplate> {
@@ -163,7 +163,7 @@ export async function listTemplates(
 
 export interface PatchTemplateInput {
   title?: string;
-  selection?: { startMs: number; durationMs: 15000 | 20000 | 25000 | 30000 };
+  selection?: { startMs: number; durationMs: 15000 | 30000 | 45000 | 60000 };
   waveformPeaks?: number[];
   lyricBlocks?: LyricBlock[];
   cutMarkers?: CutMarker[];
