@@ -130,8 +130,16 @@ export function useAudioEngine(): AudioEngine {
     if (!url) {
       a.pause();
       a.removeAttribute('src');
+      a.removeAttribute('crossorigin');
       a.load();
       return;
+    }
+    // Apply crossOrigin only for remote http(s) URLs. blob: and data: URLs
+    // must NOT have crossOrigin set or some browsers refuse to load them.
+    if (/^https?:/i.test(url)) {
+      a.crossOrigin = 'anonymous';
+    } else {
+      a.removeAttribute('crossorigin');
     }
     a.src = url;
     a.load();
