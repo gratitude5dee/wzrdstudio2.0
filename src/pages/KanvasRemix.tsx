@@ -572,25 +572,31 @@ const KanvasRemix = () => {
         {/* ── Right canvas ── */}
         <main className="relative flex min-h-0 flex-col bg-black">
           {/* Aspect ratio toggle */}
-          <div className="absolute right-6 top-2 z-10 inline-flex overflow-hidden rounded-lg border border-white/10 bg-[#111] text-xs font-bold">
+          <div className="absolute right-4 top-2 z-10 inline-flex overflow-hidden rounded-lg border border-white/10 bg-[#111] text-xs font-bold">
             {(['16:9', '9:16'] as const).map((ratio) => (
               <button
                 key={ratio}
                 type="button"
                 onClick={() => setAspectRatio(ratio)}
-                className={cn('px-4 py-2', aspectRatio === ratio ? 'bg-[#f97316]/20 text-[#f97316]' : 'text-zinc-400')}
+                className={cn('px-3 py-1.5', aspectRatio === ratio ? 'bg-[#f97316]/20 text-[#f97316]' : 'text-zinc-400')}
               >
                 {ratio}
               </button>
             ))}
           </div>
 
-          {/* Preview player */}
-          <div className="flex flex-1 items-center justify-center px-6 pt-4">
-            <div className={cn(
-              'relative overflow-hidden rounded-xl border border-white/10 bg-[#050505]',
-              aspectRatio === '9:16' ? 'h-[560px] w-[315px]' : 'h-[400px] w-[710px]'
-            )}>
+          {/* Preview player — fills available space */}
+          <div className="flex flex-1 min-h-0 items-center justify-center px-4 py-3">
+            <div
+              className="relative overflow-hidden rounded-xl border border-white/10 bg-[#050505]"
+              style={{
+                aspectRatio: aspectRatio === '9:16' ? '9/16' : '16/9',
+                maxHeight: '100%',
+                maxWidth: '100%',
+                width: aspectRatio === '9:16' ? 'auto' : '100%',
+                height: aspectRatio === '9:16' ? '100%' : 'auto',
+              }}
+            >
               <Player
                 ref={playerRef}
                 component={LyricRemixComposition}
