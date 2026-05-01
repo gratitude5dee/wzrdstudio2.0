@@ -30,7 +30,14 @@ interface MarkersPanelProps {
   canRedo: boolean;
 }
 
-const FLASH_WINDOW_SEC = 0.15;
+const FLASH_WINDOW_SEC = 0.18;
+
+function fmt(sec: number) {
+  const s = Math.max(0, sec);
+  const m = Math.floor(s / 60);
+  const r = Math.floor(s % 60);
+  return `${m}:${r.toString().padStart(2, '0')}`;
+}
 
 export function MarkersPanel({
   currentStep,
@@ -84,21 +91,42 @@ export function MarkersPanel({
   }, [isActive, onTogglePlay, onAddMarker, onUndoMarkers, onRedoMarkers, onDeleteNearestMarker]);
 
   const playheadPct = duration > 0 ? (playheadTime / duration) * 100 : 0;
+  const progressPct = duration > 0 ? Math.min(100, (playheadTime / duration) * 100) : 0;
 
-  // CUT/KEEP flash: CUT briefly when within FLASH_WINDOW_SEC of any marker
+  // CUT flash
   const isCutMoment = useMemo(() => {
     if (!isPlaying) return false;
     return markers.some((m) => Math.abs(m.timestamp - playheadTime) <= FLASH_WINDOW_SEC);
   }, [isPlaying, markers, playheadTime]);
 
-  // Active lyric word
-  const activeWord = useMemo(() => {
-    for (const block of blocks) {
-      for (const word of block.words) {
-        if (playheadTime >= word.startTime && playheadTime < word.endTime) return word.text;
+  // Active / surrounding words for caption ribbon
+  const { activeWord, prevWord, nextWord } = useMemo(() => {
+    const flat = blocks.flatMap((b) => b.words);
+    let activeIdx = -1;
+    for (let i = 0; i < flat.length; i++) {
+      const w = flat[i];
+      if (playheadTime >= w.startTime && playheadTime < w.endTime) {
+        activeIdx = i;
+        break;
       }
     }
-    return null;
+    if (activeIdx === -1) {
+      for (let i = 0; i < flat.length; i++) {
+        if (flat[i].startTime > playheadTime) {
+          return {
+            activeWord: null,
+            prevWord: flat[i - 1] ?? null,
+            nextWord: flat[i] ?? null,
+          };
+        }
+      }
+      return { activeWord: null, prevWord: flat[flat.length - 1] ?? null, nextWord: null };
+    }
+    return {
+      activeWord: flat[activeIdx],
+      prevWord: flat[activeIdx - 1] ?? null,
+      nextWord: flat[activeIdx + 1] ?? null,
+    };
   }, [blocks, playheadTime]);
 
   const handleSeekPct = (pct: number) => onSeek((pct / 100) * duration);
@@ -115,49 +143,111 @@ export function MarkersPanel({
       disabledMessage="Complete lyrics step first"
     >
       <div className="flex h-full flex-col gap-3">
-        {/* Large preview stage */}
-        <div className={cn(
-          'relative flex-1 min-h-[200px] overflow-hidden rounded-xl bg-black ring-1 ring-white/5 transition-colors',
-          isCutMoment && 'ring-rose-500/60 bg-rose-950/40'
-        )}>
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+        {/* Visualizer stage — 16:9 */}
+        <div
+          className={cn(
+            'relative w-full overflow-hidden rounded-2xl bg-black ring-1 ring-white/10 transition-all',
+            isCutMoment && 'ring-rose-500/70 bg-rose-950/40 shadow-[0_0_60px_rgba(244,63,94,0.45)]'
+          )}
+          style={{ aspectRatio: '16 / 9' }}
+        >
+          {/* gradient backdrop */}
+          <div
+            aria-hidden
+            className={cn(
+              'absolute inset-0 transition-opacity',
+              isCutMoment
+                ? 'bg-gradient-to-br from-rose-900/40 via-black to-black opacity-100'
+                : 'bg-gradient-to-br from-[#1a0d04] via-black to-black opacity-100'
+            )}
+          />
+
+          {/* center word */}
+          <div className="absolute inset-0 flex items-center justify-center px-8 text-center">
             {isCutMoment ? (
               <span
-                className="text-5xl font-black tracking-[0.12em] text-rose-400"
-                style={{ textShadow: '0 0 24px rgba(248,113,113,0.85), 0 0 48px rgba(248,113,113,0.55)' }}
+                className="text-5xl font-black uppercase tracking-[0.18em] text-rose-300 md:text-7xl"
+                style={{
+                  textShadow:
+                    '0 0 24px rgba(244,63,94,0.9), 0 0 60px rgba(244,63,94,0.5)',
+                }}
               >
                 CUT
               </span>
             ) : activeWord ? (
               <span
-                className="text-3xl font-black tracking-[0.06em] text-cyan-200 text-center px-4"
-                style={{ textShadow: '0 0 20px rgba(34,211,238,0.6)' }}
+                key={activeWord.id}
+                className="animate-in fade-in zoom-in-95 text-4xl font-black uppercase tracking-[0.08em] text-yellow-300 duration-150 md:text-6xl"
+                style={{
+                  textShadow:
+                    '0 0 24px rgba(253,224,71,0.85), 0 0 60px rgba(253,224,71,0.45)',
+                }}
               >
-                {activeWord}
+                {activeWord.text}
               </span>
             ) : (
-              <span
-                className="text-5xl font-black tracking-[0.12em] text-yellow-300/80"
-                style={{ textShadow: '0 0 24px rgba(253,224,71,0.6)' }}
-              >
-                KEEP
+              <span className="text-xl font-bold uppercase tracking-[0.32em] text-zinc-600">
+                {playheadTime < 0.1 ? 'Press play' : '·'}
               </span>
             )}
           </div>
 
-          {/* Skip-to-start button */}
+          {/* Play/Pause button */}
+          <button
+            type="button"
+            onClick={onTogglePlay}
+            aria-label={isPlaying ? 'Pause' : 'Play'}
+            className="absolute bottom-3 left-3 flex h-9 w-9 items-center justify-center rounded-full border border-[#f97316]/40 bg-black/60 text-[#fb923c] backdrop-blur transition-colors hover:bg-[#f97316]/15"
+          >
+            {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="ml-0.5 h-4 w-4" />}
+          </button>
+
+          {/* Skip-to-start */}
           <button
             type="button"
             aria-label="Skip to start"
             onClick={onRestart}
-            className="absolute bottom-3 left-3 flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/5 text-slate-300 transition-colors hover:bg-white/10"
+            className="absolute bottom-3 left-14 flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-black/60 text-slate-300 backdrop-blur transition-colors hover:bg-white/10"
           >
             <SkipBack className="h-4 w-4" />
           </button>
 
-          <div className="absolute bottom-3 right-3 font-mono text-[10px] text-slate-500">
-            {playheadTime.toFixed(1)}s / {duration.toFixed(1)}s
+          {/* Timecode */}
+          <div className="absolute bottom-4 right-4 font-mono text-[11px] text-zinc-400">
+            {fmt(playheadTime)} / {fmt(duration)}
           </div>
+
+          {/* Marker ticks on bottom edge */}
+          <div className="absolute bottom-0 left-0 right-0 h-1.5">
+            {markers.map((m) => (
+              <span
+                key={m.id}
+                className="absolute top-0 h-1.5 w-0.5 bg-rose-400/80"
+                style={{ left: `${duration > 0 ? (m.timestamp / duration) * 100 : 0}%` }}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Progress bar */}
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/5">
+          <div
+            className="h-full bg-gradient-to-r from-[#f97316] via-[#fb923c] to-amber-300 transition-[width] duration-75"
+            style={{ width: `${progressPct}%` }}
+          />
+        </div>
+
+        {/* Caption ribbon */}
+        <div className="flex items-center justify-center gap-4 text-center">
+          <span className="max-w-[30%] truncate text-[10px] uppercase tracking-[0.2em] text-zinc-600">
+            {prevWord?.text ?? '—'}
+          </span>
+          <span className="text-xs font-bold uppercase tracking-[0.22em] text-[#fb923c]">
+            {activeWord?.text ?? '·'}
+          </span>
+          <span className="max-w-[30%] truncate text-[10px] uppercase tracking-[0.2em] text-zinc-600">
+            {nextWord?.text ?? '—'}
+          </span>
         </div>
 
         {/* Waveform timeline */}
