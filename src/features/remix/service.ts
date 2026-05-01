@@ -192,7 +192,7 @@ function mapJob(row: DbRow): RemixJob {
     lyricStyleId: getLyricStyle(stringValue(row.lyric_style_id, 'default')).id as LyricStyleId,
     scale: numberValue(row.scale, 0.65),
     noCuts: booleanValue(row.no_cuts),
-    clipRatio: stringValue(row.clip_ratio, 'all'),
+    clipRatio: stringValue(row.clip_ratio, 'all') as RemixJob['clipRatio'],
     filter: stringValue(row.filter, 'all'),
     shuffleEach: booleanValue(row.shuffle_each),
     status: stringValue(row.status, 'queued') as RemixJob['status'],
