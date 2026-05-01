@@ -766,6 +766,16 @@ const KanvasRemix = () => {
         </div>
       )}
 
+      {/* Canvas export modal */}
+      {template && (
+        <ExportModal
+          open={exportModalOpen}
+          onClose={() => setExportModalOpen(false)}
+          exportOptions={exportOptions}
+          templateTitle={template.title}
+        />
+      )}
+
       <button
         type="button"
         aria-label="Help"
