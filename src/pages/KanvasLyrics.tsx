@@ -392,10 +392,14 @@ const KanvasLyrics = () => {
 
   const handleAudioReset = useCallback(() => {
     if (lastUrlRef.current) { URL.revokeObjectURL(lastUrlRef.current); lastUrlRef.current = null; }
+    sourceFileRef.current = null;
     setAudio(INITIAL_AUDIO);
     setAudioPlaybackUrl(null);
+    setAudioAssetId(null);
+    setTemplateId(null);
     setAppState('upload');
     setCurrentStep(1);
+    setTranscribeStatus('idle');
     engine.pause();
     engine.load(null);
   }, [engine]);
