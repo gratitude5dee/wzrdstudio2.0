@@ -78,8 +78,8 @@ export const LyricRemixComposition: React.FC<Partial<LyricRemixCompositionProps>
   const lines = useMemo(() => captionsToLines(props.captions), [props.captions]);
   const activeLine = lines.find((line) => nowMs >= line.startMs && nowMs < line.endMs) ?? null;
   const clipSequence = useMemo(
-    () => getClipSequence(props.backgroundClips, props.durationMs),
-    [props.backgroundClips, props.durationMs]
+    () => getClipSequence(props.backgroundClips, props.durationMs, props.cutMarkers),
+    [props.backgroundClips, props.durationMs, props.cutMarkers]
   );
 
   const enter = activeLine
