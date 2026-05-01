@@ -1,32 +1,36 @@
 
-## Goal
+## What we're building
 
-Replace the simplified black "CUT/KEEP" preview box inside the MarkersPanel (step 3) with the full-featured visualizer stage that was previously in the deleted VisualizePanel. This gives users a rich lyric playback preview directly in the Cut Markers card on the right, without needing a separate step or panel at the bottom.
+Three improvements to the Remix editor page (`/kanvas/remix/:templateId`):
 
-## Changes
+1. **More clip library assets** -- Expand the fallback footage library from 6 to ~12 clips with varied durations, covering the existing categories (Bay Area 8mm, Modern, Aerial, Abstract, Nature).
 
-### 1. Upgrade the preview stage in `MarkersPanel.tsx`
+2. **Kanvas header + back navigation** -- Add the shared `KanvasLyricsHeader` at the top of the remix page and a left chevron button next to the "Remix" title that navigates back to the templates landing (`/kanvas/lyrics`).
 
-Replace the current black box (lines ~97-133) with the rich visualizer from the old VisualizePanel:
+3. **Drag-and-drop clips into timeline slots** -- Make clip library thumbnails draggable and timeline slots droppable using native HTML5 drag/drop (no new deps). Users can drag a clip from the library grid and drop it onto a specific timeline slot.
 
-- **16:9 aspect ratio stage** with gradient backdrop (orange-to-black normally, rose when CUT flashes)
-- **Animated active word** display with yellow glow, `fade-in zoom-in` animation, keyed by word ID
-- **CUT flash** with rose glow and shadow when playhead is near a marker
-- **"Press play"** placeholder text when idle
-- **Play/Pause button** (bottom-left of stage, orange-accented)
-- **Timecode display** (bottom-right, `m:ss / m:ss` format)
-- **Marker ticks** along the bottom edge of the stage (rose-colored, positioned proportionally)
-- **Progress bar** below the stage (orange gradient)
-- **Caption ribbon** showing prev/active/next words in a horizontal strip
+4. **Style unification** -- Replace cyan/teal accents with the Kanvas orange (`#f97316`) design system. Update borders, glows, active states, buttons, and gradients to match the Noir Futurist theme used across the rest of Kanvas.
 
-### 2. Add surrounding-word logic
+---
 
-The current MarkersPanel only tracks `activeWord` (a string). Upgrade to compute `activeWord`, `prevWord`, and `nextWord` objects (with `id`, `text`, `startTime`, `endTime`) from the blocks array, matching the old VisualizePanel logic. This powers the caption ribbon and keyed animations.
+## Technical details
 
-### 3. Keep all existing marker controls
+### 1. Expand fallback footage (`src/features/remix/service.ts`)
 
-The waveform, zoom slider, shortcut chips, undo/redo, and marker count controls remain exactly as they are below the new visualizer stage.
+Add ~6 more entries to `fallbackAssets[]` using the existing `/bgvid.mp4` and `/wzrdstudiointro1.mp4` files with varied durations and categories (nature-coast, nature-forest, abstract-glitch). This ensures the clip library grid shows enough content for a full 15-slot timeline.
 
-### Files to edit
+### 2. Header + back button (`src/pages/KanvasRemix.tsx`)
 
-- `src/components/kanvas-lyrics/MarkersPanel.tsx` -- replace the black preview box with the full visualizer stage, add word-context logic, add progress bar and caption ribbon
+- Import and render `KanvasLyricsHeader` at the top of the page (above the grid layout).
+- Add a `ChevronLeft` icon button to the left of the "Remix" title that calls `navigate(appRoutes.kanvasLyrics)`.
+- Adjust the grid layout to account for the header height (add `pt-[68px]` or similar offset matching the Kanvas layout shell pattern).
+
+### 3. Drag-and-drop (`src/pages/KanvasRemix.tsx`)
+
+- On clip library thumbnails: add `draggable`, `onDragStart` setting `dataTransfer` with the clip ID.
+- On timeline slot containers: add `onDragOver` (prevent default) and `onDrop` that reads the clip ID and calls `assignClipToSlot`.
+- Visual feedback: highlight the drop target slot with an orange border on `onDragEnter`/`onDragLeave`.
+
+### 4. Style pass (`src/pages/KanvasRemix.tsx`)
+
+Replace all `cyan-300`, `cyan-400`, `cyan-200` references with orange equivalents (`orange-400`, `orange-500`, `[#f97316]`). Update gradient stops, border colors, shadow colors, and active states to match the Noir Futurist system (orange accent, absolute black backgrounds, white/zinc text).
