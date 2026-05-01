@@ -425,7 +425,7 @@ const KanvasRemix = () => {
                     {asset.posterUrl ? (
                       <img src={asset.posterUrl} alt="" className="h-full w-full object-cover opacity-80 transition-opacity group-hover:opacity-100" />
                     ) : (
-                      <video src={asset.url} muted className="h-full w-full object-cover opacity-80 transition-opacity group-hover:opacity-100" />
+                      <video src={`${asset.url}#t=0.5`} muted preload="metadata" playsInline className="h-full w-full object-cover opacity-80 transition-opacity group-hover:opacity-100" />
                     )}
                     <span className="absolute bottom-1 left-1 rounded-full bg-black/60 px-1.5 py-0.5 text-[10px] text-white">
                       ⏱{(asset.durationMs / 1000).toFixed(1)}s
