@@ -344,11 +344,11 @@ const KanvasRemix = () => {
   );
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-black text-white">
+    <div className="min-h-screen flex flex-col bg-black text-white">
       <KanvasLyricsHeader />
-      <div className="flex-1 grid min-h-0 grid-cols-1 lg:grid-cols-[400px_1fr]">
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[380px_1fr]">
         {/* ── Left rail ── */}
-        <aside className="flex flex-col border-r border-white/[0.06] bg-[#0A0A0A]">
+        <aside className="flex flex-col border-r border-white/[0.06] bg-[#0A0A0A] lg:sticky lg:top-0 lg:h-screen lg:overflow-hidden">
           <div className="px-6 pt-4">
             <div className="flex items-center gap-2">
               <button
@@ -570,7 +570,7 @@ const KanvasRemix = () => {
         </aside>
 
         {/* ── Right canvas ── */}
-        <main className="relative flex min-h-0 flex-col bg-black">
+        <main className="relative flex flex-col bg-black">
           {/* Aspect ratio toggle */}
           <div className="absolute right-4 top-2 z-10 inline-flex overflow-hidden rounded-lg border border-white/10 bg-[#111] text-xs font-bold">
             {(['16:9', '9:16'] as const).map((ratio) => (
@@ -585,8 +585,8 @@ const KanvasRemix = () => {
             ))}
           </div>
 
-          {/* Preview player — fills available space */}
-          <div className="flex flex-1 min-h-0 items-center justify-center px-4 py-3">
+          {/* Preview player */}
+          <div className="flex items-center justify-center px-4 py-3" style={{ height: 'calc(100vh - 240px)', minHeight: '300px' }}>
             <div
               className="relative overflow-hidden rounded-xl border border-white/10 bg-[#050505]"
               style={{
