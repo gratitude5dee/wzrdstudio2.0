@@ -42,13 +42,16 @@ export function useAudioEngine(): AudioEngine {
     const onTime = () => {
       const loop = loopRef.current;
       const t = a.currentTime;
-      // Loop guard
+      // End-of-window guard
       if (loop.end > loop.start && t >= loop.end) {
-        a.currentTime = loop.start;
-        if (!a.paused) {
-          a.pause();
-          setIsPlaying(false);
+        if (loop.loop) {
+          // Wrap back to start, keep playing
+          a.currentTime = loop.start;
+          setCurrentTime(0);
+          return;
         }
+        a.pause();
+        a.currentTime = loop.start;
         setCurrentTime(0);
         return;
       }
