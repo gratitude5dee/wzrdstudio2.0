@@ -1,6 +1,6 @@
 import type { AudioData, ClipDuration } from './types';
 
-export const CLIP_DURATIONS: ClipDuration[] = [15, 20, 25, 30];
+export const CLIP_DURATIONS: ClipDuration[] = [15, 30, 45, 60];
 
 export const INITIAL_AUDIO: AudioData = {
   fileName: null,

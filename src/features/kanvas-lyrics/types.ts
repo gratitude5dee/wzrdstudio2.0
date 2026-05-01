@@ -12,7 +12,7 @@ export type TemplateStatus =
   | 'failed'
   | 'archived';
 
-export type ClipDurationMs = 15000 | 20000 | 25000 | 30000;
+export type ClipDurationMs = 15000 | 30000 | 45000 | 60000;
 
 export interface LyricWord {
   id: string;
