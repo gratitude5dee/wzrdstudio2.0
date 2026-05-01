@@ -21,6 +21,7 @@ interface MarkersPanelProps {
   onSeek: (sec: number) => void;
   onMarkerDrag: (id: string, sec: number) => void;
   onMarkerDelete: (id: string) => void;
+  onPreview: () => void;
 }
 
 const FLASH_WINDOW_SEC = 0.15;
@@ -40,6 +41,7 @@ export function MarkersPanel({
   onSeek,
   onMarkerDrag,
   onMarkerDelete,
+  onPreview,
 }: MarkersPanelProps) {
   const disabled = currentStep < 3;
   const isActive = currentStep === 3;
@@ -183,9 +185,16 @@ export function MarkersPanel({
             <button
               type="button"
               onClick={onAddMarker}
-              className="rounded-full bg-gradient-to-r from-[#f97316] to-[#fb923c] px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-black shadow-[0_0_18px_rgba(249,115,22,0.4)] transition-transform hover:brightness-110"
+              className="rounded-full border border-[#f97316]/40 bg-[#f97316]/10 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-[#fb923c] transition-colors hover:bg-[#f97316]/20"
             >
               Add Cut
+            </button>
+            <button
+              type="button"
+              onClick={onPreview}
+              className="rounded-full bg-gradient-to-r from-[#f97316] to-[#fb923c] px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-black shadow-[0_0_18px_rgba(249,115,22,0.4)] transition-transform hover:brightness-110"
+            >
+              Preview →
             </button>
           </div>
         </div>
