@@ -1,4 +1,4 @@
-import { Check, AudioLines, Type, Scissors, Eye } from 'lucide-react';
+import { Check, AudioLines, Type, Scissors, Save } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { WizardStep } from './types';
 
@@ -8,14 +8,14 @@ interface KanvasLyricsFooterProps {
   selectionDuration: number;
   wordCount: number;
   markerCount: number;
+  saving: boolean;
   onSave: () => void;
 }
 
-const STEPS = [
-  { id: 1 as WizardStep, label: 'Audio', icon: AudioLines },
-  { id: 2 as WizardStep, label: 'Lyrics', icon: Type },
-  { id: 3 as WizardStep, label: 'Markers', icon: Scissors },
-  { id: 4 as WizardStep, label: 'Preview', icon: Eye },
+const STEPS: Array<{ id: WizardStep; label: string; icon: typeof AudioLines }> = [
+  { id: 1, label: 'Audio', icon: AudioLines },
+  { id: 2, label: 'Lyrics', icon: Type },
+  { id: 3, label: 'Markers', icon: Scissors },
 ];
 
 export function KanvasLyricsFooter({
@@ -24,9 +24,11 @@ export function KanvasLyricsFooter({
   selectionDuration,
   wordCount,
   markerCount,
+  saving,
   onSave,
 }: KanvasLyricsFooterProps) {
-  const saveEnabled = currentStep === 4;
+  // Save is enabled once audio is confirmed and lyrics exist
+  const saveEnabled = audioConfirmed && wordCount > 0 && !saving;
 
   return (
     <footer className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 bg-[#0D1017]/95 backdrop-blur-xl">
@@ -76,21 +78,12 @@ export function KanvasLyricsFooter({
         <div className="hidden items-center gap-4 text-[11px] uppercase tracking-wider text-slate-500 md:flex">
           {audioConfirmed && (
             <>
-              <span>
-                <span className="text-cyan-300">{selectionDuration.toFixed(1)}s</span>
+              <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2.5 py-1 text-cyan-300">
+                {selectionDuration.toFixed(1)}s
               </span>
-              <span className="h-3 w-px bg-white/10" />
               <span>
                 <span className="text-emerald-300">{wordCount}</span> words
               </span>
-              {currentStep >= 3 && (
-                <>
-                  <span className="h-3 w-px bg-white/10" />
-                  <span>
-                    <span className="text-amber-300">{markerCount}</span> markers
-                  </span>
-                </>
-              )}
             </>
           )}
         </div>
@@ -101,13 +94,14 @@ export function KanvasLyricsFooter({
           onClick={onSave}
           disabled={!saveEnabled}
           className={cn(
-            'inline-flex items-center gap-2 rounded-full px-5 py-2 text-xs font-bold uppercase tracking-[0.18em] transition-all',
+            'inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-xs font-bold uppercase tracking-[0.18em] transition-all',
             saveEnabled
               ? 'bg-gradient-to-r from-cyan-400 to-emerald-400 text-black shadow-[0_0_24px_rgba(52,211,153,0.4)] hover:brightness-110'
               : 'cursor-not-allowed bg-white/5 text-slate-600 ring-1 ring-white/10'
           )}
         >
-          Save Template
+          <Save className="h-4 w-4" />
+          SAVE TEMPLATE
         </button>
       </div>
     </footer>
