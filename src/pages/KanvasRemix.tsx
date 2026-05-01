@@ -370,7 +370,7 @@ const KanvasRemix = () => {
           </div>
 
           {/* Clip library */}
-          <section className="flex-1 overflow-y-auto px-8 pt-5">
+          <section className="flex-1 overflow-y-auto px-6 pt-4">
             <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
               <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-zinc-200">
                 <Film className="h-4 w-4 text-[#f97316]" />
