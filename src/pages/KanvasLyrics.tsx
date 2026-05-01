@@ -501,10 +501,12 @@ const KanvasLyrics = () => {
           audio={audio}
           isPlaying={engine.isPlaying && currentStep === 1}
           audioReady={engine.isReady}
+          playheadTime={currentStep === 1 ? playheadTime : 0}
           onAudioSelected={handleAudioSelected}
           onDurationChange={handleDurationChange}
           onZoomChange={handleZoomChange}
           onSelectionStartChange={handleSelectionStartChange}
+          onSeekClipRelative={handleSeek}
           onTogglePreview={togglePreview}
           onConfirm={handleAudioConfirm}
           onReset={handleAudioReset}
