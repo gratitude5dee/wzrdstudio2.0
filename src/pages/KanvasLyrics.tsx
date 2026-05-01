@@ -8,7 +8,6 @@ import { KanvasLyricsFooter } from '@/components/kanvas-lyrics/KanvasLyricsFoote
 import { AudioPanel } from '@/components/kanvas-lyrics/AudioPanel';
 import { LyricsPanel } from '@/components/kanvas-lyrics/LyricsPanel';
 import { MarkersPanel } from '@/components/kanvas-lyrics/MarkersPanel';
-import { VisualizePanel } from '@/components/kanvas-lyrics/VisualizePanel';
 import { TemplatesLanding } from '@/components/kanvas-lyrics/TemplatesLanding';
 import { INITIAL_AUDIO } from '@/components/kanvas-lyrics/constants';
 import type {
@@ -74,7 +73,6 @@ function markersToServer(markers: CutMarker[]) {
 function stepFromStatus(t: KanvasLyricTemplate): WizardStep {
   switch (t.status) {
     case 'saved':
-      return 4;
     case 'markers_ready':
       return 3;
     case 'lyrics_ready':
@@ -84,6 +82,13 @@ function stepFromStatus(t: KanvasLyricTemplate): WizardStep {
     default:
       return 1;
   }
+}
+
+const SNAP_SEC = 0.05;
+const DEDUPE_SEC = 0.25;
+
+function snapMarker(sec: number): number {
+  return Math.max(0, Math.round(sec / SNAP_SEC) * SNAP_SEC);
 }
 
 const KanvasLyrics = () => {
@@ -110,20 +115,22 @@ const KanvasLyrics = () => {
   const [lyrics, setLyrics] = useState<LyricBlock[]>([]);
   const [markers, setMarkers] = useState<CutMarker[]>([]);
 
-  // Local source File kept for the entire wizard so we can slice + upload
-  // only the trimmed clip on Confirm. Never written to network until then.
-  const sourceFileRef = useRef<File | null>(null);
+  // Marker undo/redo stacks
+  const [markerHistory, setMarkerHistory] = useState<CutMarker[][]>([]);
+  const [markerFuture, setMarkerFuture] = useState<CutMarker[][]>([]);
 
+  const pushMarkerState = useCallback((prev: CutMarker[]) => {
+    setMarkerHistory((h) => [...h.slice(-30), prev]);
+    setMarkerFuture([]);
+  }, []);
+
+  const sourceFileRef = useRef<File | null>(null);
   const engine = useAudioEngine();
 
   const lastUrlRef = useRef<string | null>(null);
   useEffect(() => () => { if (lastUrlRef.current) URL.revokeObjectURL(lastUrlRef.current); }, []);
 
-  // When entering a brand-new template session (mode=new, no templateId),
-  // reset wizard state ONCE so previous audio/lyrics/markers don't leak.
-  // Guarded with a ref so subsequent renders within the same "new" session
-  // (e.g. right after the user picks a file) do not wipe the freshly loaded
-  // audio. Re-arms whenever we leave the "new" session.
+  // New session reset
   const newSessionResetRef = useRef(false);
   useEffect(() => {
     if ((!isNewRoute && mode !== 'new') || templateIdParam) {
@@ -146,6 +153,8 @@ const KanvasLyrics = () => {
     setAudio(INITIAL_AUDIO);
     setLyrics([]);
     setMarkers([]);
+    setMarkerHistory([]);
+    setMarkerFuture([]);
     setCurrentStep(1);
     setAppState('upload');
     setTranscribeStatus('idle');
@@ -153,7 +162,7 @@ const KanvasLyrics = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNewRoute, mode, templateIdParam]);
 
-  // Hydrate from server when templateId is in URL.
+  // Hydrate from server
   useEffect(() => {
     if (!templateIdParam) return;
     let cancelled = false;
@@ -164,9 +173,6 @@ const KanvasLyrics = () => {
         if (cancelled) return;
         setTemplateId(t.id);
         setAudioAssetId(t.sourceAudioAssetId);
-        // Always show the waveform/trimmer for hydrated templates so the
-        // user can preview audio. `confirmed` only locks the trim controls
-        // once the user has explicitly moved past the audio step.
         const isPastAudio =
           t.status === 'lyrics_ready' ||
           t.status === 'markers_ready' ||
@@ -191,15 +197,12 @@ const KanvasLyrics = () => {
             ? 'lyrics_edit'
             : t.status === 'lyrics_ready'
             ? 'lyrics_complete'
-            : t.status === 'saved'
-            ? 'visualize'
             : 'markers_edit'
         );
         if (t.status === 'lyrics_processing') setTranscribeStatus('transcribing');
         else if (t.status === 'failed') setTranscribeStatus('failed');
         else setTranscribeStatus('ready');
 
-        // Resolve a playback URL from the asset
         try {
           const { data: asset } = await supabase
             .from('project_assets')
@@ -219,10 +222,6 @@ const KanvasLyrics = () => {
     return () => { cancelled = true; };
   }, [templateIdParam]);
 
-  // Wire the audio engine: load url + set loop bounds.
-  // Depend on the stable callbacks (not the engine object, which is a new
-  // reference on every render and would re-trigger load() in a loop, keeping
-  // isReady stuck at false and disabling "Confirm Selection").
   const engineLoad = engine.load;
   const engineSetLoop = engine.setLoop;
   useEffect(() => {
@@ -230,17 +229,13 @@ const KanvasLyrics = () => {
   }, [audioPlaybackUrl, engineLoad]);
 
   useEffect(() => {
-    // Loop on the audio/lyrics/markers steps so the user can review the
-    // selection continuously; play once on the visualize step (step 4)
-    // so "Replay" feels intentional.
     engineSetLoop(
       audio.selectionStart,
       audio.selectionStart + audio.selectionDuration,
-      { loop: currentStep !== 4 }
+      { loop: true }
     );
-  }, [audio.selectionStart, audio.selectionDuration, currentStep, engineSetLoop]);
+  }, [audio.selectionStart, audio.selectionDuration, engineSetLoop]);
 
-  // Active-word derivation from real engine playhead
   const playheadTime = engine.currentTime;
   const activeWordId = useMemo(() => {
     for (const block of lyrics) {
@@ -251,7 +246,7 @@ const KanvasLyrics = () => {
     return null;
   }, [playheadTime, lyrics]);
 
-  // Audio handlers — local-first. Upload is deferred to Confirm.
+  // Audio handlers
   const handleAudioSelected = useCallback(async (file: File) => {
     const MAX_BYTES = 50 * 1024 * 1024;
     const isAudio = file.type.startsWith('audio/') ||
@@ -271,10 +266,7 @@ const KanvasLyrics = () => {
     lastUrlRef.current = url;
     sourceFileRef.current = file;
     setAudioPlaybackUrl(url);
-    // Load into the audio engine immediately so isReady becomes true even if
-    // the dependent effect hasn't re-run yet.
     try { engineLoad(url); } catch (e) { console.warn('[lyrics] engine load failed', e); }
-    // Reset any previous server-side state — the wizard is now fully local.
     setAudioAssetId(null);
     setTemplateId(null);
 
@@ -301,7 +293,7 @@ const KanvasLyrics = () => {
     setTranscribeStatus('idle');
   }, [engineLoad]);
 
-  // Debounced server patch helper
+  // Debounced server patch
   const patchTimer = useRef<number | null>(null);
   const queuePatch = useCallback((patch: Parameters<typeof updateTemplate>[1]) => {
     if (!templateId) return;
@@ -378,7 +370,6 @@ const KanvasLyrics = () => {
     const durationMs = (audio.selectionDuration * 1000) as ClipDurationMs;
 
     try {
-      // 1) Slice the trimmed clip locally
       toast.loading('Slicing clip…', { id: toastId });
       setTranscribeStatus('uploading');
       const baseName = sourceFile.name.replace(/\.[^.]+$/, '').slice(0, 60) || 'clip';
@@ -389,7 +380,6 @@ const KanvasLyrics = () => {
         baseName
       );
 
-      // 2) Upload only the trimmed clip
       toast.loading('Uploading clip…', { id: toastId });
       const uploaded = await uploadTemplateAudio({
         blob: clip.blob,
@@ -399,8 +389,6 @@ const KanvasLyrics = () => {
       });
       setAudioAssetId(uploaded.assetId);
 
-      // Re-point playback to the hosted trimmed clip so later steps keep
-      // working after the local object URL is revoked.
       if (uploaded.url) {
         setAudioPlaybackUrl(uploaded.url);
         try { engineLoad(uploaded.url); } catch (e) { console.warn('[lyrics] engine reload failed', e); }
@@ -410,8 +398,6 @@ const KanvasLyrics = () => {
         }
       }
 
-      // 3) Create draft template referencing the trimmed clip. The clip IS
-      // the asset, so selectionStart=0 and totalDuration=clipDuration.
       const draft = await createTemplate({
         title: baseName || 'Untitled Template',
         sourceAudioAssetId: uploaded.assetId,
@@ -423,8 +409,6 @@ const KanvasLyrics = () => {
       setTemplateId(draft.id);
       navigate(`/kanvas/lyrics/templates/${draft.id}`, { replace: true });
 
-      // 4) Mark ready and kick transcription. Re-point the engine at the
-      // hosted clip so future steps still play after object URL is revoked.
       try {
         await updateTemplate(draft.id, {
           selection: { startMs: 0, durationMs },
@@ -437,12 +421,9 @@ const KanvasLyrics = () => {
 
       toast.success('Clip ready — transcribing…', { id: toastId });
 
-      // Advance UI now that upload succeeded
       setAudio((prev) => ({
         ...prev,
         confirmed: true,
-        // From here on the engine plays the hosted clip, which IS the
-        // selection — selectionStart resets to 0.
         selectionStart: 0,
         totalDuration: clip.durationMs / 1000,
       }));
@@ -519,48 +500,71 @@ const KanvasLyrics = () => {
     }
   }, [templateId, lyrics, engine]);
 
-  const handleMarkersDone = useCallback(() => {
-    setAppState('visualize');
-    setCurrentStep(4);
-    engine.pause();
-    engine.seek(0);
-    if (templateId) {
-      updateTemplate(templateId, {
-        cutMarkers: markersToServer(markers),
-        status: 'markers_ready',
-      }).catch(() => {});
-    }
-  }, [templateId, markers, engine]);
-
-  const handleReplay = useCallback(() => {
-    engine.pause();
-    engine.seek(0);
-    setTimeout(() => engine.play?.(), 60);
-  }, [engine]);
-
-  // Marker handlers
+  // Marker handlers with undo/redo
   const handleAddMarker = useCallback(() => {
     setMarkers((prev) => {
-      const next = [
-        ...prev,
-        { id: `m-${Date.now()}-${prev.length}`, timestamp: engine.currentTime },
-      ];
+      const snapped = snapMarker(engine.currentTime);
+      // Dedupe
+      if (prev.some((m) => Math.abs(m.timestamp - snapped) < DEDUPE_SEC)) return prev;
+      pushMarkerState(prev);
+      const next = [...prev, { id: `m-${Date.now()}-${prev.length}`, timestamp: snapped }]
+        .sort((a, b) => a.timestamp - b.timestamp);
       queuePatch({ cutMarkers: markersToServer(next) });
       return next;
     });
-  }, [engine, queuePatch]);
+  }, [engine, queuePatch, pushMarkerState]);
 
-  const handleUndoMarker = useCallback(() => {
+  const handleUndoMarkers = useCallback(() => {
+    setMarkerHistory((h) => {
+      if (h.length === 0) return h;
+      const prev = h[h.length - 1];
+      const rest = h.slice(0, -1);
+      setMarkerFuture((f) => [...f, markers]);
+      setMarkers(prev);
+      queuePatch({ cutMarkers: markersToServer(prev) });
+      return rest;
+    });
+  }, [markers, queuePatch]);
+
+  const handleRedoMarkers = useCallback(() => {
+    setMarkerFuture((f) => {
+      if (f.length === 0) return f;
+      const next = f[f.length - 1];
+      const rest = f.slice(0, -1);
+      setMarkerHistory((h) => [...h, markers]);
+      setMarkers(next);
+      queuePatch({ cutMarkers: markersToServer(next) });
+      return rest;
+    });
+  }, [markers, queuePatch]);
+
+  const handleClearMarkers = useCallback(() => {
+    pushMarkerState(markers);
+    setMarkers([]);
+    queuePatch({ cutMarkers: [] });
+  }, [markers, pushMarkerState, queuePatch]);
+
+  const handleDeleteNearestMarker = useCallback(() => {
     setMarkers((prev) => {
-      const next = prev.slice(0, -1);
+      if (prev.length === 0) return prev;
+      const t = engine.currentTime;
+      let nearest = prev[0];
+      let minDist = Math.abs(nearest.timestamp - t);
+      for (const m of prev) {
+        const d = Math.abs(m.timestamp - t);
+        if (d < minDist) { nearest = m; minDist = d; }
+      }
+      if (minDist > 0.5) return prev; // Only delete if within 500ms
+      pushMarkerState(prev);
+      const next = prev.filter((m) => m.id !== nearest.id);
       queuePatch({ cutMarkers: markersToServer(next) });
       return next;
     });
-  }, [queuePatch]);
+  }, [engine, pushMarkerState, queuePatch]);
 
   const handleMarkerDrag = useCallback((id: string, sec: number) => {
     setMarkers((prev) => {
-      const next = prev.map((m) => (m.id === id ? { ...m, timestamp: sec } : m));
+      const next = prev.map((m) => (m.id === id ? { ...m, timestamp: snapMarker(sec) } : m));
       queuePatch({ cutMarkers: markersToServer(next) });
       return next;
     });
@@ -568,14 +572,19 @@ const KanvasLyrics = () => {
 
   const handleMarkerDelete = useCallback((id: string) => {
     setMarkers((prev) => {
+      pushMarkerState(prev);
       const next = prev.filter((m) => m.id !== id);
       queuePatch({ cutMarkers: markersToServer(next) });
       return next;
     });
-  }, [queuePatch]);
+  }, [pushMarkerState, queuePatch]);
 
   const togglePlay = useCallback(() => engine.toggle(), [engine]);
   const handleSeek = useCallback((sec: number) => engine.seek(sec), [engine]);
+  const handleRestart = useCallback(() => {
+    engine.pause();
+    engine.seek(0);
+  }, [engine]);
 
   const handleSave = useCallback(async () => {
     if (!templateId) return;
@@ -636,9 +645,6 @@ const KanvasLyrics = () => {
         <h1 className="bg-gradient-to-r from-cyan-300 via-sky-300 to-blue-500 bg-clip-text text-5xl font-black tracking-[0.16em] text-transparent md:text-7xl">
           CREATE TEMPLATE
         </h1>
-        <p className="mx-auto mt-3 max-w-xl text-xs uppercase tracking-[0.32em] text-zinc-500">
-          Audio · Lyrics · Markers · Preview
-        </p>
       </div>
 
       <main className="mx-auto grid max-w-[1400px] grid-cols-1 gap-5 px-6 pb-24 lg:grid-cols-3">
@@ -679,33 +685,22 @@ const KanvasLyrics = () => {
           duration={audio.selectionDuration}
           isPlaying={engine.isPlaying && currentStep === 3}
           zoom={audio.zoom}
+          blocks={lyrics}
           onZoomChange={handleZoomChange}
           onTogglePlay={togglePlay}
           onAddMarker={handleAddMarker}
-          onUndoMarker={handleUndoMarker}
+          onUndoMarkers={handleUndoMarkers}
+          onRedoMarkers={handleRedoMarkers}
+          onClearMarkers={handleClearMarkers}
+          onDeleteNearestMarker={handleDeleteNearestMarker}
           onSeek={handleSeek}
           onMarkerDrag={handleMarkerDrag}
           onMarkerDelete={handleMarkerDelete}
-          onPreview={handleMarkersDone}
+          onRestart={handleRestart}
+          canUndo={markerHistory.length > 0}
+          canRedo={markerFuture.length > 0}
         />
       </main>
-
-      {currentStep === 4 && (
-        <section className="mx-auto max-w-[1400px] px-6 pb-24">
-          <VisualizePanel
-            currentStep={currentStep}
-            blocks={lyrics}
-            markers={markers}
-            playheadTime={playheadTime}
-            duration={audio.selectionDuration}
-            isPlaying={engine.isPlaying && currentStep === 4}
-            saving={saving}
-            onTogglePlay={togglePlay}
-            onReplay={handleReplay}
-            onSave={handleSave}
-          />
-        </section>
-      )}
 
       <button
         type="button"
@@ -721,6 +716,7 @@ const KanvasLyrics = () => {
         selectionDuration={audio.selectionDuration}
         wordCount={wordCount}
         markerCount={markers.length}
+        saving={saving}
         onSave={handleSave}
       />
 
