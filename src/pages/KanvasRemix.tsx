@@ -149,6 +149,23 @@ const KanvasRemix = () => {
     setTimelineSlots(slots);
   }, [template, durationMs]);
 
+  // Auto-populate empty timeline slots with shuffled clips when assets load
+  const hasAutoPopulated = useRef(false);
+  useEffect(() => {
+    if (hasAutoPopulated.current) return;
+    if (assets.length === 0 || timelineSlots.length === 0) return;
+    const allEmpty = timelineSlots.every((s) => s.clipId === null);
+    if (!allEmpty) return;
+    hasAutoPopulated.current = true;
+    const shuffled = seededShuffle(assets, Date.now());
+    setTimelineSlots((prev) =>
+      prev.map((slot, i) => ({
+        ...slot,
+        clipId: shuffled[i % shuffled.length]?.id ?? null,
+      }))
+    );
+  }, [assets, timelineSlots]);
+
   const captions = useMemo(() => (template ? lyricBlocksToCaptions(template.lyricBlocks) : []), [template]);
   const creditCost = quoteRemixCredits(durationMs, quantity);
   const selectedStyle = styles.find((style) => style.id === selectedStyleId) ?? LYRIC_STYLES[0];
