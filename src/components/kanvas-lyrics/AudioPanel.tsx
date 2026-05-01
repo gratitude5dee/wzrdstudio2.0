@@ -12,10 +12,14 @@ interface AudioPanelProps {
   audio: AudioData;
   isPlaying: boolean;
   audioReady: boolean;
+  /** Clip-relative playhead in seconds (0..selectionDuration). */
+  playheadTime: number;
   onAudioSelected: (file: File) => void;
   onDurationChange: (duration: ClipDuration) => void;
   onZoomChange: (zoom: number) => void;
   onSelectionStartChange: (start: number) => void;
+  /** Seek the engine to a clip-relative offset within the selection. */
+  onSeekClipRelative: (sec: number) => void;
   onTogglePreview: () => void;
   onConfirm: () => void;
   onReset: () => void;
