@@ -1,34 +1,39 @@
-## Problem
+## Plan
 
-When the user starts a "new template" (`/kanvas/lyrics?mode=new`) after working on another template, the wizard still shows the previous audio file, waveform, selection, transcribed lyrics, and cut markers. The page component never resets its in-memory state when the URL transitions from `?templateId=...` to `?mode=new`. (No localStorage is involved — state lives only in React refs/state.)
+Fix the Kanvas Lyrics audio pipeline so starting a fresh template no longer clears newly selected audio, and so playback/waveform stay available through the wizard.
 
-## Fix
+### What I’ll change
 
-Add a reset effect in `src/pages/KanvasLyrics.tsx` that fires when `mode === 'new'` and `templateIdParam` is null:
+1. **Prevent the “new template” reset from wiping a file immediately after upload**
+   - The current reset effect runs any time `/kanvas/lyrics?mode=new` is active.
+   - After selecting an audio file, the page is still on that route, so the reset can re-run and clear `audioPlaybackUrl`, `sourceFileRef`, waveform peaks, and engine source.
+   - I’ll gate the reset so it only runs when entering a new-template session, not after local audio has already been selected.
 
-1. Revoke the previous blob URL (`lastUrlRef.current`) and clear it.
-2. Clear `sourceFileRef.current`.
-3. Pause the audio engine and call `engine.load(null)` to detach the previous source.
-4. Reset all wizard state:
-   - `setTemplateId(null)`
-   - `setAudioAssetId(null)`
-   - `setAudioPlaybackUrl(null)`
-   - `setAudio(INITIAL_AUDIO)`
-   - `setLyrics([])`
-   - `setMarkers([])`
-   - `setCurrentStep(1)`
-   - `setAppState('upload')`
-   - `setTranscribeStatus('idle')`
-   - `setHydrating(false)`
+2. **Load audio into the engine immediately when a file is selected**
+   - After creating the `blob:` URL, explicitly load it into the audio engine in the upload handler instead of relying only on the later effect.
+   - This makes playback readiness deterministic and avoids timing issues with state/effect ordering.
 
-The effect depends on `[mode, templateIdParam]` so it re-fires on every fresh "new" entry, including when the user navigates from an existing template to a new one without a full page reload.
+3. **Re-point playback to the uploaded trimmed clip after confirm**
+   - `uploadTemplateAudio()` returns the hosted clip URL, but the page currently stores the asset id without updating `audioPlaybackUrl`.
+   - I’ll set `audioPlaybackUrl` to the uploaded URL after confirm so Lyrics, Cut Markers, and Preview steps play the trimmed hosted clip.
+   - I’ll only revoke the previous local object URL after the hosted URL is active, so playback doesn’t lose its source mid-flow.
 
-## Verification
+4. **Make waveform display robust**
+   - Ensure waveform peaks are retained when confirmation resets the clip to a trimmed duration.
+   - If decode fails or returns empty peaks, continue showing generated fallback bars rather than an empty-looking waveform.
 
-1. Open existing template → upload audio, trim, transcribe → state populated.
-2. Click "New Template" (navigates to `?mode=new`) → wizard resets to step 1, dropzone shown, no leftover audio/lyrics/markers, no audio playing in background.
-3. Open another existing template → server hydration still works (the new effect bails out when `templateIdParam` is set).
+5. **Improve visible failure feedback**
+   - If the audio engine rejects play or fails to load, surface a concise toast and keep state consistent so the play button doesn’t appear silently broken.
 
-## Files Touched
+### Files in scope
 
-- `src/pages/KanvasLyrics.tsx` (single new `useEffect`)
+- `src/pages/KanvasLyrics.tsx`
+- `src/features/kanvas-lyrics/useAudioEngine.ts`
+- Possibly `src/features/kanvas-lyrics/decodeWaveform.ts` if decode fallback needs a guard
+
+### Expected result
+
+- Starting “New Template” opens a clean wizard.
+- Selecting audio shows the waveform reliably.
+- Pressing play in the Audio panel works for the selected local file.
+- Confirming the selection uploads the trimmed clip and subsequent Lyrics / Cut Markers / Preview playback continues to work using the hosted clip.

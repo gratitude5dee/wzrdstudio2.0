@@ -112,10 +112,20 @@ const KanvasLyrics = () => {
   const lastUrlRef = useRef<string | null>(null);
   useEffect(() => () => { if (lastUrlRef.current) URL.revokeObjectURL(lastUrlRef.current); }, []);
 
-  // When opening "new" without a templateId, fully reset wizard state so
-  // previous audio, selection, lyrics, and markers don't leak between sessions.
+  // When entering a brand-new template session (mode=new, no templateId),
+  // reset wizard state ONCE so previous audio/lyrics/markers don't leak.
+  // Guarded with a ref so subsequent renders within the same "new" session
+  // (e.g. right after the user picks a file) do not wipe the freshly loaded
+  // audio. Re-arms whenever we leave the "new" session.
+  const newSessionResetRef = useRef(false);
   useEffect(() => {
-    if (mode !== 'new' || templateIdParam) return;
+    if (mode !== 'new' || templateIdParam) {
+      newSessionResetRef.current = false;
+      return;
+    }
+    if (newSessionResetRef.current) return;
+    newSessionResetRef.current = true;
+
     if (lastUrlRef.current) {
       URL.revokeObjectURL(lastUrlRef.current);
       lastUrlRef.current = null;
@@ -247,11 +257,20 @@ const KanvasLyrics = () => {
     lastUrlRef.current = url;
     sourceFileRef.current = file;
     setAudioPlaybackUrl(url);
+    // Load into the audio engine immediately so isReady becomes true even if
+    // the dependent effect hasn't re-run yet.
+    try { engineLoad(url); } catch (e) { console.warn('[lyrics] engine load failed', e); }
     // Reset any previous server-side state — the wizard is now fully local.
     setAudioAssetId(null);
     setTemplateId(null);
 
-    const decoded = await decodeWaveform(file);
+    let decoded;
+    try {
+      decoded = await decodeWaveform(file);
+    } catch (e) {
+      console.warn('[lyrics] decodeWaveform threw', e);
+      decoded = { peaks: [] as number[], durationSec: 0 };
+    }
     const probedDuration = decoded.durationSec || 60;
 
     setAudio({
@@ -266,7 +285,7 @@ const KanvasLyrics = () => {
     });
     setAppState('trim');
     setTranscribeStatus('idle');
-  }, []);
+  }, [engineLoad]);
 
   // Debounced server patch helper
   const patchTimer = useRef<number | null>(null);
@@ -366,6 +385,17 @@ const KanvasLyrics = () => {
       });
       setAudioAssetId(uploaded.assetId);
 
+      // Re-point playback to the hosted trimmed clip so later steps keep
+      // working after the local object URL is revoked.
+      if (uploaded.url) {
+        setAudioPlaybackUrl(uploaded.url);
+        try { engineLoad(uploaded.url); } catch (e) { console.warn('[lyrics] engine reload failed', e); }
+        if (lastUrlRef.current) {
+          URL.revokeObjectURL(lastUrlRef.current);
+          lastUrlRef.current = null;
+        }
+      }
+
       // 3) Create draft template referencing the trimmed clip. The clip IS
       // the asset, so selectionStart=0 and totalDuration=clipDuration.
       const draft = await createTemplate({
@@ -412,7 +442,7 @@ const KanvasLyrics = () => {
       toast.error(e instanceof Error ? e.message : 'Failed to prepare clip', { id: toastId });
       setTranscribeStatus('idle');
     }
-  }, [audio.selectionStart, audio.selectionDuration, audio.peaks, engine, runTranscribe, setSearchParams]);
+  }, [audio.selectionStart, audio.selectionDuration, audio.peaks, engine, engineLoad, runTranscribe, setSearchParams]);
 
   const handleAudioReset = useCallback(() => {
     if (lastUrlRef.current) { URL.revokeObjectURL(lastUrlRef.current); lastUrlRef.current = null; }
