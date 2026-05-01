@@ -13,12 +13,17 @@ export interface AudioEngine {
   pause: () => void;
   toggle: () => Promise<void>;
   seek: (clipRelativeSec: number) => void;
-  setLoop: (startSec: number, endSec: number) => void;
+  /**
+   * Configure the playback window. When `loop` is true (default) playback
+   * wraps from `endSec` back to `startSec` continuously; when false it
+   * pauses at `endSec`.
+   */
+  setLoop: (startSec: number, endSec: number, opts?: { loop?: boolean }) => void;
 }
 
 export function useAudioEngine(): AudioEngine {
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const loopRef = useRef({ start: 0, end: 0 });
+  const loopRef = useRef({ start: 0, end: 0, loop: true });
   const [isReady, setIsReady] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
