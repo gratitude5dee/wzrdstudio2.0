@@ -109,7 +109,7 @@ export function AudioPanel({
           </div>
           <div>
             <p className="text-sm font-semibold text-white">Drop audio or click</p>
-            <p className="mt-1 text-xs text-slate-500">MP3, WAV, M4A up to 100MB</p>
+            <p className="mt-1 text-xs text-slate-500">MP3, WAV, M4A up to 50MB</p>
             <p className="mt-1 text-xs text-slate-500">Minimum 15s, select 15–30s clip</p>
           </div>
           <label htmlFor="kanvas-audio-input" className="sr-only">Audio file input</label>
