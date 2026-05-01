@@ -78,10 +78,28 @@ export function AudioPanel({
   const totalDuration = Math.max(audio.totalDuration, audio.selectionDuration);
   const selectionStartPct = totalDuration > 0 ? (audio.selectionStart / totalDuration) * 100 : 0;
   const selectionWidthPct = totalDuration > 0 ? (audio.selectionDuration / totalDuration) * 100 : 0;
+  const absolutePlayhead = Math.min(
+    audio.selectionStart + Math.max(0, playheadTime),
+    audio.selectionStart + audio.selectionDuration
+  );
+  const playheadPct = totalDuration > 0 ? (absolutePlayhead / totalDuration) * 100 : 0;
+  const showLivePosition = isPlaying || playheadTime > 0.05;
+  const positionLabel = showLivePosition ? absolutePlayhead : audio.selectionStart;
 
   const handleSelectionPctChange = (pct: number) => {
     const startSec = (pct / 100) * totalDuration;
     onSelectionStartChange(startSec);
+  };
+
+  const handleSeekPct = (pct: number) => {
+    if (showConfirmed) return;
+    const absSec = (pct / 100) * totalDuration;
+    const offset = absSec - audio.selectionStart;
+    // Only seek when click is inside the selection window; otherwise let the
+    // selection-drag handler reposition it.
+    if (offset >= 0 && offset <= audio.selectionDuration) {
+      onSeekClipRelative(Math.max(0, Math.min(audio.selectionDuration, offset)));
+    }
   };
 
   return (
