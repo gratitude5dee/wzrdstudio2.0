@@ -32,11 +32,12 @@ export function useAudioEngine(): AudioEngine {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
-  // Lazily create the audio element
+  // Lazily create the audio element. Do NOT set crossOrigin here — it's
+  // applied per-load (only for remote http(s) URLs). Setting crossOrigin
+  // on blob: URLs causes silent load failures in Chromium.
   if (!audioRef.current && typeof Audio !== 'undefined') {
     audioRef.current = new Audio();
     audioRef.current.preload = 'auto';
-    audioRef.current.crossOrigin = 'anonymous';
   }
 
   const stopRaf = useCallback(() => {
