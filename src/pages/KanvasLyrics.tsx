@@ -257,7 +257,11 @@ const KanvasLyrics = () => {
   }, [templateId]);
 
   const handleDurationChange = useCallback((d: ClipDuration) => {
-    setAudio((prev) => ({ ...prev, selectionDuration: d }));
+    setAudio((prev) => {
+      const maxStart = Math.max(0, prev.totalDuration - d);
+      const start = Math.min(prev.selectionStart, maxStart);
+      return { ...prev, selectionDuration: d, selectionStart: start };
+    });
     queuePatch({
       selection: {
         startMs: Math.round(audio.selectionStart * 1000),
@@ -271,7 +275,11 @@ const KanvasLyrics = () => {
   }, []);
 
   const handleSelectionStartChange = useCallback((s: number) => {
-    setAudio((prev) => ({ ...prev, selectionStart: s }));
+    setAudio((prev) => {
+      const maxStart = Math.max(0, prev.totalDuration - prev.selectionDuration);
+      const clamped = Math.max(0, Math.min(maxStart, s));
+      return { ...prev, selectionStart: clamped };
+    });
     queuePatch({
       selection: {
         startMs: Math.round(s * 1000),
@@ -284,13 +292,13 @@ const KanvasLyrics = () => {
     engine.toggle();
   }, [engine]);
 
-  const runTranscribe = useCallback(async () => {
-    if (!templateId) return;
+  const runTranscribe = useCallback(async (idArg?: string) => {
+    const id = idArg ?? templateId;
+    if (!id) return;
     setTranscribeStatus('transcribing');
     try {
-      const result = await transcribeTemplate(templateId);
+      const result = await transcribeTemplate(id);
       setTranscribeStatus('parsing');
-      // Brief parsing tick for UX
       await new Promise((r) => setTimeout(r, 300));
       setLyrics(blocksFromServer(result));
       setTranscribeStatus('ready');
@@ -302,26 +310,85 @@ const KanvasLyrics = () => {
   }, [templateId]);
 
   const handleAudioConfirm = useCallback(async () => {
-    setAudio((prev) => ({ ...prev, confirmed: true }));
-    setAppState('lyrics_edit');
-    setCurrentStep(2);
-    engine.seek(0);
-
-    if (!templateId) return;
-    try {
-      await updateTemplate(templateId, {
-        selection: {
-          startMs: Math.round(audio.selectionStart * 1000),
-          durationMs: (audio.selectionDuration * 1000) as ClipDurationMs,
-        },
-        waveformPeaks: audio.peaks,
-        status: 'audio_ready',
-      });
-    } catch (e) {
-      console.warn('[lyrics] failed to mark audio_ready', e);
+    const sourceFile = sourceFileRef.current;
+    if (!sourceFile) {
+      toast.error('No audio file loaded');
+      return;
     }
-    runTranscribe();
-  }, [templateId, audio.selectionStart, audio.selectionDuration, audio.peaks, engine, runTranscribe]);
+
+    const toastId = 'kanvas-lyrics-confirm';
+    const startMs = Math.round(audio.selectionStart * 1000);
+    const durationMs = (audio.selectionDuration * 1000) as ClipDurationMs;
+
+    try {
+      // 1) Slice the trimmed clip locally
+      toast.loading('Slicing clip…', { id: toastId });
+      setTranscribeStatus('uploading');
+      const baseName = sourceFile.name.replace(/\.[^.]+$/, '').slice(0, 60) || 'clip';
+      const clip = await sliceAudioToWav(
+        sourceFile,
+        audio.selectionStart,
+        audio.selectionDuration,
+        baseName
+      );
+
+      // 2) Upload only the trimmed clip
+      toast.loading('Uploading clip…', { id: toastId });
+      const uploaded = await uploadTemplateAudio({
+        blob: clip.blob,
+        fileName: clip.fileName,
+        mimeType: clip.mimeType,
+        durationMs: clip.durationMs,
+      });
+      setAudioAssetId(uploaded.assetId);
+
+      // 3) Create draft template referencing the trimmed clip. The clip IS
+      // the asset, so selectionStart=0 and totalDuration=clipDuration.
+      const draft = await createTemplate({
+        title: baseName || 'Untitled Template',
+        sourceAudioAssetId: uploaded.assetId,
+        totalDurationMs: clip.durationMs,
+        selectionStartMs: 0,
+        selectionDurationMs: durationMs,
+        waveformPeaks: audio.peaks,
+      });
+      setTemplateId(draft.id);
+      setSearchParams({ templateId: draft.id }, { replace: true });
+
+      // 4) Mark ready and kick transcription. Re-point the engine at the
+      // hosted clip so future steps still play after object URL is revoked.
+      try {
+        await updateTemplate(draft.id, {
+          selection: { startMs: 0, durationMs },
+          waveformPeaks: audio.peaks,
+          status: 'audio_ready',
+        });
+      } catch (e) {
+        console.warn('[lyrics] failed to mark audio_ready', e);
+      }
+
+      toast.success('Clip ready — transcribing…', { id: toastId });
+
+      // Advance UI now that upload succeeded
+      setAudio((prev) => ({
+        ...prev,
+        confirmed: true,
+        // From here on the engine plays the hosted clip, which IS the
+        // selection — selectionStart resets to 0.
+        selectionStart: 0,
+        totalDuration: clip.durationMs / 1000,
+      }));
+      setAppState('lyrics_edit');
+      setCurrentStep(2);
+      engine.seek(0);
+
+      runTranscribe(draft.id);
+    } catch (e) {
+      console.error('[lyrics] confirm failed', e);
+      toast.error(e instanceof Error ? e.message : 'Failed to prepare clip', { id: toastId });
+      setTranscribeStatus('idle');
+    }
+  }, [audio.selectionStart, audio.selectionDuration, audio.peaks, engine, runTranscribe, setSearchParams]);
 
   const handleAudioReset = useCallback(() => {
     if (lastUrlRef.current) { URL.revokeObjectURL(lastUrlRef.current); lastUrlRef.current = null; }
