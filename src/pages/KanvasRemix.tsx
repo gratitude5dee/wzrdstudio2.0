@@ -693,7 +693,7 @@ const KanvasRemix = () => {
           </div>
 
           {/* ── Timeline strip ── */}
-          <div className="border-t border-white/[0.06] bg-[#0A0A0A] px-6 py-2">
+          <div className="border-t border-white/[0.06] bg-[#0A0A0A] px-4 py-1.5">
             <div className="flex gap-2 overflow-x-auto pb-2">
               {timelineSlots.map((slot) => {
                 const clip = slot.clipId ? assets.find((a) => a.id === slot.clipId) : null;
