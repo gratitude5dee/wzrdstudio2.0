@@ -491,7 +491,7 @@ const KanvasLyrics = () => {
           CREATE TEMPLATE
         </h1>
         <p className="mx-auto mt-3 max-w-xl text-xs uppercase tracking-[0.32em] text-zinc-500">
-          Audio · Lyrics · Markers
+          Audio · Lyrics · Markers · Preview
         </p>
       </div>
 
@@ -538,8 +538,26 @@ const KanvasLyrics = () => {
           onSeek={handleSeek}
           onMarkerDrag={handleMarkerDrag}
           onMarkerDelete={handleMarkerDelete}
+          onPreview={handleMarkersDone}
         />
       </main>
+
+      {currentStep === 4 && (
+        <section className="mx-auto max-w-[1400px] px-6 pb-24">
+          <VisualizePanel
+            currentStep={currentStep}
+            blocks={lyrics}
+            markers={markers}
+            playheadTime={playheadTime}
+            duration={audio.selectionDuration}
+            isPlaying={engine.isPlaying && currentStep === 4}
+            saving={saving}
+            onTogglePlay={togglePlay}
+            onReplay={handleReplay}
+            onSave={handleSave}
+          />
+        </section>
+      )}
 
       <button
         type="button"
