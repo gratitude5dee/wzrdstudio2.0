@@ -257,11 +257,20 @@ const KanvasLyrics = () => {
     lastUrlRef.current = url;
     sourceFileRef.current = file;
     setAudioPlaybackUrl(url);
+    // Load into the audio engine immediately so isReady becomes true even if
+    // the dependent effect hasn't re-run yet.
+    try { engineLoad(url); } catch (e) { console.warn('[lyrics] engine load failed', e); }
     // Reset any previous server-side state — the wizard is now fully local.
     setAudioAssetId(null);
     setTemplateId(null);
 
-    const decoded = await decodeWaveform(file);
+    let decoded;
+    try {
+      decoded = await decodeWaveform(file);
+    } catch (e) {
+      console.warn('[lyrics] decodeWaveform threw', e);
+      decoded = { peaks: [] as number[], durationSec: 0 };
+    }
     const probedDuration = decoded.durationSec || 60;
 
     setAudio({
@@ -276,7 +285,7 @@ const KanvasLyrics = () => {
     });
     setAppState('trim');
     setTranscribeStatus('idle');
-  }, []);
+  }, [engineLoad]);
 
   // Debounced server patch helper
   const patchTimer = useRef<number | null>(null);
