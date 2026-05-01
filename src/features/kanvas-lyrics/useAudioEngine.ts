@@ -139,8 +139,13 @@ export function useAudioEngine(): AudioEngine {
     setCurrentTime(Math.max(0, t - loop.start));
   }, []);
 
-  const setLoop = useCallback((startSec: number, endSec: number) => {
-    loopRef.current = { start: Math.max(0, startSec), end: Math.max(startSec, endSec) };
+  const setLoop = useCallback((startSec: number, endSec: number, opts?: { loop?: boolean }) => {
+    const loop = opts?.loop ?? true;
+    loopRef.current = {
+      start: Math.max(0, startSec),
+      end: Math.max(startSec, endSec),
+      loop,
+    };
     setDuration(Math.max(0, endSec - startSec));
     const a = audioRef.current;
     if (a && (a.currentTime < startSec || a.currentTime >= endSec)) {
