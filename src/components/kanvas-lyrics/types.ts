@@ -1,12 +1,11 @@
-export type WizardStep = 1 | 2 | 3 | 4;
+export type WizardStep = 1 | 2 | 3;
 
 export type AppState =
   | 'upload'
   | 'trim'
   | 'lyrics_edit'
   | 'lyrics_complete'
-  | 'markers_edit'
-  | 'visualize';
+  | 'markers_edit';
 
 export type ClipDuration = 15 | 30 | 45 | 60;
 

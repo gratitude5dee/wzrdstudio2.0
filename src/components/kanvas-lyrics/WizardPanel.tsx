@@ -1,9 +1,9 @@
 import type { ReactNode, ComponentType } from 'react';
 import { cn } from '@/lib/utils';
-import { Lock } from 'lucide-react';
+import { Check, Lock } from 'lucide-react';
 
 interface WizardPanelProps {
-  stepNumber: 1 | 2 | 3 | 4;
+  stepNumber: 1 | 2 | 3;
   title: string;
   subtitle: string;
   icon: ComponentType<{ className?: string }>;
@@ -41,12 +41,12 @@ export function WizardPanel({
           <div
             className={cn(
               'mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold',
-              active && 'bg-cyan-300 text-black',
-              complete && !active && 'bg-emerald-400 text-black',
+              complete && 'bg-emerald-400 text-black',
+              active && !complete && 'bg-cyan-300 text-black',
               !active && !complete && 'bg-white/5 text-slate-400 ring-1 ring-white/10'
             )}
           >
-            {stepNumber}
+            {complete ? <Check className="h-3.5 w-3.5" /> : stepNumber}
           </div>
           <div>
             <h3 className="text-sm font-bold uppercase tracking-[0.18em] text-white">{title}</h3>
