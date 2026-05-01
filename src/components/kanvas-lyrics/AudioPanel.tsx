@@ -192,11 +192,16 @@ export function AudioPanel({
             selectionStartPercent={selectionStartPct}
             selectionWidthPercent={selectionWidthPct}
             onSelectionStartPercentChange={!showConfirmed ? handleSelectionPctChange : undefined}
+            showPlayhead
+            playheadPercent={playheadPct}
+            onSeekPercent={!showConfirmed ? handleSeekPct : undefined}
           />
 
           {/* Position + duration row */}
           <div className="flex items-center justify-between text-[11px] text-slate-400">
-            <span className="font-mono text-[#fb923c]">{formatTime(audio.selectionStart)}</span>
+            <span className={cn('font-mono', showLivePosition ? 'text-white' : 'text-[#fb923c]')}>
+              {formatTime(positionLabel)}
+            </span>
             <span className="text-slate-600">/ {formatTime(totalDuration)}</span>
           </div>
 
