@@ -92,12 +92,22 @@ export function useAudioEngine(): AudioEngine {
         setCurrentTime(0);
       }
     };
+    const onError = () => {
+      const code = a.error?.code;
+      const msg = a.error?.message;
+      console.error('[audio] media error', { code, msg, src: a.currentSrc });
+      setIsReady(false);
+      setIsPlaying(false);
+      stopRaf();
+      toast.error(`Audio playback failed${code ? ` (code ${code})` : ''}`);
+    };
 
     a.addEventListener('loadedmetadata', onLoaded);
     a.addEventListener('canplay', onLoaded);
     a.addEventListener('play', onPlay);
     a.addEventListener('pause', onPause);
     a.addEventListener('ended', onEnded);
+    a.addEventListener('error', onError);
 
     return () => {
       a.removeEventListener('loadedmetadata', onLoaded);
@@ -105,6 +115,7 @@ export function useAudioEngine(): AudioEngine {
       a.removeEventListener('play', onPlay);
       a.removeEventListener('pause', onPause);
       a.removeEventListener('ended', onEnded);
+      a.removeEventListener('error', onError);
       stopRaf();
     };
   }, [tick, stopRaf]);
