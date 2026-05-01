@@ -1,13 +1,14 @@
-export type WizardStep = 1 | 2 | 3;
+export type WizardStep = 1 | 2 | 3 | 4;
 
 export type AppState =
   | 'upload'
   | 'trim'
   | 'lyrics_edit'
   | 'lyrics_complete'
-  | 'markers_edit';
+  | 'markers_edit'
+  | 'visualize';
 
-export type ClipDuration = 15 | 20 | 25 | 30;
+export type ClipDuration = 15 | 30 | 45 | 60;
 
 export type TranscribeStatus =
   | 'idle'

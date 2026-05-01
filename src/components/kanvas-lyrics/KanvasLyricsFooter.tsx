@@ -1,4 +1,4 @@
-import { Check, AudioLines, Type, Scissors } from 'lucide-react';
+import { Check, AudioLines, Type, Scissors, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { WizardStep } from './types';
 
@@ -15,6 +15,7 @@ const STEPS = [
   { id: 1 as WizardStep, label: 'Audio', icon: AudioLines },
   { id: 2 as WizardStep, label: 'Lyrics', icon: Type },
   { id: 3 as WizardStep, label: 'Markers', icon: Scissors },
+  { id: 4 as WizardStep, label: 'Preview', icon: Eye },
 ];
 
 export function KanvasLyricsFooter({
@@ -25,18 +26,19 @@ export function KanvasLyricsFooter({
   markerCount,
   onSave,
 }: KanvasLyricsFooterProps) {
-  const saveEnabled = currentStep === 3;
+  const saveEnabled = currentStep === 4;
 
   return (
     <footer className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 bg-[#0D1017]/95 backdrop-blur-xl">
       <div className="mx-auto flex h-20 max-w-[1500px] items-center justify-between gap-6 px-5">
         {/* Stepper */}
         <ol className="flex items-center gap-2">
-          {STEPS.map((step) => {
+          {STEPS.map((step, idx) => {
             const isActive = currentStep === step.id;
             const isComplete = currentStep > step.id;
             const isLocked = currentStep < step.id;
             const Icon = step.icon;
+            const isLast = idx === STEPS.length - 1;
             return (
               <li key={step.id} className="flex items-center gap-2">
                 <div
@@ -57,7 +59,7 @@ export function KanvasLyricsFooter({
                     {step.label}
                   </span>
                 </div>
-                {step.id !== 3 && (
+                {!isLast && (
                   <span
                     className={cn(
                       'h-px w-6',
@@ -81,7 +83,7 @@ export function KanvasLyricsFooter({
               <span>
                 <span className="text-[#fb923c]">{wordCount}</span> words
               </span>
-              {currentStep === 3 && (
+              {currentStep >= 3 && (
                 <>
                   <span className="h-3 w-px bg-white/10" />
                   <span>
@@ -101,7 +103,7 @@ export function KanvasLyricsFooter({
           className={cn(
             'inline-flex items-center gap-2 rounded-full px-5 py-2 text-xs font-bold uppercase tracking-[0.18em] transition-all',
             saveEnabled
-              ? 'bg-gradient-to-r from-cyan-400 to-emerald-400 text-black shadow-[0_0_24px_rgba(249,115,22,0.4)] hover:brightness-110'
+              ? 'bg-gradient-to-r from-cyan-400 to-emerald-400 text-black shadow-[0_0_24px_rgba(52,211,153,0.4)] hover:brightness-110'
               : 'cursor-not-allowed bg-white/5 text-slate-600 ring-1 ring-white/10'
           )}
         >

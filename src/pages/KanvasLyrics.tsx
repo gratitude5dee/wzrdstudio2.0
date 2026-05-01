@@ -8,6 +8,7 @@ import { KanvasLyricsFooter } from '@/components/kanvas-lyrics/KanvasLyricsFoote
 import { AudioPanel } from '@/components/kanvas-lyrics/AudioPanel';
 import { LyricsPanel } from '@/components/kanvas-lyrics/LyricsPanel';
 import { MarkersPanel } from '@/components/kanvas-lyrics/MarkersPanel';
+import { VisualizePanel } from '@/components/kanvas-lyrics/VisualizePanel';
 import { TemplatesLanding } from '@/components/kanvas-lyrics/TemplatesLanding';
 import { INITIAL_AUDIO } from '@/components/kanvas-lyrics/constants';
 import type {
@@ -32,7 +33,7 @@ import { useAudioEngine } from '@/features/kanvas-lyrics/useAudioEngine';
 import { decodeWaveform } from '@/features/kanvas-lyrics/decodeWaveform';
 import { supabase } from '@/integrations/supabase/client';
 
-type ClipDurationMs = 15000 | 20000 | 25000 | 30000;
+type ClipDurationMs = 15000 | 30000 | 45000 | 60000;
 
 function blocksFromServer(t: KanvasLyricTemplate): LyricBlock[] {
   return t.lyricBlocks.map((b, i) => ({
@@ -69,8 +70,9 @@ function markersToServer(markers: CutMarker[]) {
 
 function stepFromStatus(t: KanvasLyricTemplate): WizardStep {
   switch (t.status) {
-    case 'markers_ready':
     case 'saved':
+      return 4;
+    case 'markers_ready':
       return 3;
     case 'lyrics_ready':
     case 'lyrics_processing':
@@ -136,6 +138,8 @@ const KanvasLyrics = () => {
             ? 'lyrics_edit'
             : t.status === 'lyrics_ready'
             ? 'lyrics_complete'
+            : t.status === 'saved'
+            ? 'visualize'
             : 'markers_edit'
         );
         if (t.status === 'lyrics_processing') setTranscribeStatus('transcribing');
@@ -369,6 +373,25 @@ const KanvasLyrics = () => {
     }
   }, [templateId, lyrics, engine]);
 
+  const handleMarkersDone = useCallback(() => {
+    setAppState('visualize');
+    setCurrentStep(4);
+    engine.pause();
+    engine.seek(0);
+    if (templateId) {
+      updateTemplate(templateId, {
+        cutMarkers: markersToServer(markers),
+        status: 'markers_ready',
+      }).catch(() => {});
+    }
+  }, [templateId, markers, engine]);
+
+  const handleReplay = useCallback(() => {
+    engine.pause();
+    engine.seek(0);
+    setTimeout(() => engine.play?.(), 60);
+  }, [engine]);
+
   // Marker handlers
   const handleAddMarker = useCallback(() => {
     setMarkers((prev) => {
@@ -468,7 +491,7 @@ const KanvasLyrics = () => {
           CREATE TEMPLATE
         </h1>
         <p className="mx-auto mt-3 max-w-xl text-xs uppercase tracking-[0.32em] text-zinc-500">
-          Audio · Lyrics · Markers
+          Audio · Lyrics · Markers · Preview
         </p>
       </div>
 
@@ -515,8 +538,26 @@ const KanvasLyrics = () => {
           onSeek={handleSeek}
           onMarkerDrag={handleMarkerDrag}
           onMarkerDelete={handleMarkerDelete}
+          onPreview={handleMarkersDone}
         />
       </main>
+
+      {currentStep === 4 && (
+        <section className="mx-auto max-w-[1400px] px-6 pb-24">
+          <VisualizePanel
+            currentStep={currentStep}
+            blocks={lyrics}
+            markers={markers}
+            playheadTime={playheadTime}
+            duration={audio.selectionDuration}
+            isPlaying={engine.isPlaying && currentStep === 4}
+            saving={saving}
+            onTogglePlay={togglePlay}
+            onReplay={handleReplay}
+            onSave={handleSave}
+          />
+        </section>
+      )}
 
       <button
         type="button"

@@ -13,7 +13,10 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-const VALID_DURATIONS = new Set([15000, 20000, 25000, 30000]);
+// Accept both new (15/30/45/60) and legacy (20/25) durations on read paths;
+// only the new set is acceptable for new selections.
+const VALID_DURATIONS = new Set([15000, 30000, 45000, 60000]);
+const LEGACY_DURATIONS = new Set([20000, 25000]);
 const MAX_PEAKS = 2048;
 const MAX_WORDS = 500;
 const MAX_WORD_LEN = 80;
@@ -150,8 +153,8 @@ export function validateMarkers(markers: unknown, durationMs: number) {
 }
 
 function validateSelection(startMs: number, durationMs: number, totalMs: number | null) {
-  if (!VALID_DURATIONS.has(durationMs)) {
-    throw new Error('selectionDurationMs must be 15000, 20000, 25000, or 30000');
+  if (!VALID_DURATIONS.has(durationMs) && !LEGACY_DURATIONS.has(durationMs)) {
+    throw new Error('selectionDurationMs must be 15000, 30000, 45000, or 60000');
   }
   if (!Number.isFinite(startMs) || startMs < 0) throw new Error('selectionStartMs invalid');
   if (totalMs != null && startMs + durationMs > totalMs) {

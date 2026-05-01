@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 import { Lock } from 'lucide-react';
 
 interface WizardPanelProps {
-  stepNumber: 1 | 2 | 3;
+  stepNumber: 1 | 2 | 3 | 4;
   title: string;
   subtitle: string;
   icon: ComponentType<{ className?: string }>;
