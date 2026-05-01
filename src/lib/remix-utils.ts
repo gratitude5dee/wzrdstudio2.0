@@ -1,5 +1,5 @@
 import type { CutMarker, LyricBlock } from '@/features/kanvas-lyrics/types';
-import type { FootageAsset } from '@/features/remix/types';
+import type { FootageAsset, RemixTimelineSlot } from '@/features/remix/types';
 
 export interface LyricCaption {
   text: string;
