@@ -264,32 +264,28 @@ const KanvasRemix = () => {
     return () => clearInterval(interval);
   }, [template]);
 
-  const startExport = async () => {
+  const startExport = () => {
     if (!template) return;
-    setExporting(true);
-    try {
-      const job = await createRemixJob({
-        templateId: template.id,
-        durationMs,
-        quantity,
-        lyricStyleId: selectedStyleId,
-        scale,
-        noCuts,
-        clipRatio,
-        filter: tagFilter,
-        shuffleEach,
-        clipIds: timelineSlots.filter((s) => s.clipId).map((s) => s.clipId!),
-        aspectRatio,
-        timelineClipIds: timelineSlots.map((s) => s.clipId),
-      });
-      toast.success('Remix export started');
-      navigate(`/kanvas/remix/jobs/${job.job.id}`);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to start export');
-    } finally {
-      setExporting(false);
-      setConfirmOpen(false);
-    }
+    // Pause the preview player before starting export
+    playerRef.current?.pause();
+    setIsPlaying(false);
+    setConfirmOpen(false);
+    setExportModalOpen(true);
+  };
+
+  const exportOptions = useMemo(() => ({
+    width: aspectRatio === '9:16' ? 1080 : 1920,
+    height: aspectRatio === '9:16' ? 1920 : 1080,
+    durationMs,
+    fps: 30,
+    audioUrl,
+    captions,
+    lyricStyleId: selectedStyleId,
+    scale,
+    backgroundClips,
+    cutMarkers: template?.cutMarkers ?? [],
+    noCuts,
+  }), [aspectRatio, durationMs, audioUrl, captions, selectedStyleId, scale, backgroundClips, template?.cutMarkers, noCuts]);
   };
 
   if (loading) {
