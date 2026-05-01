@@ -37,17 +37,33 @@ const DEFAULT_PROPS: LyricRemixCompositionProps = {
   durationMs: 15000,
 };
 
-function getClipSequence(clips: FootageAsset[], durationMs: number) {
+/**
+ * Build clip sequence from cut markers. Each segment between consecutive
+ * marker boundaries gets one clip from the backgroundClips array (cycling).
+ */
+function getClipSequence(
+  clips: FootageAsset[],
+  durationMs: number,
+  cutMarkers: Array<{ timestampMs: number }> = []
+) {
   if (clips.length === 0) return [];
+
+  // Build boundaries from cut markers (same logic as buildRemixTimelineSlots)
+  const boundaries = new Set<number>([0, durationMs]);
+  for (const m of cutMarkers) {
+    const t = Math.max(0, Math.min(durationMs, m.timestampMs));
+    boundaries.add(t);
+  }
+  const sorted = Array.from(boundaries).sort((a, b) => a - b);
+
   const sequence: Array<{ clip: FootageAsset; fromMs: number; durationMs: number }> = [];
-  let cursor = 0;
-  let index = 0;
-  while (cursor < durationMs && index < clips.length * 4) {
-    const clip = clips[index % clips.length];
-    const clipDuration = Math.max(1000, clip.durationMs);
-    sequence.push({ clip, fromMs: cursor, durationMs: Math.min(clipDuration, durationMs - cursor) });
-    cursor += clipDuration;
-    index += 1;
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const clip = clips[i % clips.length];
+    const segStart = sorted[i];
+    const segEnd = sorted[i + 1];
+    if (segEnd > segStart) {
+      sequence.push({ clip, fromMs: segStart, durationMs: segEnd - segStart });
+    }
   }
   return sequence;
 }
