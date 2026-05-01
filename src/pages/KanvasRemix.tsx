@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   Check,
   ChevronDown,
+  ChevronLeft,
   Clapperboard,
   Download,
   Film,
@@ -26,6 +27,7 @@ import { toast } from 'sonner';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
+import { appRoutes } from '@/lib/routes';
 import { getTemplate, listTemplates } from '@/features/kanvas-lyrics/service';
 import type { KanvasLyricTemplate } from '@/features/kanvas-lyrics/types';
 import {
@@ -46,6 +48,7 @@ import {
   seededShuffle,
 } from '@/lib/remix-utils';
 import { LyricRemixComposition } from '@/components/remix/LyricRemixComposition';
+import { KanvasLyricsHeader } from '@/components/kanvas-lyrics/KanvasLyricsHeader';
 
 type RatioFilter = 'all' | AspectRatio;
 type SortKey = 'newest' | 'oldest' | 'shortest' | 'longest';
@@ -86,6 +89,7 @@ const KanvasRemix = () => {
   const [timelineSlots, setTimelineSlots] = useState<RemixTimelineSlot[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentFrameMs, setCurrentFrameMs] = useState(0);
+  const [dragOverSlot, setDragOverSlot] = useState<number | null>(null);
 
   // Data loading
   useEffect(() => {
@@ -190,6 +194,31 @@ const KanvasRemix = () => {
     setShuffleEach(quantity > 1);
   }, [assets, quantity]);
 
+  // Drag-and-drop handlers
+  const handleDragStart = useCallback((e: React.DragEvent, clipId: string) => {
+    e.dataTransfer.setData('text/plain', clipId);
+    e.dataTransfer.effectAllowed = 'copy';
+  }, []);
+
+  const handleSlotDragOver = useCallback((e: React.DragEvent, slotIndex: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    setDragOverSlot(slotIndex);
+  }, []);
+
+  const handleSlotDragLeave = useCallback(() => {
+    setDragOverSlot(null);
+  }, []);
+
+  const handleSlotDrop = useCallback((e: React.DragEvent, slotIndex: number) => {
+    e.preventDefault();
+    setDragOverSlot(null);
+    const clipId = e.dataTransfer.getData('text/plain');
+    if (clipId) {
+      setTimelineSlots((prev) => assignClipToSlot(prev, slotIndex, clipId));
+    }
+  }, []);
+
   // Player transport controls
   const togglePlay = useCallback(() => {
     const p = playerRef.current;
@@ -263,30 +292,46 @@ const KanvasRemix = () => {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-black text-white">
-        <Loader2 className="h-6 w-6 animate-spin text-cyan-300" />
+      <div className="flex min-h-screen flex-col bg-black text-white">
+        <KanvasLyricsHeader />
+        <div className="flex flex-1 items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-[#f97316]" />
+        </div>
       </div>
     );
   }
 
   if (!template) {
     return (
-      <div className="min-h-screen bg-black px-6 py-10 text-white">
-        <div className="mx-auto max-w-4xl">
-          <h1 className="text-5xl font-black tracking-tight text-cyan-300">Remix</h1>
-          <p className="mt-2 max-w-xl text-sm text-slate-400">
-            Pick a saved lyric template to start building beat-synced short-form videos.
-          </p>
-          <div className="mt-8 rounded-2xl border border-dashed border-cyan-400/20 bg-[#0A0D14] p-10 text-center">
-            <Music2 className="mx-auto h-8 w-8 text-cyan-300" />
-            <p className="mt-4 text-sm font-bold text-white">No saved lyric templates</p>
-            <button
-              type="button"
-              onClick={() => navigate('/kanvas/lyrics/new')}
-              className="mt-5 rounded-full bg-cyan-400 px-5 py-2 text-xs font-bold uppercase tracking-[0.18em] text-black"
-            >
-              Create template
-            </button>
+      <div className="min-h-screen flex flex-col bg-black text-white">
+        <KanvasLyricsHeader />
+        <div className="px-6 py-10">
+          <div className="mx-auto max-w-4xl">
+            <div className="flex items-center gap-3 mb-2">
+              <button
+                type="button"
+                onClick={() => navigate(appRoutes.kanvasLyrics)}
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
+                aria-label="Back to templates"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <h1 className="text-5xl font-black tracking-tight text-[#f97316]">Remix</h1>
+            </div>
+            <p className="mt-2 max-w-xl text-sm text-zinc-400">
+              Pick a saved lyric template to start building beat-synced short-form videos.
+            </p>
+            <div className="mt-8 rounded-2xl border border-dashed border-[#f97316]/20 bg-[#0A0A0A] p-10 text-center">
+              <Music2 className="mx-auto h-8 w-8 text-[#f97316]" />
+              <p className="mt-4 text-sm font-bold text-white">No saved lyric templates</p>
+              <button
+                type="button"
+                onClick={() => navigate('/kanvas/lyrics/new')}
+                className="mt-5 rounded-full bg-[#f97316] px-5 py-2 text-xs font-bold uppercase tracking-[0.18em] text-black"
+              >
+                Create template
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -299,31 +344,40 @@ const KanvasRemix = () => {
   );
 
   return (
-    <div className="min-h-screen overflow-hidden bg-black text-white">
-      <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[480px_1fr]">
+    <div className="min-h-screen flex flex-col overflow-hidden bg-black text-white">
+      <KanvasLyricsHeader />
+      <div className="flex-1 grid min-h-0 grid-cols-1 lg:grid-cols-[480px_1fr]">
         {/* ── Left rail ── */}
-        <aside className="flex flex-col border-r border-cyan-400/10 bg-[#030507]">
+        <aside className="flex flex-col border-r border-white/[0.06] bg-[#0A0A0A]">
           <div className="px-8 pt-6">
             <div className="flex items-center gap-2">
-              <h1 className="bg-gradient-to-r from-cyan-300 via-sky-400 to-blue-500 bg-clip-text text-3xl font-black tracking-tight text-transparent">
+              <button
+                type="button"
+                onClick={() => navigate(appRoutes.kanvasLyrics)}
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
+                aria-label="Back to templates"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <h1 className="text-3xl font-black tracking-tight text-[#f97316]">
                 Remix
               </h1>
-              <HelpCircle className="h-4 w-4 text-slate-500" />
+              <HelpCircle className="h-4 w-4 text-zinc-600" />
             </div>
-            <p className="mt-1.5 max-w-md text-xs leading-5 text-slate-400">
+            <p className="mt-1.5 max-w-md text-xs leading-5 text-zinc-400">
               Build beat-synced videos from your clip library. Pick a template, shuffle your clips, and export.
             </p>
           </div>
 
           {/* Clip library */}
           <section className="flex-1 overflow-y-auto px-8 pt-5">
-            <div className="flex items-center justify-between border-b border-cyan-400/10 pb-3">
-              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-200">
-                <Film className="h-4 w-4 text-cyan-300" />
+            <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-zinc-200">
+                <Film className="h-4 w-4 text-[#f97316]" />
                 Clip Library
-                <span className="text-slate-500">{assets.length}</span>
+                <span className="text-zinc-500">{assets.length}</span>
               </div>
-              <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-bold text-cyan-300">
+              <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-bold text-[#f97316]">
                 <Import className="h-3.5 w-3.5" />
                 Import
                 <input
@@ -336,19 +390,19 @@ const KanvasRemix = () => {
             </div>
 
             <div className="mt-2 flex items-center justify-between gap-2">
-              <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-slate-500">
-                <button type="button" onClick={() => setCategoryId(null)} className="hover:text-cyan-200">All</button>
+              <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-zinc-500">
+                <button type="button" onClick={() => setCategoryId(null)} className="hover:text-zinc-200">All Categories</button>
                 <span>/</span>
-                <button type="button" onClick={() => setCategoryId(rootCategory?.id ?? null)} className="truncate hover:text-cyan-200">
+                <button type="button" onClick={() => setCategoryId(rootCategory?.id ?? null)} className="truncate hover:text-zinc-200">
                   {rootCategory?.name ?? 'Bay Area'}
                 </button>
                 <span>/</span>
-                <span className="font-bold text-slate-200">{activeCategory?.name ?? 'All'}</span>
+                <span className="font-bold text-zinc-200">{activeCategory?.name ?? 'All'}</span>
               </div>
               <select
                 value={sort}
                 onChange={(e) => setSort(e.target.value as SortKey)}
-                className="rounded-lg border border-white/10 bg-[#0B0E13] px-2 py-1 text-[11px] text-white outline-none"
+                className="rounded-lg border border-white/10 bg-[#111] px-2 py-1 text-[11px] text-white outline-none"
               >
                 <option value="newest">Newest</option>
                 <option value="oldest">Oldest</option>
@@ -362,10 +416,12 @@ const KanvasRemix = () => {
                 <button
                   key={asset.id}
                   type="button"
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, asset.id)}
                   onClick={() => addClipToTimeline(asset)}
-                  className="group min-w-0 text-left"
+                  className="group min-w-0 text-left cursor-grab active:cursor-grabbing"
                 >
-                  <div className="relative aspect-[9/16] overflow-hidden rounded-lg border border-cyan-400/10 bg-[#0D1117]">
+                  <div className="relative aspect-[9/16] overflow-hidden rounded-lg border border-white/[0.06] bg-[#111]">
                     {asset.posterUrl ? (
                       <img src={asset.posterUrl} alt="" className="h-full w-full object-cover opacity-80 transition-opacity group-hover:opacity-100" />
                     ) : (
@@ -375,23 +431,23 @@ const KanvasRemix = () => {
                       ⏱{(asset.durationMs / 1000).toFixed(1)}s
                     </span>
                   </div>
-                  <p className="mt-1 truncate text-[10px] text-slate-400 group-hover:text-white">{asset.title}</p>
+                  <p className="mt-1 truncate text-[10px] text-zinc-400 group-hover:text-white">{asset.title}</p>
                 </button>
               ))}
             </div>
 
             {/* Controls */}
-            <section className="mt-4 border-t border-cyan-400/10 pt-3">
+            <section className="mt-4 border-t border-white/[0.06] pt-3">
               <button
                 type="button"
                 onClick={() => setControlsOpen((prev) => !prev)}
-                className="flex w-full items-center justify-between text-xs font-bold uppercase tracking-[0.14em] text-slate-200"
+                className="flex w-full items-center justify-between text-xs font-bold uppercase tracking-[0.14em] text-zinc-200"
               >
                 <span className="inline-flex items-center gap-2">
-                  <Clapperboard className="h-4 w-4 text-cyan-300" />
+                  <Clapperboard className="h-4 w-4 text-[#f97316]" />
                   Controls
                 </span>
-                <ChevronDown className={cn('h-4 w-4 text-slate-500 transition-transform', !controlsOpen && '-rotate-90')} />
+                <ChevronDown className={cn('h-4 w-4 text-zinc-500 transition-transform', !controlsOpen && '-rotate-90')} />
               </button>
 
               {controlsOpen && (
@@ -400,7 +456,7 @@ const KanvasRemix = () => {
                   <select
                     value={template.id}
                     onChange={(e) => navigate(`/kanvas/remix/${e.target.value}`)}
-                    className="w-full rounded-lg border border-cyan-400/40 bg-[#081019] px-3 py-2 text-sm text-white outline-none"
+                    className="w-full rounded-lg border border-[#f97316]/40 bg-[#111] px-3 py-2 text-sm text-white outline-none"
                   >
                     {templates.map((row) => (
                       <option key={row.id} value={row.id}>
@@ -410,10 +466,10 @@ const KanvasRemix = () => {
                   </select>
 
                   <div className="flex items-center justify-between">
-                    <span className="inline-flex items-center gap-1.5 text-xs uppercase tracking-[0.14em] text-slate-500">
+                    <span className="inline-flex items-center gap-1.5 text-xs uppercase tracking-[0.14em] text-zinc-500">
                       <X className="h-3 w-3" />
                       No cuts
-                      <HelpCircle className="h-3 w-3 text-slate-600" />
+                      <HelpCircle className="h-3 w-3 text-zinc-600" />
                     </span>
                     <Switch checked={noCuts} onCheckedChange={setNoCuts} />
                   </div>
@@ -428,8 +484,8 @@ const KanvasRemix = () => {
                         className={cn(
                           'flex h-14 flex-col items-center justify-center rounded-lg border bg-black text-[8px] transition-colors',
                           selectedStyleId === style.id
-                            ? 'border-cyan-300 text-cyan-200 shadow-[0_0_18px_rgba(34,211,238,0.25)]'
-                            : 'border-white/10 text-slate-500 hover:border-cyan-400/40'
+                            ? 'border-[#f97316] text-orange-200 shadow-[0_0_18px_rgba(249,115,22,0.25)]'
+                            : 'border-white/10 text-zinc-500 hover:border-[#f97316]/40'
                         )}
                       >
                         <span
@@ -465,11 +521,11 @@ const KanvasRemix = () => {
                   <div>
                     <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
                       <div
-                        className="h-full bg-gradient-to-r from-emerald-400 to-cyan-300"
+                        className="h-full bg-gradient-to-r from-[#f97316] to-amber-400"
                         style={{ width: `${Math.min(100, (filledSlotCount / Math.max(1, totalSlots)) * 100)}%` }}
                       />
                     </div>
-                    <p className="mt-1 text-right text-[10px] text-emerald-300">
+                    <p className="mt-1 text-right text-[10px] text-[#f97316]">
                       {filledSlotCount}/{totalSlots}
                     </p>
                   </div>
@@ -478,28 +534,35 @@ const KanvasRemix = () => {
                     <button
                       type="button"
                       onClick={shuffleClips}
-                      className="inline-flex items-center justify-center gap-2 rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-sm font-bold text-cyan-200 hover:bg-cyan-400/15"
+                      className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#f97316]/30 bg-[#f97316]/10 px-4 py-2 text-sm font-bold text-orange-200 hover:bg-[#f97316]/15"
                     >
                       <Shuffle className="h-4 w-4" />
                       Shuffle
                     </button>
-                    <div className="flex items-center rounded-lg border border-white/10 bg-[#0B0E13]">
-                      <button type="button" onClick={() => setQuantity((q) => Math.max(1, q - 1))} className="px-3 py-2 text-slate-300">-</button>
+                    <div className="flex items-center rounded-lg border border-white/10 bg-[#111]">
+                      <button type="button" onClick={() => setQuantity((q) => Math.max(1, q - 1))} className="px-3 py-2 text-zinc-300">-</button>
                       <span className="w-8 text-center text-sm font-bold">{quantity}</span>
-                      <button type="button" onClick={() => setQuantity((q) => Math.min(10, q + 1))} className="px-3 py-2 text-slate-300">+</button>
+                      <button type="button" onClick={() => setQuantity((q) => Math.min(10, q + 1))} className="px-3 py-2 text-zinc-300">+</button>
                     </div>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => setConfirmOpen(true)}
-                    disabled={exporting}
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-cyan-400 to-blue-500 px-4 py-3 text-sm font-black text-black shadow-[0_0_22px_rgba(34,211,238,0.24)] disabled:opacity-60"
-                  >
-                    {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                    Export
-                    <span className="rounded-full bg-black/20 px-2 py-0.5">◈ {creditCost}</span>
-                  </button>
+                  <div className="grid grid-cols-[1fr_auto] gap-2">
+                    <button
+                      type="button"
+                      onClick={shuffleClips}
+                      className="sr-only"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setConfirmOpen(true)}
+                      disabled={exporting}
+                      className="col-span-2 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#f97316] px-4 py-3 text-sm font-black text-black shadow-[0_0_22px_rgba(249,115,22,0.24)] disabled:opacity-60"
+                    >
+                      {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                      Export
+                      <span className="rounded-full bg-black/20 px-2 py-0.5">◈ {creditCost}</span>
+                    </button>
+                  </div>
                 </div>
               )}
             </section>
@@ -507,15 +570,15 @@ const KanvasRemix = () => {
         </aside>
 
         {/* ── Right canvas ── */}
-        <main className="relative flex min-h-screen flex-col bg-black">
+        <main className="relative flex min-h-0 flex-col bg-black">
           {/* Aspect ratio toggle */}
-          <div className="absolute right-6 top-2 z-10 inline-flex overflow-hidden rounded-lg border border-white/10 bg-[#0B0E13] text-xs font-bold">
+          <div className="absolute right-6 top-2 z-10 inline-flex overflow-hidden rounded-lg border border-white/10 bg-[#111] text-xs font-bold">
             {(['16:9', '9:16'] as const).map((ratio) => (
               <button
                 key={ratio}
                 type="button"
                 onClick={() => setAspectRatio(ratio)}
-                className={cn('px-4 py-2', aspectRatio === ratio ? 'bg-cyan-400/20 text-cyan-200' : 'text-slate-400')}
+                className={cn('px-4 py-2', aspectRatio === ratio ? 'bg-[#f97316]/20 text-[#f97316]' : 'text-zinc-400')}
               >
                 {ratio}
               </button>
@@ -523,7 +586,7 @@ const KanvasRemix = () => {
           </div>
 
           {/* Preview player */}
-          <div className="flex flex-1 items-center justify-center px-6 pt-10">
+          <div className="flex flex-1 items-center justify-center px-6 pt-4">
             <div className={cn(
               'relative overflow-hidden rounded-xl border border-white/10 bg-[#050505]',
               aspectRatio === '9:16' ? 'h-[560px] w-[315px]' : 'h-[400px] w-[710px]'
@@ -554,13 +617,13 @@ const KanvasRemix = () => {
 
           {/* Custom transport controls */}
           <div className="mx-auto flex w-full max-w-[900px] items-center gap-3 px-6 py-2">
-            <button type="button" onClick={replay} className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10" aria-label="Replay">
+            <button type="button" onClick={replay} className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10" aria-label="Replay">
               <Repeat2 className="h-4 w-4" />
             </button>
             <button type="button" onClick={togglePlay} className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-black" aria-label={isPlaying ? 'Pause' : 'Play'}>
               {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="ml-0.5 h-4 w-4" />}
             </button>
-            <span className="font-mono text-xs tabular-nums text-slate-400">
+            <span className="font-mono text-xs tabular-nums text-zinc-400">
               {fmtTime(currentFrameMs)} / {fmtTime(durationMs)}
             </span>
 
@@ -572,7 +635,7 @@ const KanvasRemix = () => {
                   {timelineSlots.map((slot, i) => {
                     const left = durationMs > 0 ? (slot.startMs / durationMs) * 100 : 0;
                     const width = durationMs > 0 ? ((slot.endMs - slot.startMs) / durationMs) * 100 : 0;
-                    const colors = ['bg-rose-500', 'bg-amber-500', 'bg-emerald-500', 'bg-blue-500', 'bg-purple-500', 'bg-cyan-500', 'bg-pink-500', 'bg-yellow-500'];
+                    const colors = ['bg-rose-500', 'bg-amber-500', 'bg-emerald-500', 'bg-blue-500', 'bg-purple-500', 'bg-[#f97316]', 'bg-pink-500', 'bg-yellow-500'];
                     const filled = slot.clipId !== null;
                     return (
                       <div
@@ -610,21 +673,36 @@ const KanvasRemix = () => {
             The preview may lag during playback — don't worry, your export will be a perfectly smooth HD video!
           </div>
 
-          {/* ── Timeline strip ── */}
-          <div className="border-t border-cyan-400/10 bg-[#030507] px-6 py-2">
-            <div className="flex items-center gap-1 text-[10px] text-slate-500 mb-1.5">
-              <span className="text-emerald-300">{filledSlotCount}/{totalSlots}</span>
+          {/* Progress bar for timeline */}
+          <div className="mx-6 mb-1">
+            <div className="h-1 overflow-hidden rounded-full bg-white/10">
+              <div
+                className="h-full bg-gradient-to-r from-[#f97316] to-amber-400"
+                style={{ width: `${Math.min(100, (filledSlotCount / Math.max(1, totalSlots)) * 100)}%` }}
+              />
             </div>
+            <p className="mt-0.5 text-right text-[10px] text-[#f97316]">
+              {filledSlotCount}/{totalSlots}
+            </p>
+          </div>
+
+          {/* ── Timeline strip ── */}
+          <div className="border-t border-white/[0.06] bg-[#0A0A0A] px-6 py-2">
             <div className="flex gap-2 overflow-x-auto pb-2">
               {timelineSlots.map((slot) => {
                 const clip = slot.clipId ? assets.find((a) => a.id === slot.clipId) : null;
                 const slotDurationSec = ((slot.endMs - slot.startMs) / 1000).toFixed(1);
+                const isDragOver = dragOverSlot === slot.slotIndex;
                 return (
                   <div
                     key={slot.slotIndex}
+                    onDragOver={(e) => handleSlotDragOver(e, slot.slotIndex)}
+                    onDragLeave={handleSlotDragLeave}
+                    onDrop={(e) => handleSlotDrop(e, slot.slotIndex)}
                     className={cn(
-                      'group relative shrink-0 overflow-hidden rounded-lg border bg-[#0B0E13]',
-                      clip ? 'w-24 h-24 border-cyan-400/20' : 'w-24 h-24 border-dashed border-white/10'
+                      'group relative shrink-0 overflow-hidden rounded-lg border bg-[#111] transition-colors',
+                      clip ? 'w-24 h-24 border-[#f97316]/20' : 'w-24 h-24 border-dashed border-white/10',
+                      isDragOver && 'border-[#f97316] border-solid bg-[#f97316]/10 shadow-[0_0_12px_rgba(249,115,22,0.3)]'
                     )}
                   >
                     {clip ? (
@@ -634,7 +712,7 @@ const KanvasRemix = () => {
                         ) : (
                           <video src={clip.url} muted className="h-full w-full object-cover" />
                         )}
-                        <span className="absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded bg-black/70 text-[10px] font-bold text-cyan-300">
+                        <span className="absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded bg-black/70 text-[10px] font-bold text-[#f97316]">
                           {slot.slotIndex + 1}
                         </span>
                         <span className="absolute bottom-1 right-1 rounded-full bg-black/70 px-1.5 text-[9px] text-white">
@@ -651,9 +729,9 @@ const KanvasRemix = () => {
                       </>
                     ) : (
                       <div className="flex h-full flex-col items-center justify-center gap-1 px-1 text-center">
-                        <span className="text-[10px] font-bold text-slate-600">{slot.slotIndex + 1}</span>
-                        <span className="text-[9px] text-slate-600">{slotDurationSec}s</span>
-                        <span className="text-[8px] text-slate-700">Drop video here</span>
+                        <span className="text-[10px] font-bold text-zinc-600">{slot.slotIndex + 1}</span>
+                        <span className="text-[9px] text-zinc-600">{slotDurationSec}s</span>
+                        <span className="text-[8px] text-zinc-700">Drop video here</span>
                       </div>
                     )}
                   </div>
@@ -667,14 +745,14 @@ const KanvasRemix = () => {
       {/* Confirm modal */}
       {confirmOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-cyan-400/20 bg-[#080B10] p-6 shadow-[0_0_40px_rgba(34,211,238,0.16)]">
+          <div className="w-full max-w-md rounded-2xl border border-[#f97316]/20 bg-[#0A0A0A] p-6 shadow-[0_0_40px_rgba(249,115,22,0.16)]">
             <h2 className="text-lg font-black text-white">Confirm export</h2>
-            <p className="mt-2 text-sm text-slate-400">
+            <p className="mt-2 text-sm text-zinc-400">
               This will spend {quantity} × {Math.ceil(durationMs / 1000)} = {creditCost} credits.
             </p>
             <div className="mt-6 flex justify-end gap-3">
-              <button type="button" onClick={() => setConfirmOpen(false)} className="rounded-lg border border-white/10 px-4 py-2 text-sm text-slate-300">Cancel</button>
-              <button type="button" onClick={startExport} className="rounded-lg bg-cyan-400 px-4 py-2 text-sm font-bold text-black">Confirm</button>
+              <button type="button" onClick={() => setConfirmOpen(false)} className="rounded-lg border border-white/10 px-4 py-2 text-sm text-zinc-300">Cancel</button>
+              <button type="button" onClick={startExport} className="rounded-lg bg-[#f97316] px-4 py-2 text-sm font-bold text-black">Confirm</button>
             </div>
           </div>
         </div>
@@ -683,7 +761,7 @@ const KanvasRemix = () => {
       <button
         type="button"
         aria-label="Help"
-        className="fixed bottom-8 right-8 inline-flex h-12 w-12 items-center justify-center rounded-full bg-cyan-400 text-black shadow-[0_0_28px_rgba(34,211,238,0.45)]"
+        className="fixed bottom-8 right-8 inline-flex h-12 w-12 items-center justify-center rounded-full bg-[#f97316] text-black shadow-[0_0_28px_rgba(249,115,22,0.45)]"
       >
         <HelpCircle className="h-5 w-5" />
       </button>
@@ -692,7 +770,7 @@ const KanvasRemix = () => {
 };
 
 function ControlLabel({ label }: { label: string }) {
-  return <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">{label}</p>;
+  return <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-500">{label}</p>;
 }
 
 function SelectLike({
@@ -710,11 +788,11 @@ function SelectLike({
 }) {
   return (
     <div className="relative">
-      <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">{icon}</div>
+      <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500">{icon}</div>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-lg border border-cyan-400/25 bg-[#081019] py-2 pl-10 pr-3 text-sm text-white outline-none"
+        className="w-full rounded-lg border border-[#f97316]/25 bg-[#111] py-2 pl-10 pr-3 text-sm text-white outline-none"
       >
         {options.map((option) => (
           <option key={option} value={option}>
