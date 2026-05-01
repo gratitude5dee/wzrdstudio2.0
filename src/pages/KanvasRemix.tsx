@@ -83,9 +83,9 @@ const KanvasRemix = () => {
   const [quantity, setQuantity] = useState(1);
   const [shuffleEach, setShuffleEach] = useState(false);
   const [loading, setLoading] = useState(true);
-  const exporting = exportModalOpen;
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [exportModalOpen, setExportModalOpen] = useState(false);
+  const exporting = exportModalOpen;
   const [controlsOpen, setControlsOpen] = useState(true);
   const [timelineSlots, setTimelineSlots] = useState<RemixTimelineSlot[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
