@@ -112,6 +112,30 @@ const KanvasLyrics = () => {
   const lastUrlRef = useRef<string | null>(null);
   useEffect(() => () => { if (lastUrlRef.current) URL.revokeObjectURL(lastUrlRef.current); }, []);
 
+  // When opening "new" without a templateId, fully reset wizard state so
+  // previous audio, selection, lyrics, and markers don't leak between sessions.
+  useEffect(() => {
+    if (mode !== 'new' || templateIdParam) return;
+    if (lastUrlRef.current) {
+      URL.revokeObjectURL(lastUrlRef.current);
+      lastUrlRef.current = null;
+    }
+    sourceFileRef.current = null;
+    engine.pause();
+    engine.load(null);
+    setTemplateId(null);
+    setAudioAssetId(null);
+    setAudioPlaybackUrl(null);
+    setAudio(INITIAL_AUDIO);
+    setLyrics([]);
+    setMarkers([]);
+    setCurrentStep(1);
+    setAppState('upload');
+    setTranscribeStatus('idle');
+    setHydrating(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, templateIdParam]);
+
   // Hydrate from server when templateId is in URL.
   useEffect(() => {
     if (!templateIdParam) return;
