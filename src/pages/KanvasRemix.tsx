@@ -143,11 +143,30 @@ const KanvasRemix = () => {
 
   // Build timeline slots when template changes
   const durationMs = template?.selectionDurationMs ?? 15000;
+  const hasAutoPopulated = useRef(false);
+
   useEffect(() => {
+    hasAutoPopulated.current = false;
     const markers = template?.cutMarkers ?? [];
     const slots = buildRemixTimelineSlots(durationMs, markers);
     setTimelineSlots(slots);
   }, [template, durationMs]);
+
+  // Auto-populate empty timeline slots with shuffled clips when assets load
+  useEffect(() => {
+    if (hasAutoPopulated.current) return;
+    if (assets.length === 0 || timelineSlots.length === 0) return;
+    const allEmpty = timelineSlots.every((s) => s.clipId === null);
+    if (!allEmpty) return;
+    hasAutoPopulated.current = true;
+    const shuffled = seededShuffle(assets, Date.now());
+    setTimelineSlots((prev) =>
+      prev.map((slot, i) => ({
+        ...slot,
+        clipId: shuffled[i % shuffled.length]?.id ?? null,
+      }))
+    );
+  }, [assets, timelineSlots]);
 
   const captions = useMemo(() => (template ? lyricBlocksToCaptions(template.lyricBlocks) : []), [template]);
   const creditCost = quoteRemixCredits(durationMs, quantity);

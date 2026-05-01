@@ -1,9 +1,9 @@
 /**
  * Canvas-based video exporter for Remix compositions.
  *
- * Renders background clips + lyric overlays frame-by-frame onto a <canvas>,
- * then records using MediaRecorder + Web Audio for a proper WebM export
- * that runs entirely client-side.
+ * Records background clips + lyric overlays + audio in real time using
+ * requestAnimationFrame, MediaRecorder, and Web Audio API.
+ * Produces a downloadable WebM file entirely client-side.
  */
 
 import { captionsToLines, type LyricCaption } from '@/lib/remix-utils';
@@ -75,17 +75,6 @@ function loadAudio(url: string): Promise<HTMLAudioElement> {
   });
 }
 
-function seekVideo(video: HTMLVideoElement, timeSec: number): Promise<void> {
-  return new Promise((resolve) => {
-    if (Math.abs(video.currentTime - timeSec) < 0.02) {
-      resolve();
-      return;
-    }
-    video.currentTime = Math.max(0, timeSec);
-    video.addEventListener('seeked', () => resolve(), { once: true });
-  });
-}
-
 function lerp(a: number, b: number, t: number) {
   return a + (b - a) * Math.max(0, Math.min(1, t));
 }
@@ -97,7 +86,6 @@ export async function exportRemixVideo(opts: CanvasExportOptions): Promise<Blob>
     width,
     height,
     durationMs,
-    fps,
     audioUrl,
     captions,
     lyricStyleId,
@@ -109,7 +97,6 @@ export async function exportRemixVideo(opts: CanvasExportOptions): Promise<Blob>
     signal,
   } = opts;
 
-  const totalFrames = Math.max(1, Math.round((durationMs / 1000) * fps));
   const style = getLyricStyle(lyricStyleId);
   const lines = captionsToLines(captions);
   const segments = buildSegments(backgroundClips, cutMarkers, durationMs);
@@ -119,8 +106,13 @@ export async function exportRemixVideo(opts: CanvasExportOptions): Promise<Blob>
   const videoCache = new Map<string, HTMLVideoElement>();
   for (const seg of segments) {
     if (!videoCache.has(seg.clip.url)) {
-      const v = await loadVideo(seg.clip.url);
-      videoCache.set(seg.clip.url, v);
+      try {
+        const v = await loadVideo(seg.clip.url);
+        videoCache.set(seg.clip.url, v);
+      } catch (e) {
+        console.warn('[remix-export] Skipping clip that failed to load:', seg.clip.url, e);
+        continue;
+      }
     }
     clipSegments.push({
       ...seg,
@@ -139,7 +131,6 @@ export async function exportRemixVideo(opts: CanvasExportOptions): Promise<Blob>
       const audioSource = audioCtx.createMediaElementSource(audioEl);
       audioDest = audioCtx.createMediaStreamDestination();
       audioSource.connect(audioDest);
-      // Also play through speakers so user can hear during export
       audioSource.connect(audioCtx.destination);
     } catch (e) {
       console.warn('[remix-export] Audio load failed, exporting without audio', e);
@@ -183,52 +174,64 @@ export async function exportRemixVideo(opts: CanvasExportOptions): Promise<Blob>
     };
   });
 
-  recorder.start(100);
+  // ── Pre-seek first clip and prepare all clips for playback ──
+  // Start each clip playing when its segment begins (real-time approach)
+  let currentSegIndex = -1;
 
-  // Start audio playback
-  if (audioEl) {
-    audioEl.currentTime = 0;
-    await audioEl.play().catch(() => {});
+  function startSegment(segIndex: number, offsetMs: number) {
+    if (segIndex < 0 || segIndex >= clipSegments.length) return;
+    const seg = clipSegments[segIndex];
+    const segOffsetSec = Math.max(0, (offsetMs - seg.fromMs) / 1000);
+    seg.videoEl.currentTime = segOffsetSec;
+    seg.videoEl.play().catch(() => {});
+    currentSegIndex = segIndex;
   }
 
-  // ── Frame-by-frame render loop ──
-  const frameDurationMs = 1000 / fps;
-  const startTime = performance.now();
+  function findSegmentIndex(nowMs: number): number {
+    return clipSegments.findIndex((s) => nowMs >= s.fromMs && nowMs < s.toMs);
+  }
 
-  for (let frame = 0; frame < totalFrames; frame++) {
-    if (signal?.aborted) {
-      recorder.stop();
-      audioEl?.pause();
-      throw new Error('Export cancelled');
-    }
+  // ── Drawing functions ──
 
-    const nowMs = (frame / fps) * 1000;
-
-    // -- Draw background --
+  function drawVideoFrame(nowMs: number) {
     ctx.fillStyle = '#050505';
     ctx.fillRect(0, 0, width, height);
 
-    // Find the active segment and draw video frame
-    const activeSeg = clipSegments.find((s) => nowMs >= s.fromMs && nowMs < s.toMs);
-    if (activeSeg) {
-      const segOffsetSec = (nowMs - activeSeg.fromMs) / 1000;
-      await seekVideo(activeSeg.videoEl, segOffsetSec);
-      const vw = activeSeg.videoEl.videoWidth || width;
-      const vh = activeSeg.videoEl.videoHeight || height;
-      const videoAR = vw / vh;
-      const canvasAR = width / height;
-      let sx = 0, sy = 0, sw = vw, sh = vh;
-      if (videoAR > canvasAR) {
-        sw = vh * canvasAR;
-        sx = (vw - sw) / 2;
-      } else {
-        sh = vw / canvasAR;
-        sy = (vh - sh) / 2;
+    const segIdx = findSegmentIndex(nowMs);
+    if (segIdx === -1) return;
+
+    // Switch to new segment if needed
+    if (segIdx !== currentSegIndex) {
+      // Pause old segment
+      if (currentSegIndex >= 0 && currentSegIndex < clipSegments.length) {
+        clipSegments[currentSegIndex].videoEl.pause();
       }
-      ctx.drawImage(activeSeg.videoEl, sx, sy, sw, sh, 0, 0, width, height);
+      startSegment(segIdx, nowMs);
     }
 
-    // -- Dark overlay gradient --
+    const seg = clipSegments[segIdx];
+    const vw = seg.videoEl.videoWidth || width;
+    const vh = seg.videoEl.videoHeight || height;
+    const videoAR = vw / vh;
+    const canvasAR = width / height;
+    let sx = 0, sy = 0, sw = vw, sh = vh;
+    if (videoAR > canvasAR) {
+      sw = vh * canvasAR;
+      sx = (vw - sw) / 2;
+    } else {
+      sh = vw / canvasAR;
+      sy = (vh - sh) / 2;
+    }
+
+    try {
+      ctx.drawImage(seg.videoEl, sx, sy, sw, sh, 0, 0, width, height);
+    } catch {
+      // Video may not be ready yet, draw black
+    }
+  }
+
+  function drawOverlays(nowMs: number) {
+    // Dark overlay gradient
     const grad = ctx.createLinearGradient(0, 0, 0, height);
     grad.addColorStop(0, 'rgba(0,0,0,0.10)');
     grad.addColorStop(0.45, 'rgba(0,0,0,0.18)');
@@ -236,7 +239,7 @@ export async function exportRemixVideo(opts: CanvasExportOptions): Promise<Blob>
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, width, height);
 
-    // -- Cut flash --
+    // Cut flash
     if (!noCuts) {
       for (const marker of cutMarkers) {
         const flashDuration = 80;
@@ -247,7 +250,7 @@ export async function exportRemixVideo(opts: CanvasExportOptions): Promise<Blob>
       }
     }
 
-    // -- Lyrics overlay --
+    // Lyrics overlay
     if (style.id !== 'none') {
       const activeLine = lines.find((l) => nowMs >= l.startMs && nowMs < l.endMs) ?? null;
       if (activeLine) {
@@ -262,7 +265,6 @@ export async function exportRemixVideo(opts: CanvasExportOptions): Promise<Blob>
         ctx.translate(width / 2, height / 2);
         ctx.scale(enterScale, enterScale);
 
-        // Apply style transforms
         if (style.transform?.includes('skewX')) {
           const match = style.transform.match(/skewX\((-?\d+)deg\)/);
           if (match) {
@@ -330,22 +332,68 @@ export async function exportRemixVideo(opts: CanvasExportOptions): Promise<Blob>
         ctx.restore();
       }
     }
-
-    // Push frame to the stream
-    const canvasTrack = canvasStream.getVideoTracks()[0];
-    if (canvasTrack && 'requestFrame' in canvasTrack) {
-      (canvasTrack as CanvasCaptureMediaStreamTrack).requestFrame();
-    }
-
-    // Wait until real time catches up (for audio sync)
-    const targetTime = startTime + (frame + 1) * frameDurationMs;
-    const now = performance.now();
-    if (now < targetTime) {
-      await new Promise((r) => setTimeout(r, targetTime - now));
-    }
-
-    onProgress?.((frame + 1) / totalFrames);
   }
+
+  // ── Real-time recording loop using requestAnimationFrame ──
+
+  recorder.start(100);
+
+  // Start audio playback
+  if (audioEl) {
+    audioEl.currentTime = 0;
+    await audioEl.play().catch(() => {});
+  }
+
+  // Start first segment
+  if (clipSegments.length > 0) {
+    startSegment(0, 0);
+  }
+
+  const startTime = performance.now();
+
+  await new Promise<void>((resolve, reject) => {
+    let rafId: number;
+
+    function tick() {
+      if (signal?.aborted) {
+        cancelAnimationFrame(rafId);
+        recorder.stop();
+        audioEl?.pause();
+        // Pause all clips
+        for (const seg of clipSegments) seg.videoEl.pause();
+        reject(new Error('Export cancelled'));
+        return;
+      }
+
+      const elapsed = performance.now() - startTime;
+      const nowMs = Math.min(elapsed, durationMs);
+
+      // Draw frame
+      drawVideoFrame(nowMs);
+      drawOverlays(nowMs);
+
+      // Push frame to recorder
+      const canvasTrack = canvasStream.getVideoTracks()[0];
+      if (canvasTrack && 'requestFrame' in canvasTrack) {
+        (canvasTrack as CanvasCaptureMediaStreamTrack).requestFrame();
+      }
+
+      // Report progress
+      onProgress?.(nowMs / durationMs);
+
+      // Check if done
+      if (elapsed >= durationMs) {
+        // Pause all clips
+        for (const seg of clipSegments) seg.videoEl.pause();
+        resolve();
+        return;
+      }
+
+      rafId = requestAnimationFrame(tick);
+    }
+
+    rafId = requestAnimationFrame(tick);
+  });
 
   // ── Finalize ──
   recorder.stop();
@@ -357,6 +405,7 @@ export async function exportRemixVideo(opts: CanvasExportOptions): Promise<Blob>
 
   // Clean up video elements
   for (const v of videoCache.values()) {
+    v.pause();
     v.src = '';
     v.load();
   }
