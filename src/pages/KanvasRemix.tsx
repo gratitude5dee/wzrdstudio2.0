@@ -680,7 +680,7 @@ const KanvasRemix = () => {
           </div>
 
           {/* Progress bar for timeline */}
-          <div className="mx-6 mb-1">
+          <div className="mx-4 mb-1">
             <div className="h-1 overflow-hidden rounded-full bg-white/10">
               <div
                 className="h-full bg-gradient-to-r from-[#f97316] to-amber-400"
