@@ -385,6 +385,17 @@ const KanvasLyrics = () => {
       });
       setAudioAssetId(uploaded.assetId);
 
+      // Re-point playback to the hosted trimmed clip so later steps keep
+      // working after the local object URL is revoked.
+      if (uploaded.url) {
+        setAudioPlaybackUrl(uploaded.url);
+        try { engineLoad(uploaded.url); } catch (e) { console.warn('[lyrics] engine reload failed', e); }
+        if (lastUrlRef.current) {
+          URL.revokeObjectURL(lastUrlRef.current);
+          lastUrlRef.current = null;
+        }
+      }
+
       // 3) Create draft template referencing the trimmed clip. The clip IS
       // the asset, so selectionStart=0 and totalDuration=clipDuration.
       const draft = await createTemplate({
