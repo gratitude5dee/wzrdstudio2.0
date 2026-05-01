@@ -37,27 +37,50 @@ const MAX_AUDIO_BYTES = 50 * 1024 * 1024; // 50 MB — matches storage bucket li
 const ACCEPTED_AUDIO_PREFIXES = ['audio/'];
 const ACCEPTED_AUDIO_EXTS = ['mp3', 'wav', 'm4a', 'mp4', 'aac', 'flac', 'ogg', 'oga'];
 
-function looksLikeAudio(file: File) {
-  if (file.type && ACCEPTED_AUDIO_PREFIXES.some((p) => file.type.startsWith(p))) return true;
-  const ext = file.name.split('.').pop()?.toLowerCase();
+function looksLikeAudio(file: File | { type?: string; name?: string }) {
+  if (file.type && ACCEPTED_AUDIO_PREFIXES.some((p) => file.type!.startsWith(p))) return true;
+  const ext = file.name?.split('.').pop()?.toLowerCase();
   return !!ext && ACCEPTED_AUDIO_EXTS.includes(ext);
 }
 
+export interface UploadTemplateAudioInput {
+  /** Source bytes — the raw File the user picked, or a sliced clip Blob. */
+  blob: Blob;
+  /** Filename to register (e.g. "song-clip.wav"). */
+  fileName: string;
+  /** MIME type of `blob`. Defaults to "audio/mpeg". */
+  mimeType?: string;
+  /** Known duration in ms (skips re-probing when provided). */
+  durationMs?: number | null;
+  projectId?: string | null;
+}
+
 /**
- * Upload an audio file directly from the browser to Storage, then register a
+ * Upload an audio blob directly from the browser to Storage, then register a
  * project_assets row via a tiny edge function. The edge function never sees
- * the file bytes, which avoids the WORKER_RESOURCE_LIMIT (150MB) crash that
- * the old base64-through-JSON pattern hit on real audio files.
+ * the file bytes, so it stays well under worker memory limits.
+ *
+ * For backwards compatibility, callers may still pass a `File` directly.
  */
 export async function uploadTemplateAudio(
-  file: File,
-  projectId?: string
+  input: UploadTemplateAudioInput | File,
+  legacyProjectId?: string
 ): Promise<UploadedTemplateAudio> {
-  if (!looksLikeAudio(file)) {
+  // Normalize input — keep the old (file, projectId) signature working.
+  const normalized: UploadTemplateAudioInput =
+    input instanceof File
+      ? { blob: input, fileName: input.name, mimeType: input.type, projectId: legacyProjectId ?? null }
+      : input;
+
+  const { blob, fileName } = normalized;
+  const mimeType = normalized.mimeType || (blob as File).type || 'audio/mpeg';
+  const projectId = normalized.projectId ?? null;
+
+  if (!looksLikeAudio({ type: mimeType, name: fileName })) {
     throw new Error('Unsupported file type. Use MP3, WAV, M4A, AAC, FLAC, or OGG.');
   }
-  if (file.size > MAX_AUDIO_BYTES) {
-    const mb = (file.size / (1024 * 1024)).toFixed(1);
+  if (blob.size > MAX_AUDIO_BYTES) {
+    const mb = (blob.size / (1024 * 1024)).toFixed(1);
     throw new Error(`Audio file is too large (${mb} MB). Max 50 MB.`);
   }
 
@@ -65,20 +88,21 @@ export async function uploadTemplateAudio(
   if (userErr || !user) throw new Error('You must be signed in to upload audio');
 
   // RLS on storage.objects requires foldername(name)[1] === auth.uid().
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
+  const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
   const storagePath = `${user.id}/lyric-audio/${crypto.randomUUID()}-${safeName}`;
 
   const { error: uploadError } = await supabase.storage
     .from(AUDIO_BUCKET)
-    .upload(storagePath, file, {
-      contentType: file.type || 'audio/mpeg',
+    .upload(storagePath, blob, {
+      contentType: mimeType,
       cacheControl: '3600',
       upsert: false,
     });
   if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
 
-  // Probe duration off the network — purely client-side, near-zero memory.
-  const durationMs = await probeAudioDurationMs(file).catch(() => null);
+  const durationMs =
+    normalized.durationMs ??
+    (blob instanceof File ? await probeAudioDurationMs(blob).catch(() => null) : null);
 
   try {
     const res = await call<{
@@ -90,9 +114,9 @@ export async function uploadTemplateAudio(
     }>('kanvas-lyrics-audio-register', {
       projectId: projectId ?? null,
       storagePath,
-      fileName: file.name,
-      mimeType: file.type || 'audio/mpeg',
-      size: file.size,
+      fileName,
+      mimeType,
+      size: blob.size,
       durationMs,
       visibility: projectId ? 'project' : 'private',
     });
@@ -104,9 +128,9 @@ export async function uploadTemplateAudio(
     return {
       assetId: res.assetId,
       url: res.url ?? res.asset?.url ?? '',
-      fileName: file.name,
-      size: file.size,
-      mimeType: file.type || 'audio/mpeg',
+      fileName,
+      size: blob.size,
+      mimeType,
       durationMs,
     };
   } catch (err) {
