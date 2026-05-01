@@ -127,19 +127,15 @@ export function useAudioEngine(): AudioEngine {
     setIsReady(false);
     setIsPlaying(false);
     setCurrentTime(0);
+    // Always clear crossOrigin — we don't need CORS for plain <audio>
+    // playback, and setting it makes Supabase public URLs fail when the
+    // bucket doesn't return CORS headers for the credentialed request.
+    a.removeAttribute('crossorigin');
     if (!url) {
       a.pause();
       a.removeAttribute('src');
-      a.removeAttribute('crossorigin');
       a.load();
       return;
-    }
-    // Apply crossOrigin only for remote http(s) URLs. blob: and data: URLs
-    // must NOT have crossOrigin set or some browsers refuse to load them.
-    if (/^https?:/i.test(url)) {
-      a.crossOrigin = 'anonymous';
-    } else {
-      a.removeAttribute('crossorigin');
     }
     a.src = url;
     a.load();
