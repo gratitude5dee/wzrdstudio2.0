@@ -286,7 +286,6 @@ const KanvasRemix = () => {
     cutMarkers: template?.cutMarkers ?? [],
     noCuts,
   }), [aspectRatio, durationMs, audioUrl, captions, selectedStyleId, scale, backgroundClips, template?.cutMarkers, noCuts]);
-  };
 
   if (loading) {
     return (
