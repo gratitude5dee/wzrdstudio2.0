@@ -373,6 +373,25 @@ const KanvasLyrics = () => {
     }
   }, [templateId, lyrics, engine]);
 
+  const handleMarkersDone = useCallback(() => {
+    setAppState('visualize');
+    setCurrentStep(4);
+    engine.pause();
+    engine.seek(0);
+    if (templateId) {
+      updateTemplate(templateId, {
+        cutMarkers: markersToServer(markers),
+        status: 'markers_ready',
+      }).catch(() => {});
+    }
+  }, [templateId, markers, engine]);
+
+  const handleReplay = useCallback(() => {
+    engine.pause();
+    engine.seek(0);
+    setTimeout(() => engine.play?.(), 60);
+  }, [engine]);
+
   // Marker handlers
   const handleAddMarker = useCallback(() => {
     setMarkers((prev) => {
