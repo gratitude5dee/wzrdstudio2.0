@@ -79,8 +79,9 @@ export function WaveformView({
     const el = containerRef.current;
     if (!el) return 0;
     const rect = el.getBoundingClientRect();
-    return Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
-  }, []);
+    const vpPct = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
+    return absFromViewportPct(vpPct);
+  }, [viewportStartPct, viewportWidthPct]);
 
   // Global mousemove/up while dragging
   useEffect(() => {
@@ -119,6 +120,11 @@ export function WaveformView({
     draggingRef.current = { kind: 'selection', offsetPct: pct - selectionStartPercent };
   };
 
+  // Selection viewport-relative left/width
+  const selVpLeft = viewportPctFromAbs(selectionStartPercent);
+  const selVpWidth = (selectionWidthPercent / viewportWidthPct) * 100;
+  const playheadVp = viewportPctFromAbs(playheadPercent);
+
   return (
     <div
       ref={containerRef}
@@ -129,8 +135,14 @@ export function WaveformView({
       )}
       style={{ height }}
     >
-      {/* Bars */}
-      <div className="absolute inset-0 flex items-center gap-[2px] px-2 pointer-events-none">
+      {/* Bars — scaled by zoom and translated so the viewport shows the focus area */}
+      <div
+        className="absolute inset-0 flex items-center gap-[2px] px-2 pointer-events-none"
+        style={{
+          width: `${100 * z}%`,
+          transform: `translateX(-${viewportStartPct * z}%)`,
+        }}
+      >
         {bars.map((h, i) => {
           const pct = (i / bars.length) * 100;
           const inActive =
@@ -158,23 +170,22 @@ export function WaveformView({
             'absolute top-0 bottom-0 rounded-md border border-[#f97316]/70 bg-[#f97316]/10 shadow-[0_0_18px_rgba(249,115,22,0.4)]',
             onSelectionStartPercentChange ? 'cursor-grab active:cursor-grabbing' : 'pointer-events-none'
           )}
-          style={{
-            left: `${selectionStartPercent}%`,
-            width: `${selectionWidthPercent}%`,
-          }}
+          style={{ left: `${selVpLeft}%`, width: `${selVpWidth}%` }}
         />
       )}
 
       {/* Markers */}
       {markers.map((m) => {
-        const pct = duration > 0 ? Math.min(100, Math.max(0, (m.timestamp / duration) * 100)) : 0;
+        const absPct = duration > 0 ? Math.min(100, Math.max(0, (m.timestamp / duration) * 100)) : 0;
+        const vpPct = viewportPctFromAbs(absPct);
+        if (vpPct < -2 || vpPct > 102) return null;
         return (
           <div
             key={m.id}
             onMouseDown={(e) => {
               e.stopPropagation();
               if (onMarkerDrag) {
-                draggingRef.current = { kind: 'marker', id: m.id, offsetPct: pctFromEvent(e.clientX) - pct };
+                draggingRef.current = { kind: 'marker', id: m.id, offsetPct: pctFromEvent(e.clientX) - absPct };
               }
             }}
             onClick={(e) => {
@@ -185,17 +196,17 @@ export function WaveformView({
               'absolute -top-1 -bottom-1 w-[3px] bg-amber-300 shadow-[0_0_12px_rgba(252,211,77,0.95)] rounded-sm',
               onMarkerDrag ? 'cursor-ew-resize' : 'pointer-events-none'
             )}
-            style={{ left: `calc(${pct}% - 1.5px)` }}
+            style={{ left: `calc(${vpPct}% - 1.5px)` }}
             title="Drag to move · Click to delete"
           />
         );
       })}
 
       {/* Playhead */}
-      {showPlayhead && (
+      {showPlayhead && playheadVp >= 0 && playheadVp <= 100 && (
         <div
           className="pointer-events-none absolute top-0 bottom-0 w-[2px] bg-white shadow-[0_0_10px_rgba(255,255,255,0.85)]"
-          style={{ left: `${Math.min(100, Math.max(0, playheadPercent))}%` }}
+          style={{ left: `${playheadVp}%` }}
         />
       )}
     </div>
