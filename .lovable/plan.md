@@ -1,36 +1,29 @@
 
-## What we're building
+## Fix remix page layout and clip thumbnails
 
-Three improvements to the Remix editor page (`/kanvas/remix/:templateId`):
+### Problem
+1. Video preview area has excessive empty space — player floats in a huge void
+2. Clip library thumbnails show blank/broken frames because `<video>` elements lack `preload` and time seek
+3. Timeline slots have the same issue with video thumbnails
+4. Left rail is too wide (480px), wasting space
 
-1. **More clip library assets** -- Expand the fallback footage library from 6 to ~12 clips with varied durations, covering the existing categories (Bay Area 8mm, Modern, Aerial, Abstract, Nature).
+### Changes (all in `src/pages/KanvasRemix.tsx`)
 
-2. **Kanvas header + back navigation** -- Add the shared `KanvasLyricsHeader` at the top of the remix page and a left chevron button next to the "Remix" title that navigates back to the templates landing (`/kanvas/lyrics`).
+**1. Layout tightening**
+- Change root container from `min-h-screen` to `h-screen` so the entire page fits the viewport without scrolling
+- Narrow the left rail from `480px` to `400px`
+- Replace the player's `flex-1 items-center justify-center` wrapper with a constrained container that uses `max-h-[calc(100%-160px)]` so the player fills available space minus transport/timeline, eliminating the void
+- Reduce padding (pt-6 to pt-4, px-8 to px-6) throughout the left rail for density
 
-3. **Drag-and-drop clips into timeline slots** -- Make clip library thumbnails draggable and timeline slots droppable using native HTML5 drag/drop (no new deps). Users can drag a clip from the library grid and drop it onto a specific timeline slot.
+**2. Video thumbnail previews**
+- For all `<video>` elements in the clip library grid: add `preload="metadata"` and append `#t=0.5` to the `src` URL so browsers render an actual frame from the video
+- Same fix for timeline slot video thumbnails
+- This replaces the current blank black rectangles with real video frame previews
 
-4. **Style unification** -- Replace cyan/teal accents with the Kanvas orange (`#f97316`) design system. Update borders, glows, active states, buttons, and gradients to match the Noir Futurist theme used across the rest of Kanvas.
+**3. Player area optimization**
+- Remove fixed `h-[560px]`/`h-[400px]` from the player container
+- Instead use responsive sizing: `max-h-full w-auto aspect-[9/16]` (or `aspect-video` for 16:9) so the player scales to fill the available vertical space without overflow
+- Transport controls, disclaimer, progress bar, and timeline strip are pinned at the bottom with no flex-grow
 
----
-
-## Technical details
-
-### 1. Expand fallback footage (`src/features/remix/service.ts`)
-
-Add ~6 more entries to `fallbackAssets[]` using the existing `/bgvid.mp4` and `/wzrdstudiointro1.mp4` files with varied durations and categories (nature-coast, nature-forest, abstract-glitch). This ensures the clip library grid shows enough content for a full 15-slot timeline.
-
-### 2. Header + back button (`src/pages/KanvasRemix.tsx`)
-
-- Import and render `KanvasLyricsHeader` at the top of the page (above the grid layout).
-- Add a `ChevronLeft` icon button to the left of the "Remix" title that calls `navigate(appRoutes.kanvasLyrics)`.
-- Adjust the grid layout to account for the header height (add `pt-[68px]` or similar offset matching the Kanvas layout shell pattern).
-
-### 3. Drag-and-drop (`src/pages/KanvasRemix.tsx`)
-
-- On clip library thumbnails: add `draggable`, `onDragStart` setting `dataTransfer` with the clip ID.
-- On timeline slot containers: add `onDragOver` (prevent default) and `onDrop` that reads the clip ID and calls `assignClipToSlot`.
-- Visual feedback: highlight the drop target slot with an orange border on `onDragEnter`/`onDragLeave`.
-
-### 4. Style pass (`src/pages/KanvasRemix.tsx`)
-
-Replace all `cyan-300`, `cyan-400`, `cyan-200` references with orange equivalents (`orange-400`, `orange-500`, `[#f97316]`). Update gradient stops, border colors, shadow colors, and active states to match the Noir Futurist system (orange accent, absolute black backgrounds, white/zinc text).
+### Files changed
+- `src/pages/KanvasRemix.tsx` — layout, thumbnail, and sizing updates
