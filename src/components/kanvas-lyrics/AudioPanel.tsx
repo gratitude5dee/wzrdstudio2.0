@@ -195,6 +195,7 @@ export function AudioPanel({
             showPlayhead
             playheadPercent={playheadPct}
             onSeekPercent={!showConfirmed ? handleSeekPct : undefined}
+            zoom={audio.zoom}
           />
 
           {/* Position + duration row */}
