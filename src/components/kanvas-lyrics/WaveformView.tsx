@@ -52,11 +52,28 @@ export function WaveformView({
   duration = 1,
   onMarkerDrag,
   onMarkerClick,
+  zoom = 1,
 }: WaveformViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef<{ kind: 'selection' | 'marker'; id?: string; offsetPct: number } | null>(null);
 
   const bars = peaks.length > 0 ? peaks : fallbackPeaks();
+
+  // Center the zoomed viewport around the selection (Step 1) or playhead.
+  const z = Math.max(1, zoom);
+  const focusPct = showSelection
+    ? selectionStartPercent + selectionWidthPercent / 2
+    : playheadPercent;
+  const viewportWidthPct = 100 / z;
+  let viewportStartPct = focusPct - viewportWidthPct / 2;
+  viewportStartPct = Math.max(0, Math.min(100 - viewportWidthPct, viewportStartPct));
+
+  // Map a 0..100 pct relative to the visible viewport to the absolute 0..100
+  // pct of the underlying waveform, and vice versa.
+  const absFromViewportPct = (vpPct: number) =>
+    viewportStartPct + (vpPct / 100) * viewportWidthPct;
+  const viewportPctFromAbs = (absPct: number) =>
+    ((absPct - viewportStartPct) / viewportWidthPct) * 100;
 
   const pctFromEvent = useCallback((clientX: number) => {
     const el = containerRef.current;
