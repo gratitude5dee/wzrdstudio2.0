@@ -570,7 +570,7 @@ const KanvasRemix = () => {
         </aside>
 
         {/* ── Right canvas ── */}
-        <main className="relative flex min-h-0 flex-col bg-black">
+        <main className="relative flex flex-col bg-black">
           {/* Aspect ratio toggle */}
           <div className="absolute right-4 top-2 z-10 inline-flex overflow-hidden rounded-lg border border-white/10 bg-[#111] text-xs font-bold">
             {(['16:9', '9:16'] as const).map((ratio) => (
