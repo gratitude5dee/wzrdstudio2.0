@@ -157,17 +157,18 @@ const KanvasRemix = () => {
   const filledSlotCount = timelineSlots.filter((s) => s.clipId !== null).length;
   const totalSlots = timelineSlots.length;
 
-  // Build background clips array from timeline slots
+  // Build background clips array aligned 1:1 with timeline slots.
+  // Empty slots get a fallback clip so the composition always has one clip per segment.
   const backgroundClips = useMemo(() => {
-    const clips: FootageAsset[] = [];
-    for (const slot of timelineSlots) {
+    const fallback = assets[0] ?? null;
+    return timelineSlots.map((slot) => {
       if (slot.clipId) {
-        const asset = assets.find((a) => a.id === slot.clipId);
-        if (asset) clips.push(asset);
+        const found = assets.find((a) => a.id === slot.clipId);
+        if (found) return found;
       }
-    }
-    return clips.length > 0 ? clips : assets.slice(0, Math.max(1, totalSlots));
-  }, [timelineSlots, assets, totalSlots]);
+      return fallback;
+    }).filter(Boolean) as FootageAsset[];
+  }, [timelineSlots, assets]);
 
   // Add clip to next empty slot
   const addClipToTimeline = useCallback((clip: FootageAsset) => {
