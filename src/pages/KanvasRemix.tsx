@@ -700,6 +700,9 @@ const KanvasRemix = () => {
                 const clip = slot.clipId ? assets.find((a) => a.id === slot.clipId) : null;
                 const slotDurationSec = ((slot.endMs - slot.startMs) / 1000).toFixed(1);
                 const isDragOver = dragOverSlot === slot.slotIndex;
+                // Proportional width based on slot duration relative to total
+                const widthPct = durationMs > 0 ? ((slot.endMs - slot.startMs) / durationMs) * 100 : 100 / Math.max(1, timelineSlots.length);
+                const minW = 72;
                 return (
                   <div
                     key={slot.slotIndex}
@@ -707,10 +710,11 @@ const KanvasRemix = () => {
                     onDragLeave={handleSlotDragLeave}
                     onDrop={(e) => handleSlotDrop(e, slot.slotIndex)}
                     className={cn(
-                      'group relative shrink-0 overflow-hidden rounded-lg border bg-[#111] transition-colors',
-                      clip ? 'w-24 h-24 border-[#f97316]/20' : 'w-24 h-24 border-dashed border-white/10',
+                      'group relative shrink-0 overflow-hidden rounded-lg border bg-[#111] transition-colors h-24',
+                      clip ? 'border-[#f97316]/20' : 'border-dashed border-white/10',
                       isDragOver && 'border-[#f97316] border-solid bg-[#f97316]/10 shadow-[0_0_12px_rgba(249,115,22,0.3)]'
                     )}
+                    style={{ width: `max(${minW}px, ${widthPct}%)` }}
                   >
                     {clip ? (
                       <>
