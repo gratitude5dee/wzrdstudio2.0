@@ -23,6 +23,9 @@ interface WaveformViewProps {
   duration?: number; // seconds, used to position markers
   onMarkerDrag?: (id: string, newSec: number) => void;
   onMarkerClick?: (id: string) => void;
+
+  /** Horizontal zoom factor (>=1). Centers around selection/playhead. */
+  zoom?: number;
 }
 
 const FALLBACK_BAR_COUNT = 140;
