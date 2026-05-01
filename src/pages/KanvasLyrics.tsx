@@ -31,6 +31,7 @@ import {
 import type { KanvasLyricTemplate } from '@/features/kanvas-lyrics/types';
 import { useAudioEngine } from '@/features/kanvas-lyrics/useAudioEngine';
 import { decodeWaveform } from '@/features/kanvas-lyrics/decodeWaveform';
+import { sliceAudioToWav } from '@/features/kanvas-lyrics/clipAudio';
 import { supabase } from '@/integrations/supabase/client';
 
 type ClipDurationMs = 15000 | 30000 | 45000 | 60000;
@@ -101,6 +102,10 @@ const KanvasLyrics = () => {
   const [audioPlaybackUrl, setAudioPlaybackUrl] = useState<string | null>(null);
   const [lyrics, setLyrics] = useState<LyricBlock[]>([]);
   const [markers, setMarkers] = useState<CutMarker[]>([]);
+
+  // Local source File kept for the entire wizard so we can slice + upload
+  // only the trimmed clip on Confirm. Never written to network until then.
+  const sourceFileRef = useRef<File | null>(null);
 
   const engine = useAudioEngine();
 
@@ -198,10 +203,8 @@ const KanvasLyrics = () => {
     return null;
   }, [playheadTime, lyrics]);
 
-  // Audio handlers
+  // Audio handlers — local-first. Upload is deferred to Confirm.
   const handleAudioSelected = useCallback(async (file: File) => {
-    // Fast client-side validation so users get immediate feedback rather
-    // than a 413 from Storage.
     const MAX_BYTES = 50 * 1024 * 1024;
     const isAudio = file.type.startsWith('audio/') ||
       /\.(mp3|wav|m4a|mp4|aac|flac|ogg|oga)$/i.test(file.name);
@@ -218,9 +221,12 @@ const KanvasLyrics = () => {
     if (lastUrlRef.current) URL.revokeObjectURL(lastUrlRef.current);
     const url = URL.createObjectURL(file);
     lastUrlRef.current = url;
+    sourceFileRef.current = file;
     setAudioPlaybackUrl(url);
+    // Reset any previous server-side state — the wizard is now fully local.
+    setAudioAssetId(null);
+    setTemplateId(null);
 
-    // Decode peaks + duration in parallel with upload
     const decoded = await decodeWaveform(file);
     const probedDuration = decoded.durationSec || 60;
 
@@ -235,36 +241,8 @@ const KanvasLyrics = () => {
       confirmed: false,
     });
     setAppState('trim');
-
-    // Upload + create draft template in background
-    const toastId = 'kanvas-lyrics-upload';
-    toast.loading('Uploading audio…', { id: toastId });
-    setTranscribeStatus('uploading');
-    try {
-      const uploaded = await uploadTemplateAudio(file);
-      setAudioAssetId(uploaded.assetId);
-      const draft = await createTemplate({
-        title: file.name.replace(/\.[^.]+$/, '').slice(0, 80) || 'Untitled Template',
-        sourceAudioAssetId: uploaded.assetId,
-        totalDurationMs: Math.round(probedDuration * 1000),
-        selectionStartMs: 0,
-        selectionDurationMs: 15000,
-        waveformPeaks: decoded.peaks,
-      });
-      setTemplateId(draft.id);
-      setSearchParams({ templateId: draft.id }, { replace: true });
-      setTranscribeStatus('idle');
-      toast.success('Audio uploaded', { id: toastId });
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Upload failed', { id: toastId });
-      setTranscribeStatus('idle');
-      // Reset back to dropzone so the user can retry without reload.
-      if (lastUrlRef.current) { URL.revokeObjectURL(lastUrlRef.current); lastUrlRef.current = null; }
-      setAudio(INITIAL_AUDIO);
-      setAudioPlaybackUrl(null);
-      setAppState('upload');
-    }
-  }, [setSearchParams]);
+    setTranscribeStatus('idle');
+  }, []);
 
   // Debounced server patch helper
   const patchTimer = useRef<number | null>(null);
@@ -279,7 +257,11 @@ const KanvasLyrics = () => {
   }, [templateId]);
 
   const handleDurationChange = useCallback((d: ClipDuration) => {
-    setAudio((prev) => ({ ...prev, selectionDuration: d }));
+    setAudio((prev) => {
+      const maxStart = Math.max(0, prev.totalDuration - d);
+      const start = Math.min(prev.selectionStart, maxStart);
+      return { ...prev, selectionDuration: d, selectionStart: start };
+    });
     queuePatch({
       selection: {
         startMs: Math.round(audio.selectionStart * 1000),
@@ -293,7 +275,11 @@ const KanvasLyrics = () => {
   }, []);
 
   const handleSelectionStartChange = useCallback((s: number) => {
-    setAudio((prev) => ({ ...prev, selectionStart: s }));
+    setAudio((prev) => {
+      const maxStart = Math.max(0, prev.totalDuration - prev.selectionDuration);
+      const clamped = Math.max(0, Math.min(maxStart, s));
+      return { ...prev, selectionStart: clamped };
+    });
     queuePatch({
       selection: {
         startMs: Math.round(s * 1000),
@@ -306,13 +292,13 @@ const KanvasLyrics = () => {
     engine.toggle();
   }, [engine]);
 
-  const runTranscribe = useCallback(async () => {
-    if (!templateId) return;
+  const runTranscribe = useCallback(async (idArg?: string) => {
+    const id = idArg ?? templateId;
+    if (!id) return;
     setTranscribeStatus('transcribing');
     try {
-      const result = await transcribeTemplate(templateId);
+      const result = await transcribeTemplate(id);
       setTranscribeStatus('parsing');
-      // Brief parsing tick for UX
       await new Promise((r) => setTimeout(r, 300));
       setLyrics(blocksFromServer(result));
       setTranscribeStatus('ready');
@@ -324,33 +310,96 @@ const KanvasLyrics = () => {
   }, [templateId]);
 
   const handleAudioConfirm = useCallback(async () => {
-    setAudio((prev) => ({ ...prev, confirmed: true }));
-    setAppState('lyrics_edit');
-    setCurrentStep(2);
-    engine.seek(0);
-
-    if (!templateId) return;
-    try {
-      await updateTemplate(templateId, {
-        selection: {
-          startMs: Math.round(audio.selectionStart * 1000),
-          durationMs: (audio.selectionDuration * 1000) as ClipDurationMs,
-        },
-        waveformPeaks: audio.peaks,
-        status: 'audio_ready',
-      });
-    } catch (e) {
-      console.warn('[lyrics] failed to mark audio_ready', e);
+    const sourceFile = sourceFileRef.current;
+    if (!sourceFile) {
+      toast.error('No audio file loaded');
+      return;
     }
-    runTranscribe();
-  }, [templateId, audio.selectionStart, audio.selectionDuration, audio.peaks, engine, runTranscribe]);
+
+    const toastId = 'kanvas-lyrics-confirm';
+    const startMs = Math.round(audio.selectionStart * 1000);
+    const durationMs = (audio.selectionDuration * 1000) as ClipDurationMs;
+
+    try {
+      // 1) Slice the trimmed clip locally
+      toast.loading('Slicing clip…', { id: toastId });
+      setTranscribeStatus('uploading');
+      const baseName = sourceFile.name.replace(/\.[^.]+$/, '').slice(0, 60) || 'clip';
+      const clip = await sliceAudioToWav(
+        sourceFile,
+        audio.selectionStart,
+        audio.selectionDuration,
+        baseName
+      );
+
+      // 2) Upload only the trimmed clip
+      toast.loading('Uploading clip…', { id: toastId });
+      const uploaded = await uploadTemplateAudio({
+        blob: clip.blob,
+        fileName: clip.fileName,
+        mimeType: clip.mimeType,
+        durationMs: clip.durationMs,
+      });
+      setAudioAssetId(uploaded.assetId);
+
+      // 3) Create draft template referencing the trimmed clip. The clip IS
+      // the asset, so selectionStart=0 and totalDuration=clipDuration.
+      const draft = await createTemplate({
+        title: baseName || 'Untitled Template',
+        sourceAudioAssetId: uploaded.assetId,
+        totalDurationMs: clip.durationMs,
+        selectionStartMs: 0,
+        selectionDurationMs: durationMs,
+        waveformPeaks: audio.peaks,
+      });
+      setTemplateId(draft.id);
+      setSearchParams({ templateId: draft.id }, { replace: true });
+
+      // 4) Mark ready and kick transcription. Re-point the engine at the
+      // hosted clip so future steps still play after object URL is revoked.
+      try {
+        await updateTemplate(draft.id, {
+          selection: { startMs: 0, durationMs },
+          waveformPeaks: audio.peaks,
+          status: 'audio_ready',
+        });
+      } catch (e) {
+        console.warn('[lyrics] failed to mark audio_ready', e);
+      }
+
+      toast.success('Clip ready — transcribing…', { id: toastId });
+
+      // Advance UI now that upload succeeded
+      setAudio((prev) => ({
+        ...prev,
+        confirmed: true,
+        // From here on the engine plays the hosted clip, which IS the
+        // selection — selectionStart resets to 0.
+        selectionStart: 0,
+        totalDuration: clip.durationMs / 1000,
+      }));
+      setAppState('lyrics_edit');
+      setCurrentStep(2);
+      engine.seek(0);
+
+      runTranscribe(draft.id);
+    } catch (e) {
+      console.error('[lyrics] confirm failed', e);
+      toast.error(e instanceof Error ? e.message : 'Failed to prepare clip', { id: toastId });
+      setTranscribeStatus('idle');
+    }
+  }, [audio.selectionStart, audio.selectionDuration, audio.peaks, engine, runTranscribe, setSearchParams]);
 
   const handleAudioReset = useCallback(() => {
     if (lastUrlRef.current) { URL.revokeObjectURL(lastUrlRef.current); lastUrlRef.current = null; }
+    sourceFileRef.current = null;
     setAudio(INITIAL_AUDIO);
     setAudioPlaybackUrl(null);
+    setAudioAssetId(null);
+    setTemplateId(null);
     setAppState('upload');
     setCurrentStep(1);
+    setTranscribeStatus('idle');
     engine.pause();
     engine.load(null);
   }, [engine]);

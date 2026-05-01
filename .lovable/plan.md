@@ -1,54 +1,72 @@
-## Problems Observed
+## Goal
 
-From the live network log + code review of the lyrics wizard:
+Make audio trim + waveform + playback feel instant by keeping the full song **client-side only** during the wizard, then upload **just the trimmed clip** when the user confirms their selection.
 
-1. **Upload** — A 50MB+ `.wav` returned 413 from Storage with no friendly error; the user only saw a silent failure. Mp3 uploads succeed but there is no visible progress/feedback during the upload + draft-create round-trip.
-2. **Playback** — Pressing play in Step 1 (Audio) plays the full song. The engine's "loop guard" calls `pause()` when the playhead crosses `loopEnd`, so the clip does not actually loop — it just stops. `currentTime` resets to 0 but `isPlaying` flips to false, which contradicts the "preview your clip" intent.
-3. **Clipping visualization** — The waveform in Step 1 has no playhead; only the orange selection rectangle is visible. The position display shows `audio.selectionStart` (the trim handle), not the live playhead, so the user cannot see playback progress within their selected window. Click-to-seek inside the selection is also not wired.
-4. **Visualize step / replay** — Inherits the same non-looping behaviour; replay restarts but stops at clip end.
+## Architecture change
 
-## Plan
+```
+BEFORE: pick file → upload full song → wait → playback from remote URL
+AFTER:  pick file → instant local Blob URL → trim & scrub locally
+                                          ↓
+                              Confirm Selection clicked
+                                          ↓
+                          slice clip with OfflineAudioContext
+                                          ↓
+                         upload tiny trimmed clip → transcribe
+```
 
-### 1. Client-side upload validation + feedback (`src/features/kanvas-lyrics/service.ts`, `AudioPanel.tsx`, `KanvasLyrics.tsx`)
-- Add a 50 MB pre-check in `uploadTemplateAudio` and throw a clear `Audio file is too large (max 50 MB).` error before hitting Storage.
-- Validate mime type up-front (mpeg/wav/m4a/flac/aac/ogg) and reject with a friendly toast.
-- In `KanvasLyrics.handleAudioSelected`, show a `toast.loading('Uploading audio…')` keyed by id, replaced by `toast.success` on completion or `toast.error` on failure. Reset wizard state on failure so the dropzone reappears.
-- Update the dropzone hint text to read `MP3, WAV, M4A, FLAC up to 50 MB`.
+## Phase 1 — Local-first wizard
 
-### 2. True clip looping in `useAudioEngine` (`src/features/kanvas-lyrics/useAudioEngine.ts`)
-- Add a `loop` flag (default `true`) to `setLoop(startSec, endSec, opts?)`.
-- In the `timeupdate` handler, when `t >= loop.end`:
-  - If looping: set `currentTime = loop.start`, keep `isPlaying = true`, do **not** pause.
-  - Otherwise: keep current behaviour (pause + reset).
-- Remove the redundant `setIsPlaying(false)` inside the loop branch.
-- The `ended` handler stays as a safety net.
+- On file pick: create `URL.createObjectURL(file)`, decode peaks, load engine — no network calls.
+- Keep the local Blob URL alive for the entire wizard (Audio → Lyrics → Markers → Visualize).
+- Store the raw `File` in a ref so we can slice it on confirm.
+- Show a small "Not yet uploaded" pill in the Audio panel until confirmed.
 
-### 3. Live playhead + click-to-seek in Step 1 (`AudioPanel.tsx`, `KanvasLyrics.tsx`, `WaveformView.tsx`)
-- Pass `playheadTime` (clip-relative seconds) and `selectionDuration` from `KanvasLyrics` into `AudioPanel`.
-- In `AudioPanel`, compute absolute playhead seconds = `selectionStart + playheadTime` and convert to percent of `totalDuration` for the waveform.
-- Render the playhead in `WaveformView` (existing prop) by passing `showPlayhead` + `playheadPercent`.
-- Wire `onSeekPercent` so a click inside the selection window seeks the engine; clicks outside the selection move the selection start to that point (existing behaviour) instead of seeking.
-- Update the Position display to show `formatTime(selectionStart + playheadTime)` while playing, and the static `selectionStart` while paused.
+## Phase 2 — Tighter audio engine
 
-### 4. Visualize step parity (`VisualizePanel.tsx`)
-- Pass `loop: false` when calling `setLoop` in the Visualize panel so the preview plays once end-to-end (matches the "Replay" intent), then enable a clear "Replay" button (already present). No new logic, just call the new opts.
+- Replace `timeupdate` with `requestAnimationFrame` while playing for smooth playhead and accurate loop boundaries.
+- Clamp `selectionStart` whenever duration changes so `start + duration ≤ totalDuration`.
+- Clamp `seek()` to the active clip window.
+- Stop RAF cleanly on pause/unmount.
 
-### 5. Minor cleanup
-- Remove the obsolete `100 MB` reference anywhere it still exists in copy.
-- Add a one-line comment on `setLoop` documenting the loop semantics.
+## Phase 3 — Clip-and-upload on Confirm Selection
 
-## Files Touched
-- `src/features/kanvas-lyrics/useAudioEngine.ts`
-- `src/features/kanvas-lyrics/service.ts`
-- `src/components/kanvas-lyrics/AudioPanel.tsx`
-- `src/components/kanvas-lyrics/VisualizePanel.tsx`
-- `src/pages/KanvasLyrics.tsx`
+- New `src/features/kanvas-lyrics/clipAudio.ts`:
+  - Decode source `File` once with `OfflineAudioContext`
+  - Render the `[selectionStart, selectionStart + selectionDuration]` window
+  - Encode the result as 16-bit PCM WAV (small, universally supported, no codec libs needed)
+  - Return a `Blob` + `durationMs`
+- Update `handleAudioConfirm`:
+  1. Slice the clip locally
+  2. Upload only the clip via the existing `uploadTemplateAudio` path (rename file to `*-clip.wav`)
+  3. Create draft template with `selectionStartMs: 0`, `selectionDurationMs` = chosen duration, `totalDurationMs` = clip duration
+  4. Mark `audio_ready` and kick off transcription (Gemini 3.1 Flash on GMI Cloud transcribes the clip directly — fast & cheap)
+- Show progress on the Confirm button (`Slicing… → Uploading… → Transcribing…`).
 
-No DB migration needed — the 50 MB bucket limit was applied in the previous step.
+## Phase 4 — Hydration of saved templates
 
-## Acceptance
-- Uploading a >50 MB file shows a friendly toast immediately, no 413 in the console.
-- Uploading a valid file shows a loading toast, then success.
-- Pressing Play on Step 1 loops continuously within the selected window; the white playhead advances across the orange selection bar; the time readout ticks up and resets at the selection end.
-- Clicking inside the selection seeks; dragging the orange box still moves the selection.
-- Visualize step plays the clip once, stops at end, Replay restarts.
+- The stored asset IS the trimmed clip, so `selectionStart = 0`, `totalDuration = clipDuration`.
+- For private assets, generate a signed URL via `storage_bucket` + `storage_path` from the asset metadata instead of relying on the public URL.
+- Use stored peaks if present, otherwise re-decode peaks from the signed URL.
+
+## Phase 5 — Waveform polish
+
+- Apply `zoom` viewport in `WaveformView` (currently displayed but unused).
+- Live RAF playhead in Audio / Markers / Visualize panels.
+
+## Files
+
+- `src/features/kanvas-lyrics/useAudioEngine.ts` — RAF loop, clamped seek, accurate loop boundaries
+- `src/features/kanvas-lyrics/clipAudio.ts` (**new**) — `OfflineAudioContext` slice + WAV encode
+- `src/features/kanvas-lyrics/service.ts` — add `resolveAudioPlaybackUrl(asset)` helper using signed URLs for private assets
+- `src/pages/KanvasLyrics.tsx` — defer upload to confirm; keep local Blob URL throughout wizard; new confirm progress states
+- `src/components/kanvas-lyrics/AudioPanel.tsx` — confirm button progress states; "not yet uploaded" pill
+- `src/components/kanvas-lyrics/WaveformView.tsx` — zoom viewport support
+
+## Trade-off accepted
+
+Backend stores only the trimmed clip — full song is not retained. Re-trimming a saved template into a different window is not supported (user would re-upload). This is the chosen behavior.
+
+## No DB / edge-function schema changes
+
+The existing `kanvas-lyrics-audio-register`, `kanvas-lyrics-template`, and `kanvas-lyrics-transcribe` functions all work with the trimmed clip as-is. Gemini 3.1 Flash on GMI Cloud will transcribe the small clip directly.

@@ -1,5 +1,6 @@
-// Single HTMLAudioElement controller used by all 3 wizard panels.
-// Exposes clip-relative time/duration; loops within [loopStart, loopEnd].
+// Single HTMLAudioElement controller used by all wizard panels.
+// Drives playback against a clip window [loop.start, loop.end] and exposes
+// clip-relative time updated on every animation frame for smooth UI.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -24,6 +25,7 @@ export interface AudioEngine {
 export function useAudioEngine(): AudioEngine {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const loopRef = useRef({ start: 0, end: 0, loop: true });
+  const rafRef = useRef<number | null>(null);
   const [isReady, setIsReady] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -33,37 +35,55 @@ export function useAudioEngine(): AudioEngine {
   if (!audioRef.current && typeof Audio !== 'undefined') {
     audioRef.current = new Audio();
     audioRef.current.preload = 'auto';
+    audioRef.current.crossOrigin = 'anonymous';
   }
+
+  const stopRaf = useCallback(() => {
+    if (rafRef.current != null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+  }, []);
+
+  const tick = useCallback(() => {
+    const a = audioRef.current;
+    if (!a) return;
+    const loop = loopRef.current;
+    const t = a.currentTime;
+
+    if (loop.end > loop.start && t >= loop.end) {
+      if (loop.loop) {
+        a.currentTime = loop.start;
+        setCurrentTime(0);
+      } else {
+        a.pause();
+        a.currentTime = loop.start;
+        setCurrentTime(0);
+        return; // pause handler will stop RAF
+      }
+    } else {
+      setCurrentTime(Math.max(0, t - loop.start));
+    }
+    rafRef.current = requestAnimationFrame(tick);
+  }, []);
 
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
 
-    const onTime = () => {
-      const loop = loopRef.current;
-      const t = a.currentTime;
-      // End-of-window guard
-      if (loop.end > loop.start && t >= loop.end) {
-        if (loop.loop) {
-          // Wrap back to start, keep playing
-          a.currentTime = loop.start;
-          setCurrentTime(0);
-          return;
-        }
-        a.pause();
-        a.currentTime = loop.start;
-        setCurrentTime(0);
-        return;
-      }
-      setCurrentTime(Math.max(0, t - loop.start));
+    const onLoaded = () => setIsReady(true);
+    const onPlay = () => {
+      setIsPlaying(true);
+      stopRaf();
+      rafRef.current = requestAnimationFrame(tick);
     };
-    const onLoaded = () => {
-      setIsReady(true);
+    const onPause = () => {
+      setIsPlaying(false);
+      stopRaf();
     };
-    const onPlay = () => setIsPlaying(true);
-    const onPause = () => setIsPlaying(false);
     const onEnded = () => {
       setIsPlaying(false);
+      stopRaf();
       const loop = loopRef.current;
       if (loop.end > loop.start) {
         a.currentTime = loop.start;
@@ -71,7 +91,6 @@ export function useAudioEngine(): AudioEngine {
       }
     };
 
-    a.addEventListener('timeupdate', onTime);
     a.addEventListener('loadedmetadata', onLoaded);
     a.addEventListener('canplay', onLoaded);
     a.addEventListener('play', onPlay);
@@ -79,29 +98,31 @@ export function useAudioEngine(): AudioEngine {
     a.addEventListener('ended', onEnded);
 
     return () => {
-      a.removeEventListener('timeupdate', onTime);
       a.removeEventListener('loadedmetadata', onLoaded);
       a.removeEventListener('canplay', onLoaded);
       a.removeEventListener('play', onPlay);
       a.removeEventListener('pause', onPause);
       a.removeEventListener('ended', onEnded);
+      stopRaf();
     };
-  }, []);
+  }, [tick, stopRaf]);
 
   const load = useCallback((url: string | null) => {
     const a = audioRef.current;
     if (!a) return;
+    stopRaf();
     setIsReady(false);
     setIsPlaying(false);
     setCurrentTime(0);
     if (!url) {
+      a.pause();
       a.removeAttribute('src');
       a.load();
       return;
     }
     a.src = url;
     a.load();
-  }, []);
+  }, [stopRaf]);
 
   const play = useCallback(async () => {
     const a = audioRef.current;
@@ -134,22 +155,21 @@ export function useAudioEngine(): AudioEngine {
     const a = audioRef.current;
     if (!a) return;
     const loop = loopRef.current;
-    const t = loop.start + Math.max(0, clipRelativeSec);
-    a.currentTime = t;
-    setCurrentTime(Math.max(0, t - loop.start));
+    const clipDur = Math.max(0, loop.end - loop.start);
+    const clamped = Math.max(0, Math.min(clipDur, clipRelativeSec));
+    a.currentTime = loop.start + clamped;
+    setCurrentTime(clamped);
   }, []);
 
   const setLoop = useCallback((startSec: number, endSec: number, opts?: { loop?: boolean }) => {
     const loop = opts?.loop ?? true;
-    loopRef.current = {
-      start: Math.max(0, startSec),
-      end: Math.max(startSec, endSec),
-      loop,
-    };
-    setDuration(Math.max(0, endSec - startSec));
+    const start = Math.max(0, startSec);
+    const end = Math.max(start, endSec);
+    loopRef.current = { start, end, loop };
+    setDuration(Math.max(0, end - start));
     const a = audioRef.current;
-    if (a && (a.currentTime < startSec || a.currentTime >= endSec)) {
-      a.currentTime = startSec;
+    if (a && (a.currentTime < start || a.currentTime >= end)) {
+      a.currentTime = start;
       setCurrentTime(0);
     }
   }, []);
