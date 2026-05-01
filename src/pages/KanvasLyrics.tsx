@@ -177,8 +177,15 @@ const KanvasLyrics = () => {
   }, [audioPlaybackUrl, engineLoad]);
 
   useEffect(() => {
-    engineSetLoop(audio.selectionStart, audio.selectionStart + audio.selectionDuration);
-  }, [audio.selectionStart, audio.selectionDuration, engineSetLoop]);
+    // Loop on the audio/lyrics/markers steps so the user can review the
+    // selection continuously; play once on the visualize step (step 4)
+    // so "Replay" feels intentional.
+    engineSetLoop(
+      audio.selectionStart,
+      audio.selectionStart + audio.selectionDuration,
+      { loop: currentStep !== 4 }
+    );
+  }, [audio.selectionStart, audio.selectionDuration, currentStep, engineSetLoop]);
 
   // Active-word derivation from real engine playhead
   const playheadTime = engine.currentTime;
