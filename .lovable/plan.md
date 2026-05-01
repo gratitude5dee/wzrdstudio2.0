@@ -1,29 +1,17 @@
 
-## Fix remix page layout and clip thumbnails
+## Fix page cutoff — make scrollable and tighten layout
 
 ### Problem
-1. Video preview area has excessive empty space — player floats in a huge void
-2. Clip library thumbnails show blank/broken frames because `<video>` elements lack `preload` and time seek
-3. Timeline slots have the same issue with video thumbnails
-4. Left rail is too wide (480px), wasting space
+The `h-screen` + `overflow-hidden` on the root container cuts off the bottom (shuffle/export buttons hidden) and right side (player not rendering). Content needs to be scrollable while staying tight.
 
-### Changes (all in `src/pages/KanvasRemix.tsx`)
+### Changes (`src/pages/KanvasRemix.tsx`)
 
-**1. Layout tightening**
-- Change root container from `min-h-screen` to `h-screen` so the entire page fits the viewport without scrolling
-- Narrow the left rail from `480px` to `400px`
-- Replace the player's `flex-1 items-center justify-center` wrapper with a constrained container that uses `max-h-[calc(100%-160px)]` so the player fills available space minus transport/timeline, eliminating the void
-- Reduce padding (pt-6 to pt-4, px-8 to px-6) throughout the left rail for density
+**Root layout**: Change from `h-screen overflow-hidden` to `min-h-screen` so the page can scroll naturally.
 
-**2. Video thumbnail previews**
-- For all `<video>` elements in the clip library grid: add `preload="metadata"` and append `#t=0.5` to the `src` URL so browsers render an actual frame from the video
-- Same fix for timeline slot video thumbnails
-- This replaces the current blank black rectangles with real video frame previews
+**Left rail**: Make it sticky with `lg:sticky lg:top-[56px] lg:h-[calc(100vh-56px)]` (56px = header height) so it stays in view while the right side scrolls. Narrow from 400px to 380px. The left rail already has `overflow-y-auto` on its inner section, so it scrolls independently.
 
-**3. Player area optimization**
-- Remove fixed `h-[560px]`/`h-[400px]` from the player container
-- Instead use responsive sizing: `max-h-full w-auto aspect-[9/16]` (or `aspect-video` for 16:9) so the player scales to fill the available vertical space without overflow
-- Transport controls, disclaimer, progress bar, and timeline strip are pinned at the bottom with no flex-grow
+**Right canvas**: Remove `min-h-0` constraint. Give the player area a sensible min-height (`min-h-[360px]`) instead of flex-1 with min-h-0 which collapses it. Use `max-h-[calc(100vh-220px)]` on the player wrapper so it fills available space but leaves room for transport + timeline without cutting off.
 
-### Files changed
-- `src/pages/KanvasRemix.tsx` — layout, thumbnail, and sizing updates
+**Timeline strip**: Ensure it's always visible at the bottom — no overflow clipping from the parent.
+
+These changes let the page scroll if content overflows while keeping the layout tight and the left rail pinned.
