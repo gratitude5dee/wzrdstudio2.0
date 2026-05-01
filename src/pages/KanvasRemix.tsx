@@ -344,12 +344,12 @@ const KanvasRemix = () => {
   );
 
   return (
-    <div className="min-h-screen flex flex-col overflow-hidden bg-black text-white">
+    <div className="h-screen flex flex-col overflow-hidden bg-black text-white">
       <KanvasLyricsHeader />
-      <div className="flex-1 grid min-h-0 grid-cols-1 lg:grid-cols-[480px_1fr]">
+      <div className="flex-1 grid min-h-0 grid-cols-1 lg:grid-cols-[400px_1fr]">
         {/* ── Left rail ── */}
         <aside className="flex flex-col border-r border-white/[0.06] bg-[#0A0A0A]">
-          <div className="px-8 pt-6">
+          <div className="px-6 pt-4">
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -370,7 +370,7 @@ const KanvasRemix = () => {
           </div>
 
           {/* Clip library */}
-          <section className="flex-1 overflow-y-auto px-8 pt-5">
+          <section className="flex-1 overflow-y-auto px-6 pt-4">
             <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
               <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-zinc-200">
                 <Film className="h-4 w-4 text-[#f97316]" />
@@ -425,7 +425,7 @@ const KanvasRemix = () => {
                     {asset.posterUrl ? (
                       <img src={asset.posterUrl} alt="" className="h-full w-full object-cover opacity-80 transition-opacity group-hover:opacity-100" />
                     ) : (
-                      <video src={asset.url} muted className="h-full w-full object-cover opacity-80 transition-opacity group-hover:opacity-100" />
+                      <video src={`${asset.url}#t=0.5`} muted preload="metadata" playsInline className="h-full w-full object-cover opacity-80 transition-opacity group-hover:opacity-100" />
                     )}
                     <span className="absolute bottom-1 left-1 rounded-full bg-black/60 px-1.5 py-0.5 text-[10px] text-white">
                       ⏱{(asset.durationMs / 1000).toFixed(1)}s
@@ -572,25 +572,31 @@ const KanvasRemix = () => {
         {/* ── Right canvas ── */}
         <main className="relative flex min-h-0 flex-col bg-black">
           {/* Aspect ratio toggle */}
-          <div className="absolute right-6 top-2 z-10 inline-flex overflow-hidden rounded-lg border border-white/10 bg-[#111] text-xs font-bold">
+          <div className="absolute right-4 top-2 z-10 inline-flex overflow-hidden rounded-lg border border-white/10 bg-[#111] text-xs font-bold">
             {(['16:9', '9:16'] as const).map((ratio) => (
               <button
                 key={ratio}
                 type="button"
                 onClick={() => setAspectRatio(ratio)}
-                className={cn('px-4 py-2', aspectRatio === ratio ? 'bg-[#f97316]/20 text-[#f97316]' : 'text-zinc-400')}
+                className={cn('px-3 py-1.5', aspectRatio === ratio ? 'bg-[#f97316]/20 text-[#f97316]' : 'text-zinc-400')}
               >
                 {ratio}
               </button>
             ))}
           </div>
 
-          {/* Preview player */}
-          <div className="flex flex-1 items-center justify-center px-6 pt-4">
-            <div className={cn(
-              'relative overflow-hidden rounded-xl border border-white/10 bg-[#050505]',
-              aspectRatio === '9:16' ? 'h-[560px] w-[315px]' : 'h-[400px] w-[710px]'
-            )}>
+          {/* Preview player — fills available space */}
+          <div className="flex flex-1 min-h-0 items-center justify-center px-4 py-3">
+            <div
+              className="relative overflow-hidden rounded-xl border border-white/10 bg-[#050505]"
+              style={{
+                aspectRatio: aspectRatio === '9:16' ? '9/16' : '16/9',
+                maxHeight: '100%',
+                maxWidth: '100%',
+                width: aspectRatio === '9:16' ? 'auto' : '100%',
+                height: aspectRatio === '9:16' ? '100%' : 'auto',
+              }}
+            >
               <Player
                 ref={playerRef}
                 component={LyricRemixComposition}
@@ -616,7 +622,7 @@ const KanvasRemix = () => {
           </div>
 
           {/* Custom transport controls */}
-          <div className="mx-auto flex w-full max-w-[900px] items-center gap-3 px-6 py-2">
+          <div className="mx-auto flex w-full items-center gap-3 px-4 py-1.5">
             <button type="button" onClick={replay} className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10" aria-label="Replay">
               <Repeat2 className="h-4 w-4" />
             </button>
@@ -668,13 +674,13 @@ const KanvasRemix = () => {
           </div>
 
           {/* Lag disclaimer */}
-          <div className="mx-auto mb-2 flex w-full max-w-[900px] items-center justify-center gap-2 rounded-lg border border-amber-400/30 bg-amber-400/10 px-4 py-2 text-xs font-bold text-amber-300">
+          <div className="mx-auto mb-1 flex w-full items-center justify-center gap-2 rounded-lg border border-amber-400/30 bg-amber-400/10 px-4 py-1.5 text-xs font-bold text-amber-300">
             <Info className="h-3.5 w-3.5" />
             The preview may lag during playback — don't worry, your export will be a perfectly smooth HD video!
           </div>
 
           {/* Progress bar for timeline */}
-          <div className="mx-6 mb-1">
+          <div className="mx-4 mb-1">
             <div className="h-1 overflow-hidden rounded-full bg-white/10">
               <div
                 className="h-full bg-gradient-to-r from-[#f97316] to-amber-400"
@@ -687,7 +693,7 @@ const KanvasRemix = () => {
           </div>
 
           {/* ── Timeline strip ── */}
-          <div className="border-t border-white/[0.06] bg-[#0A0A0A] px-6 py-2">
+          <div className="border-t border-white/[0.06] bg-[#0A0A0A] px-4 py-1.5">
             <div className="flex gap-2 overflow-x-auto pb-2">
               {timelineSlots.map((slot) => {
                 const clip = slot.clipId ? assets.find((a) => a.id === slot.clipId) : null;
@@ -710,7 +716,7 @@ const KanvasRemix = () => {
                         {clip.posterUrl ? (
                           <img src={clip.posterUrl} alt="" className="h-full w-full object-cover" />
                         ) : (
-                          <video src={clip.url} muted className="h-full w-full object-cover" />
+                          <video src={`${clip.url}#t=0.5`} muted preload="metadata" playsInline className="h-full w-full object-cover" />
                         )}
                         <span className="absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded bg-black/70 text-[10px] font-bold text-[#f97316]">
                           {slot.slotIndex + 1}
