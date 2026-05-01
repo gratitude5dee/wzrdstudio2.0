@@ -83,9 +83,9 @@ const KanvasRemix = () => {
   const [quantity, setQuantity] = useState(1);
   const [shuffleEach, setShuffleEach] = useState(false);
   const [loading, setLoading] = useState(true);
-  const exporting = exportModalOpen;
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [exportModalOpen, setExportModalOpen] = useState(false);
+  const exporting = exportModalOpen;
   const [controlsOpen, setControlsOpen] = useState(true);
   const [timelineSlots, setTimelineSlots] = useState<RemixTimelineSlot[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -286,7 +286,6 @@ const KanvasRemix = () => {
     cutMarkers: template?.cutMarkers ?? [],
     noCuts,
   }), [aspectRatio, durationMs, audioUrl, captions, selectedStyleId, scale, backgroundClips, template?.cutMarkers, noCuts]);
-  };
 
   if (loading) {
     return (
