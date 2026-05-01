@@ -12,10 +12,14 @@ interface AudioPanelProps {
   audio: AudioData;
   isPlaying: boolean;
   audioReady: boolean;
+  /** Clip-relative playhead in seconds (0..selectionDuration). */
+  playheadTime: number;
   onAudioSelected: (file: File) => void;
   onDurationChange: (duration: ClipDuration) => void;
   onZoomChange: (zoom: number) => void;
   onSelectionStartChange: (start: number) => void;
+  /** Seek the engine to a clip-relative offset within the selection. */
+  onSeekClipRelative: (sec: number) => void;
   onTogglePreview: () => void;
   onConfirm: () => void;
   onReset: () => void;
@@ -33,10 +37,12 @@ export function AudioPanel({
   audio,
   isPlaying,
   audioReady,
+  playheadTime,
   onAudioSelected,
   onDurationChange,
   onZoomChange,
   onSelectionStartChange,
+  onSeekClipRelative,
   onTogglePreview,
   onConfirm,
   onReset,
@@ -72,10 +78,28 @@ export function AudioPanel({
   const totalDuration = Math.max(audio.totalDuration, audio.selectionDuration);
   const selectionStartPct = totalDuration > 0 ? (audio.selectionStart / totalDuration) * 100 : 0;
   const selectionWidthPct = totalDuration > 0 ? (audio.selectionDuration / totalDuration) * 100 : 0;
+  const absolutePlayhead = Math.min(
+    audio.selectionStart + Math.max(0, playheadTime),
+    audio.selectionStart + audio.selectionDuration
+  );
+  const playheadPct = totalDuration > 0 ? (absolutePlayhead / totalDuration) * 100 : 0;
+  const showLivePosition = isPlaying || playheadTime > 0.05;
+  const positionLabel = showLivePosition ? absolutePlayhead : audio.selectionStart;
 
   const handleSelectionPctChange = (pct: number) => {
     const startSec = (pct / 100) * totalDuration;
     onSelectionStartChange(startSec);
+  };
+
+  const handleSeekPct = (pct: number) => {
+    if (showConfirmed) return;
+    const absSec = (pct / 100) * totalDuration;
+    const offset = absSec - audio.selectionStart;
+    // Only seek when click is inside the selection window; otherwise let the
+    // selection-drag handler reposition it.
+    if (offset >= 0 && offset <= audio.selectionDuration) {
+      onSeekClipRelative(Math.max(0, Math.min(audio.selectionDuration, offset)));
+    }
   };
 
   return (
@@ -168,11 +192,16 @@ export function AudioPanel({
             selectionStartPercent={selectionStartPct}
             selectionWidthPercent={selectionWidthPct}
             onSelectionStartPercentChange={!showConfirmed ? handleSelectionPctChange : undefined}
+            showPlayhead
+            playheadPercent={playheadPct}
+            onSeekPercent={!showConfirmed ? handleSeekPct : undefined}
           />
 
           {/* Position + duration row */}
           <div className="flex items-center justify-between text-[11px] text-slate-400">
-            <span className="font-mono text-[#fb923c]">{formatTime(audio.selectionStart)}</span>
+            <span className={cn('font-mono', showLivePosition ? 'text-white' : 'text-[#fb923c]')}>
+              {formatTime(positionLabel)}
+            </span>
             <span className="text-slate-600">/ {formatTime(totalDuration)}</span>
           </div>
 

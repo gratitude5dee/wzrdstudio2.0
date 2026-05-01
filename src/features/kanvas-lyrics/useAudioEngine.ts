@@ -13,12 +13,17 @@ export interface AudioEngine {
   pause: () => void;
   toggle: () => Promise<void>;
   seek: (clipRelativeSec: number) => void;
-  setLoop: (startSec: number, endSec: number) => void;
+  /**
+   * Configure the playback window. When `loop` is true (default) playback
+   * wraps from `endSec` back to `startSec` continuously; when false it
+   * pauses at `endSec`.
+   */
+  setLoop: (startSec: number, endSec: number, opts?: { loop?: boolean }) => void;
 }
 
 export function useAudioEngine(): AudioEngine {
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const loopRef = useRef({ start: 0, end: 0 });
+  const loopRef = useRef({ start: 0, end: 0, loop: true });
   const [isReady, setIsReady] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -37,13 +42,16 @@ export function useAudioEngine(): AudioEngine {
     const onTime = () => {
       const loop = loopRef.current;
       const t = a.currentTime;
-      // Loop guard
+      // End-of-window guard
       if (loop.end > loop.start && t >= loop.end) {
-        a.currentTime = loop.start;
-        if (!a.paused) {
-          a.pause();
-          setIsPlaying(false);
+        if (loop.loop) {
+          // Wrap back to start, keep playing
+          a.currentTime = loop.start;
+          setCurrentTime(0);
+          return;
         }
+        a.pause();
+        a.currentTime = loop.start;
         setCurrentTime(0);
         return;
       }
@@ -131,8 +139,13 @@ export function useAudioEngine(): AudioEngine {
     setCurrentTime(Math.max(0, t - loop.start));
   }, []);
 
-  const setLoop = useCallback((startSec: number, endSec: number) => {
-    loopRef.current = { start: Math.max(0, startSec), end: Math.max(startSec, endSec) };
+  const setLoop = useCallback((startSec: number, endSec: number, opts?: { loop?: boolean }) => {
+    const loop = opts?.loop ?? true;
+    loopRef.current = {
+      start: Math.max(0, startSec),
+      end: Math.max(startSec, endSec),
+      loop,
+    };
     setDuration(Math.max(0, endSec - startSec));
     const a = audioRef.current;
     if (a && (a.currentTime < startSec || a.currentTime >= endSec)) {
