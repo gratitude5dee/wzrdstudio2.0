@@ -112,10 +112,20 @@ const KanvasLyrics = () => {
   const lastUrlRef = useRef<string | null>(null);
   useEffect(() => () => { if (lastUrlRef.current) URL.revokeObjectURL(lastUrlRef.current); }, []);
 
-  // When opening "new" without a templateId, fully reset wizard state so
-  // previous audio, selection, lyrics, and markers don't leak between sessions.
+  // When entering a brand-new template session (mode=new, no templateId),
+  // reset wizard state ONCE so previous audio/lyrics/markers don't leak.
+  // Guarded with a ref so subsequent renders within the same "new" session
+  // (e.g. right after the user picks a file) do not wipe the freshly loaded
+  // audio. Re-arms whenever we leave the "new" session.
+  const newSessionResetRef = useRef(false);
   useEffect(() => {
-    if (mode !== 'new' || templateIdParam) return;
+    if (mode !== 'new' || templateIdParam) {
+      newSessionResetRef.current = false;
+      return;
+    }
+    if (newSessionResetRef.current) return;
+    newSessionResetRef.current = true;
+
     if (lastUrlRef.current) {
       URL.revokeObjectURL(lastUrlRef.current);
       lastUrlRef.current = null;
