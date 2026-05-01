@@ -349,7 +349,7 @@ const KanvasRemix = () => {
       <div className="flex-1 grid min-h-0 grid-cols-1 lg:grid-cols-[400px_1fr]">
         {/* ── Left rail ── */}
         <aside className="flex flex-col border-r border-white/[0.06] bg-[#0A0A0A]">
-          <div className="px-8 pt-6">
+          <div className="px-6 pt-4">
             <div className="flex items-center gap-2">
               <button
                 type="button"
