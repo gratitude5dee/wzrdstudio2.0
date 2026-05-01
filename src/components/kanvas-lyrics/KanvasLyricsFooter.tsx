@@ -45,7 +45,7 @@ export function KanvasLyricsFooter({
                   className={cn(
                     'flex items-center gap-2 rounded-full border px-3 py-1.5 transition-all',
                     isActive &&
-                      'border-[#f97316]/60 bg-[#f97316]/10 text-[#fdba74] shadow-[0_0_18px_rgba(249,115,22,0.4)]',
+                      'border-cyan-300/70 bg-cyan-400/10 text-cyan-200 shadow-[0_0_18px_rgba(34,211,238,0.32)]',
                     isComplete && 'border-emerald-400/40 bg-emerald-400/10 text-emerald-300',
                     isLocked && 'border-white/10 bg-white/[0.02] text-slate-600 opacity-60'
                   )}
@@ -77,11 +77,11 @@ export function KanvasLyricsFooter({
           {audioConfirmed && (
             <>
               <span>
-                <span className="text-[#fb923c]">{selectionDuration.toFixed(1)}s</span>
+                <span className="text-cyan-300">{selectionDuration.toFixed(1)}s</span>
               </span>
               <span className="h-3 w-px bg-white/10" />
               <span>
-                <span className="text-[#fb923c]">{wordCount}</span> words
+                <span className="text-emerald-300">{wordCount}</span> words
               </span>
               {currentStep >= 3 && (
                 <>

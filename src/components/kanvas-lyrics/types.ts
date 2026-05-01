@@ -34,6 +34,7 @@ export interface LyricWord {
   text: string;
   startTime: number;
   endTime: number;
+  confidence?: number;
 }
 
 export interface LyricBlock {

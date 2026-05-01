@@ -24,6 +24,7 @@ interface LyricWord {
   text: string;
   startTimeMs: number;
   endTimeMs: number;
+  confidence?: number;
 }
 interface LyricBlock {
   id: string;
@@ -100,6 +101,7 @@ interface GeminiSegment {
   text: string;
   startSec: number;
   endSec: number;
+  confidence?: number;
 }
 
 async function transcribeWithGemini(
@@ -164,6 +166,7 @@ async function transcribeWithGemini(
                     text: { type: 'string', description: 'The sung text for this block.' },
                     startSec: { type: 'number', description: 'Start time in seconds.' },
                     endSec: { type: 'number', description: 'End time in seconds.' },
+                    confidence: { type: 'number', description: 'Estimated confidence from 0 to 1.' },
                   },
                   required: ['text', 'startSec', 'endSec'],
                 },
@@ -220,6 +223,7 @@ async function transcribeWithGemini(
       text: String(b.text ?? '').trim(),
       startSec: Number(b.startSec ?? b.start ?? 0),
       endSec: Number(b.endSec ?? b.end ?? 0),
+      confidence: typeof b.confidence === 'number' ? b.confidence : 0.86,
     }))
     .filter((s: GeminiSegment) => s.text.length > 0 && Number.isFinite(s.startSec) && Number.isFinite(s.endSec));
 
@@ -259,6 +263,7 @@ function buildBlocks(
       text: t,
       startTimeMs: Math.round(segStart + i * per),
       endTimeMs: Math.round(segStart + (i + 1) * per),
+      confidence: typeof seg.confidence === 'number' ? seg.confidence : 0.86,
     }));
     blocks.push({
       id: crypto.randomUUID(),
@@ -268,6 +273,19 @@ function buildBlocks(
     });
   }
   return blocks;
+}
+
+function blocksToCaptions(blocks: LyricBlock[]) {
+  return blocks
+    .flatMap((block) =>
+      block.words.map((word) => ({
+        text: word.text,
+        startMs: word.startTimeMs,
+        endMs: word.endTimeMs,
+        confidence: typeof word.confidence === 'number' ? word.confidence : 0.86,
+      }))
+    )
+    .sort((a, b) => a.startMs - b.startMs);
 }
 
 // --- entry ---------------------------------------------------------------
@@ -383,6 +401,7 @@ serve(async (req) => {
       generatedAt: new Date().toISOString(),
       segmentCount: segments.length,
       language,
+      captions: blocksToCaptions(blocks),
     };
 
     const { data: updated, error: upErr } = await svc

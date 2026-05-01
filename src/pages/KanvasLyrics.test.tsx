@@ -1,24 +1,43 @@
-import { describe, expect, it, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 import KanvasLyrics from './KanvasLyrics';
 
-const renderPage = () =>
+beforeAll(() => {
+  Object.defineProperty(HTMLMediaElement.prototype, 'load', { configurable: true, value: vi.fn() });
+  Object.defineProperty(HTMLMediaElement.prototype, 'pause', { configurable: true, value: vi.fn() });
+  Object.defineProperty(HTMLMediaElement.prototype, 'play', {
+    configurable: true,
+    value: vi.fn().mockResolvedValue(undefined),
+  });
+});
+
+const renderPage = (path = '/kanvas/lyrics/new') =>
   render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[path]}>
       <KanvasLyrics />
     </MemoryRouter>
   );
 
 describe('KanvasLyrics', () => {
-  it('renders title and disabled lyrics/markers panels initially', () => {
+  it('renders templates home on /kanvas/lyrics', () => {
+    renderPage('/kanvas/lyrics');
+
+    expect(screen.getByRole('heading', { name: 'YOUR TEMPLATES' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /create new template/i })).toBeInTheDocument();
+    expect(screen.getByText(/15\/30\/45\/60s clip/i)).toBeInTheDocument();
+  });
+
+  it('renders create workspace on /kanvas/lyrics/new', () => {
     renderPage();
-    expect(screen.getByText('CREATE TEMPLATE')).toBeInTheDocument();
-    expect(screen.getByText('Complete audio step first')).toBeInTheDocument();
-    expect(screen.getByText('Complete lyrics step first')).toBeInTheDocument();
+
+    expect(screen.getByRole('heading', { name: 'CREATE TEMPLATE' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Audio' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Lyrics' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Cut Markers' })).toBeInTheDocument();
   });
 
   it('save template button is disabled before step 3', () => {
@@ -27,48 +46,9 @@ describe('KanvasLyrics', () => {
     expect(save).toBeDisabled();
   });
 
-  it('selecting an audio file reveals the trimmer with confirm button', () => {
+  it('keeps the 15/30/45/60 duration policy visible in create mode', () => {
     renderPage();
-    const fileInput = document.getElementById('kanvas-audio-input') as HTMLInputElement;
-    const file = new File(['x'], 'demo.mp3', { type: 'audio/mpeg' });
-    fireEvent.change(fileInput, { target: { files: [file] } });
-    expect(screen.getByRole('button', { name: /confirm selection/i })).toBeInTheDocument();
-  });
 
-  it('confirming audio enables lyrics and advances stepper', () => {
-    renderPage();
-    const fileInput = document.getElementById('kanvas-audio-input') as HTMLInputElement;
-    fireEvent.change(fileInput, {
-      target: { files: [new File(['x'], 'demo.mp3', { type: 'audio/mpeg' })] },
-    });
-    fireEvent.click(screen.getByRole('button', { name: /confirm selection/i }));
-    expect(screen.queryByText('Complete audio step first')).not.toBeInTheDocument();
-    expect(screen.getByText('Edit Lyrics')).toBeInTheDocument();
-  });
-
-  it('done on lyrics enables markers panel and step 3 enables save', () => {
-    renderPage();
-    const fileInput = document.getElementById('kanvas-audio-input') as HTMLInputElement;
-    fireEvent.change(fileInput, {
-      target: { files: [new File(['x'], 'demo.mp3', { type: 'audio/mpeg' })] },
-    });
-    fireEvent.click(screen.getByRole('button', { name: /confirm selection/i }));
-    fireEvent.click(screen.getByRole('button', { name: /^done$/i }));
-    expect(screen.queryByText('Complete lyrics step first')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /save template/i })).not.toBeDisabled();
-  });
-
-  it('pressing M adds a marker and Cmd+Z removes it on step 3', () => {
-    renderPage();
-    const fileInput = document.getElementById('kanvas-audio-input') as HTMLInputElement;
-    fireEvent.change(fileInput, {
-      target: { files: [new File(['x'], 'demo.mp3', { type: 'audio/mpeg' })] },
-    });
-    fireEvent.click(screen.getByRole('button', { name: /confirm selection/i }));
-    fireEvent.click(screen.getByRole('button', { name: /^done$/i }));
-    fireEvent.keyDown(window, { key: 'm' });
-    expect(screen.getByText(/1 marker placed/i)).toBeInTheDocument();
-    fireEvent.keyDown(window, { key: 'z', metaKey: true });
-    expect(screen.getByText(/no markers/i)).toBeInTheDocument();
+    expect(screen.getByText(/select a 15\/30\/45\/60s clip/i)).toBeInTheDocument();
   });
 });

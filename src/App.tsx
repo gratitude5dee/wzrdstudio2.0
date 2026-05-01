@@ -22,7 +22,7 @@ import { InsufficientCreditsDialog } from "@/components/billing/InsufficientCred
 // after a redeploy/HMR), force a single hard reload so the browser fetches the
 // new asset manifest. Prevents persistent blank screens.
 const RELOAD_FLAG = "__lov_chunk_reloaded__";
-const lazyWithRetry = <T extends { default: React.ComponentType<any> }>(
+const lazyWithRetry = <T extends { default: React.ComponentType<Record<string, never>> }>(
   importer: () => Promise<T>,
 ) =>
   lazy(async () => {
@@ -61,6 +61,8 @@ const Storyboard = lazyWithRetry(() => import("./pages/Storyboard"));
 const ShotEditor = lazyWithRetry(() => import("./pages/ShotEditor"));
 const KanvasPage = lazyWithRetry(() => import("./pages/KanvasPage"));
 const KanvasLyrics = lazyWithRetry(() => import("./pages/KanvasLyrics"));
+const KanvasRemix = lazyWithRetry(() => import("./pages/KanvasRemix"));
+const KanvasRemixJobs = lazyWithRetry(() => import("./pages/KanvasRemixJobs"));
 const AssetsPage = lazyWithRetry(() => import("./pages/AssetsPage"));
 
 const RedirectProjectTimelineAlias = () => {
@@ -272,6 +274,56 @@ const App = () => {
                         <ProtectedRoute>
                           <StudioErrorBoundary fallbackTitle="Lyrics wizard error" fallbackDescription="The Create Template wizard hit an unexpected issue">
                             <KanvasLyrics />
+                          </StudioErrorBoundary>
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path={appRoutes.kanvasLyricsNew}
+                      element={
+                        <ProtectedRoute>
+                          <StudioErrorBoundary fallbackTitle="Lyrics wizard error" fallbackDescription="The Create Template wizard hit an unexpected issue">
+                            <KanvasLyrics />
+                          </StudioErrorBoundary>
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/kanvas/lyrics/templates/:templateId"
+                      element={
+                        <ProtectedRoute>
+                          <StudioErrorBoundary fallbackTitle="Lyrics wizard error" fallbackDescription="The Create Template wizard hit an unexpected issue">
+                            <KanvasLyrics />
+                          </StudioErrorBoundary>
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/kanvas/remix/jobs/:jobId"
+                      element={
+                        <ProtectedRoute>
+                          <StudioErrorBoundary fallbackTitle="Remix jobs error" fallbackDescription="The Remix job view hit an unexpected issue">
+                            <KanvasRemixJobs />
+                          </StudioErrorBoundary>
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path={appRoutes.kanvasRemix}
+                      element={
+                        <ProtectedRoute>
+                          <StudioErrorBoundary fallbackTitle="Remix error" fallbackDescription="The Remix studio hit an unexpected issue">
+                            <KanvasRemix />
+                          </StudioErrorBoundary>
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/kanvas/remix/:templateId"
+                      element={
+                        <ProtectedRoute>
+                          <StudioErrorBoundary fallbackTitle="Remix error" fallbackDescription="The Remix studio hit an unexpected issue">
+                            <KanvasRemix />
                           </StudioErrorBoundary>
                         </ProtectedRoute>
                       }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, HelpCircle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { KanvasLyricsHeader } from '@/components/kanvas-lyrics/KanvasLyricsHeader';
 import { KanvasLyricsFooter } from '@/components/kanvas-lyrics/KanvasLyricsFooter';
@@ -47,6 +47,7 @@ function blocksFromServer(t: KanvasLyricTemplate): LyricBlock[] {
       text: w.text,
       startTime: w.startTimeMs / 1000,
       endTime: w.endTimeMs / 1000,
+      confidence: w.confidence,
     })),
   }));
 }
@@ -61,6 +62,7 @@ function blocksToServer(blocks: LyricBlock[]) {
       text: w.text,
       startTimeMs: Math.round(w.startTime * 1000),
       endTimeMs: Math.round(w.endTime * 1000),
+      ...(typeof w.confidence === 'number' ? { confidence: w.confidence } : {}),
     })),
   }));
 }
@@ -85,10 +87,15 @@ function stepFromStatus(t: KanvasLyricTemplate): WizardStep {
 }
 
 const KanvasLyrics = () => {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { templateId: routeTemplateId } = useParams<{ templateId?: string }>();
+  const [searchParams] = useSearchParams();
   const mode = searchParams.get('mode');
-  const templateIdParam = searchParams.get('templateId');
-  const showWizard = mode === 'new' || !!templateIdParam;
+  const legacyTemplateId = searchParams.get('templateId');
+  const isNewRoute = location.pathname.endsWith('/new');
+  const templateIdParam = routeTemplateId ?? legacyTemplateId;
+  const showWizard = isNewRoute || mode === 'new' || !!templateIdParam;
 
   const [templateId, setTemplateId] = useState<string | null>(templateIdParam);
   const [hydrating, setHydrating] = useState(!!templateIdParam);
@@ -119,7 +126,7 @@ const KanvasLyrics = () => {
   // audio. Re-arms whenever we leave the "new" session.
   const newSessionResetRef = useRef(false);
   useEffect(() => {
-    if (mode !== 'new' || templateIdParam) {
+    if ((!isNewRoute && mode !== 'new') || templateIdParam) {
       newSessionResetRef.current = false;
       return;
     }
@@ -144,7 +151,7 @@ const KanvasLyrics = () => {
     setTranscribeStatus('idle');
     setHydrating(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, templateIdParam]);
+  }, [isNewRoute, mode, templateIdParam]);
 
   // Hydrate from server when templateId is in URL.
   useEffect(() => {
@@ -414,7 +421,7 @@ const KanvasLyrics = () => {
         waveformPeaks: audio.peaks,
       });
       setTemplateId(draft.id);
-      setSearchParams({ templateId: draft.id }, { replace: true });
+      navigate(`/kanvas/lyrics/templates/${draft.id}`, { replace: true });
 
       // 4) Mark ready and kick transcription. Re-point the engine at the
       // hosted clip so future steps still play after object URL is revoked.
@@ -449,7 +456,7 @@ const KanvasLyrics = () => {
       toast.error(e instanceof Error ? e.message : 'Failed to prepare clip', { id: toastId });
       setTranscribeStatus('idle');
     }
-  }, [audio.selectionStart, audio.selectionDuration, audio.peaks, engine, engineLoad, runTranscribe, setSearchParams]);
+  }, [audio.selectionStart, audio.selectionDuration, audio.peaks, engine, engineLoad, navigate, runTranscribe]);
 
   const handleAudioReset = useCallback(() => {
     if (lastUrlRef.current) { URL.revokeObjectURL(lastUrlRef.current); lastUrlRef.current = null; }
@@ -580,13 +587,13 @@ const KanvasLyrics = () => {
       });
       await finalizeTemplate(templateId);
       toast.success('Template saved');
-      setSearchParams({});
+      navigate(`/kanvas/lyrics?highlight=${templateId}`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to save');
     } finally {
       setSaving(false);
     }
-  }, [templateId, lyrics, markers, setSearchParams]);
+  }, [templateId, lyrics, markers, navigate]);
 
   const wordCount = useMemo(() => lyrics.reduce((s, b) => s + b.words.length, 0), [lyrics]);
 
@@ -595,8 +602,8 @@ const KanvasLyrics = () => {
       <div className="min-h-screen bg-[#050506] text-white">
         <KanvasLyricsHeader />
         <TemplatesLanding
-          onCreate={() => setSearchParams({ mode: 'new' })}
-          onOpen={(t) => setSearchParams({ templateId: t.id })}
+          onCreate={() => navigate('/kanvas/lyrics/new')}
+          onOpen={(t) => navigate(`/kanvas/lyrics/templates/${t.id}`)}
         />
       </div>
     );
@@ -620,13 +627,13 @@ const KanvasLyrics = () => {
       <div className="px-6 pb-8 pt-10 text-center">
         <button
           type="button"
-          onClick={() => setSearchParams({})}
+          onClick={() => navigate('/kanvas/lyrics')}
           className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-zinc-300 transition-colors hover:bg-white/10"
         >
           <ArrowLeft className="h-3 w-3" />
           Back to templates
         </button>
-        <h1 className="bg-gradient-to-r from-[#fdba74] via-white to-[#f97316] bg-clip-text text-5xl font-black tracking-[0.16em] text-transparent md:text-7xl">
+        <h1 className="bg-gradient-to-r from-cyan-300 via-sky-300 to-blue-500 bg-clip-text text-5xl font-black tracking-[0.16em] text-transparent md:text-7xl">
           CREATE TEMPLATE
         </h1>
         <p className="mx-auto mt-3 max-w-xl text-xs uppercase tracking-[0.32em] text-zinc-500">

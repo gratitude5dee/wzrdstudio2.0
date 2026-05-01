@@ -4,6 +4,7 @@ import { formatDistanceToNow } from 'date-fns';
 import {
   Archive,
   CheckCircle2,
+  Clapperboard,
   Loader2,
   Music2,
   Plus,
@@ -106,10 +107,10 @@ export function TemplatesLanding({ onCreate, onOpen }: TemplatesLandingProps) {
     <main className="mx-auto max-w-[1400px] px-6 pb-24 pt-10">
       {/* Hero */}
       <div className="text-center">
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#f97316]/20 bg-[#f97316]/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-[#f97316]">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-300">
           <Sparkles className="h-3 w-3" /> Lyric Templates
         </span>
-        <h1 className="mt-4 bg-gradient-to-r from-[#fdba74] via-white to-[#f97316] bg-clip-text text-5xl font-black tracking-[0.16em] text-transparent md:text-6xl">
+        <h1 className="mt-4 bg-gradient-to-r from-cyan-300 via-sky-300 to-blue-500 bg-clip-text text-5xl font-black tracking-[0.16em] text-transparent md:text-6xl">
           YOUR TEMPLATES
         </h1>
         <p className="mx-auto mt-3 max-w-xl text-xs uppercase tracking-[0.32em] text-zinc-500">
@@ -122,19 +123,19 @@ export function TemplatesLanding({ onCreate, onOpen }: TemplatesLandingProps) {
         <button
           type="button"
           onClick={onCreate}
-          className="group relative overflow-hidden rounded-2xl border border-[#f97316]/30 bg-gradient-to-br from-[#f97316]/10 via-[#0A0A0A] to-[#0A0A0A] p-6 text-left transition-all hover:border-[#f97316]/60 hover:shadow-[0_0_32px_rgba(249,115,22,0.18)]"
+          className="group relative overflow-hidden rounded-2xl border border-cyan-400/30 bg-gradient-to-br from-cyan-400/10 via-[#0A0A0A] to-[#0A0A0A] p-6 text-left transition-all hover:border-cyan-400/60 hover:shadow-[0_0_32px_rgba(34,211,238,0.18)]"
         >
           <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f97316]/15 ring-1 ring-[#f97316]/30">
-              <Plus className="h-6 w-6 text-[#f97316]" />
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-400/15 ring-1 ring-cyan-400/30">
+              <Plus className="h-6 w-6 text-cyan-300" />
             </div>
             <div className="flex-1">
               <h3 className="text-lg font-bold text-white">Create new template</h3>
               <p className="mt-1 text-xs text-zinc-400">
-                Upload a song, trim a 15–30s clip, sync the lyrics, and place cut markers.
+                Upload a song, trim a 15/30/45/60s clip, sync the lyrics, and place cut markers.
               </p>
             </div>
-            <span className="hidden rounded-full bg-[#f97316] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black shadow-[0_0_20px_rgba(249,115,22,0.45)] transition-transform group-hover:scale-105 md:inline-block">
+            <span className="hidden rounded-full bg-cyan-400 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-black shadow-[0_0_20px_rgba(34,211,238,0.35)] transition-transform group-hover:scale-105 md:inline-block">
               Start
             </span>
           </div>
@@ -187,10 +188,11 @@ export function TemplatesLanding({ onCreate, onOpen }: TemplatesLandingProps) {
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {filtered.map((t) => (
-              <TemplateCard
+          <TemplateCard
                 key={t.id}
                 template={t}
                 onOpen={() => onOpen(t)}
+                onOpenRemix={() => navigate(`/kanvas/remix/${t.id}`)}
                 onArchive={() => handleArchive(t)}
                 archiving={archivingId === t.id}
               />
@@ -206,7 +208,7 @@ export function TemplatesLanding({ onCreate, onOpen }: TemplatesLandingProps) {
         </h2>
         <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
           {[
-            { n: 1, title: 'Upload audio', body: 'Drop a 15–30 second clip from your song.' },
+            { n: 1, title: 'Upload audio', body: 'Drop a clip from your song and choose 15/30/45/60 seconds.' },
             { n: 2, title: 'Sync lyrics', body: 'AI transcribes and aligns words to the beat.' },
             { n: 3, title: 'Place markers', body: 'Tap M to mark cut points across the clip.' },
           ].map((s) => (
@@ -233,11 +235,13 @@ export function TemplatesLanding({ onCreate, onOpen }: TemplatesLandingProps) {
 function TemplateCard({
   template,
   onOpen,
+  onOpenRemix,
   onArchive,
   archiving,
 }: {
   template: KanvasLyricTemplate;
   onOpen: () => void;
+  onOpenRemix: () => void;
   onArchive: () => void;
   archiving: boolean;
 }) {
@@ -311,6 +315,17 @@ function TemplateCard({
           >
             {template.status === 'saved' ? 'Open' : 'Continue'}
           </button>
+          {template.status === 'saved' && (
+            <button
+              type="button"
+              onClick={onOpenRemix}
+              className="inline-flex h-7 items-center gap-1 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2.5 text-[10px] font-bold uppercase tracking-[0.16em] text-cyan-200 transition-colors hover:bg-cyan-400/15"
+              title="Open in Remix"
+            >
+              <Clapperboard className="h-3 w-3" />
+              Remix
+            </button>
+          )}
           <button
             type="button"
             onClick={onArchive}
