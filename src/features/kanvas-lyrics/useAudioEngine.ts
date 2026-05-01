@@ -3,6 +3,7 @@
 // clip-relative time updated on every animation frame for smooth UI.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 export interface AudioEngine {
   isReady: boolean;
@@ -31,11 +32,12 @@ export function useAudioEngine(): AudioEngine {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
-  // Lazily create the audio element
+  // Lazily create the audio element. Do NOT set crossOrigin here — it's
+  // applied per-load (only for remote http(s) URLs). Setting crossOrigin
+  // on blob: URLs causes silent load failures in Chromium.
   if (!audioRef.current && typeof Audio !== 'undefined') {
     audioRef.current = new Audio();
     audioRef.current.preload = 'auto';
-    audioRef.current.crossOrigin = 'anonymous';
   }
 
   const stopRaf = useCallback(() => {
@@ -90,12 +92,22 @@ export function useAudioEngine(): AudioEngine {
         setCurrentTime(0);
       }
     };
+    const onError = () => {
+      const code = a.error?.code;
+      const msg = a.error?.message;
+      console.error('[audio] media error', { code, msg, src: a.currentSrc });
+      setIsReady(false);
+      setIsPlaying(false);
+      stopRaf();
+      toast.error(`Audio playback failed${code ? ` (code ${code})` : ''}`);
+    };
 
     a.addEventListener('loadedmetadata', onLoaded);
     a.addEventListener('canplay', onLoaded);
     a.addEventListener('play', onPlay);
     a.addEventListener('pause', onPause);
     a.addEventListener('ended', onEnded);
+    a.addEventListener('error', onError);
 
     return () => {
       a.removeEventListener('loadedmetadata', onLoaded);
@@ -103,6 +115,7 @@ export function useAudioEngine(): AudioEngine {
       a.removeEventListener('play', onPlay);
       a.removeEventListener('pause', onPause);
       a.removeEventListener('ended', onEnded);
+      a.removeEventListener('error', onError);
       stopRaf();
     };
   }, [tick, stopRaf]);
@@ -117,8 +130,16 @@ export function useAudioEngine(): AudioEngine {
     if (!url) {
       a.pause();
       a.removeAttribute('src');
+      a.removeAttribute('crossorigin');
       a.load();
       return;
+    }
+    // Apply crossOrigin only for remote http(s) URLs. blob: and data: URLs
+    // must NOT have crossOrigin set or some browsers refuse to load them.
+    if (/^https?:/i.test(url)) {
+      a.crossOrigin = 'anonymous';
+    } else {
+      a.removeAttribute('crossorigin');
     }
     a.src = url;
     a.load();
