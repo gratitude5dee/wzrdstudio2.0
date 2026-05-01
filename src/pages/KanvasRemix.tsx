@@ -143,6 +143,8 @@ const KanvasRemix = () => {
 
   // Build timeline slots when template changes
   const durationMs = template?.selectionDurationMs ?? 15000;
+  const hasAutoPopulated = useRef(false);
+
   useEffect(() => {
     hasAutoPopulated.current = false;
     const markers = template?.cutMarkers ?? [];
@@ -151,7 +153,6 @@ const KanvasRemix = () => {
   }, [template, durationMs]);
 
   // Auto-populate empty timeline slots with shuffled clips when assets load
-  const hasAutoPopulated = useRef(false);
   useEffect(() => {
     if (hasAutoPopulated.current) return;
     if (assets.length === 0 || timelineSlots.length === 0) return;
