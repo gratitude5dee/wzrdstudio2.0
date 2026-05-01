@@ -674,7 +674,7 @@ const KanvasRemix = () => {
           </div>
 
           {/* Lag disclaimer */}
-          <div className="mx-auto mb-2 flex w-full max-w-[900px] items-center justify-center gap-2 rounded-lg border border-amber-400/30 bg-amber-400/10 px-4 py-2 text-xs font-bold text-amber-300">
+          <div className="mx-auto mb-1 flex w-full items-center justify-center gap-2 rounded-lg border border-amber-400/30 bg-amber-400/10 px-4 py-1.5 text-xs font-bold text-amber-300">
             <Info className="h-3.5 w-3.5" />
             The preview may lag during playback — don't worry, your export will be a perfectly smooth HD video!
           </div>
