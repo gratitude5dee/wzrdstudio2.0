@@ -33,6 +33,15 @@ export interface UploadedTemplateAudio {
 }
 
 const AUDIO_BUCKET = 'project-assets';
+const MAX_AUDIO_BYTES = 50 * 1024 * 1024; // 50 MB — matches storage bucket limit
+const ACCEPTED_AUDIO_PREFIXES = ['audio/'];
+const ACCEPTED_AUDIO_EXTS = ['mp3', 'wav', 'm4a', 'mp4', 'aac', 'flac', 'ogg', 'oga'];
+
+function looksLikeAudio(file: File) {
+  if (file.type && ACCEPTED_AUDIO_PREFIXES.some((p) => file.type.startsWith(p))) return true;
+  const ext = file.name.split('.').pop()?.toLowerCase();
+  return !!ext && ACCEPTED_AUDIO_EXTS.includes(ext);
+}
 
 /**
  * Upload an audio file directly from the browser to Storage, then register a
@@ -44,6 +53,14 @@ export async function uploadTemplateAudio(
   file: File,
   projectId?: string
 ): Promise<UploadedTemplateAudio> {
+  if (!looksLikeAudio(file)) {
+    throw new Error('Unsupported file type. Use MP3, WAV, M4A, AAC, FLAC, or OGG.');
+  }
+  if (file.size > MAX_AUDIO_BYTES) {
+    const mb = (file.size / (1024 * 1024)).toFixed(1);
+    throw new Error(`Audio file is too large (${mb} MB). Max 50 MB.`);
+  }
+
   const { data: { user }, error: userErr } = await supabase.auth.getUser();
   if (userErr || !user) throw new Error('You must be signed in to upload audio');
 
