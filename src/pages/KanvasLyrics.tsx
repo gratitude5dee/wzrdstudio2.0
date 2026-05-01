@@ -8,6 +8,7 @@ import { KanvasLyricsFooter } from '@/components/kanvas-lyrics/KanvasLyricsFoote
 import { AudioPanel } from '@/components/kanvas-lyrics/AudioPanel';
 import { LyricsPanel } from '@/components/kanvas-lyrics/LyricsPanel';
 import { MarkersPanel } from '@/components/kanvas-lyrics/MarkersPanel';
+import { VisualizePanel } from '@/components/kanvas-lyrics/VisualizePanel';
 import { TemplatesLanding } from '@/components/kanvas-lyrics/TemplatesLanding';
 import { INITIAL_AUDIO } from '@/components/kanvas-lyrics/constants';
 import type {
@@ -32,7 +33,7 @@ import { useAudioEngine } from '@/features/kanvas-lyrics/useAudioEngine';
 import { decodeWaveform } from '@/features/kanvas-lyrics/decodeWaveform';
 import { supabase } from '@/integrations/supabase/client';
 
-type ClipDurationMs = 15000 | 20000 | 25000 | 30000;
+type ClipDurationMs = 15000 | 30000 | 45000 | 60000;
 
 function blocksFromServer(t: KanvasLyricTemplate): LyricBlock[] {
   return t.lyricBlocks.map((b, i) => ({
@@ -69,8 +70,9 @@ function markersToServer(markers: CutMarker[]) {
 
 function stepFromStatus(t: KanvasLyricTemplate): WizardStep {
   switch (t.status) {
-    case 'markers_ready':
     case 'saved':
+      return 4;
+    case 'markers_ready':
       return 3;
     case 'lyrics_ready':
     case 'lyrics_processing':
@@ -136,6 +138,8 @@ const KanvasLyrics = () => {
             ? 'lyrics_edit'
             : t.status === 'lyrics_ready'
             ? 'lyrics_complete'
+            : t.status === 'saved'
+            ? 'visualize'
             : 'markers_edit'
         );
         if (t.status === 'lyrics_processing') setTranscribeStatus('transcribing');
