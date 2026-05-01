@@ -31,7 +31,6 @@ import { appRoutes } from '@/lib/routes';
 import { getTemplate, listTemplates } from '@/features/kanvas-lyrics/service';
 import type { KanvasLyricTemplate } from '@/features/kanvas-lyrics/types';
 import {
-  createRemixJob,
   listFootageAssets,
   listFootageCategories,
   listLyricStyles,
@@ -49,6 +48,7 @@ import {
 } from '@/lib/remix-utils';
 import { LyricRemixComposition } from '@/components/remix/LyricRemixComposition';
 import { KanvasLyricsHeader } from '@/components/kanvas-lyrics/KanvasLyricsHeader';
+import { ExportModal } from '@/features/remix/ExportModal';
 
 type RatioFilter = 'all' | AspectRatio;
 type SortKey = 'newest' | 'oldest' | 'shortest' | 'longest';
@@ -83,8 +83,9 @@ const KanvasRemix = () => {
   const [quantity, setQuantity] = useState(1);
   const [shuffleEach, setShuffleEach] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [exporting, setExporting] = useState(false);
+  const exporting = exportModalOpen;
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
   const [controlsOpen, setControlsOpen] = useState(true);
   const [timelineSlots, setTimelineSlots] = useState<RemixTimelineSlot[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -263,32 +264,28 @@ const KanvasRemix = () => {
     return () => clearInterval(interval);
   }, [template]);
 
-  const startExport = async () => {
+  const startExport = () => {
     if (!template) return;
-    setExporting(true);
-    try {
-      const job = await createRemixJob({
-        templateId: template.id,
-        durationMs,
-        quantity,
-        lyricStyleId: selectedStyleId,
-        scale,
-        noCuts,
-        clipRatio,
-        filter: tagFilter,
-        shuffleEach,
-        clipIds: timelineSlots.filter((s) => s.clipId).map((s) => s.clipId!),
-        aspectRatio,
-        timelineClipIds: timelineSlots.map((s) => s.clipId),
-      });
-      toast.success('Remix export started');
-      navigate(`/kanvas/remix/jobs/${job.job.id}`);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to start export');
-    } finally {
-      setExporting(false);
-      setConfirmOpen(false);
-    }
+    // Pause the preview player before starting export
+    playerRef.current?.pause();
+    setIsPlaying(false);
+    setConfirmOpen(false);
+    setExportModalOpen(true);
+  };
+
+  const exportOptions = useMemo(() => ({
+    width: aspectRatio === '9:16' ? 1080 : 1920,
+    height: aspectRatio === '9:16' ? 1920 : 1080,
+    durationMs,
+    fps: 30,
+    audioUrl,
+    captions,
+    lyricStyleId: selectedStyleId,
+    scale,
+    backgroundClips,
+    cutMarkers: template?.cutMarkers ?? [],
+    noCuts,
+  }), [aspectRatio, durationMs, audioUrl, captions, selectedStyleId, scale, backgroundClips, template?.cutMarkers, noCuts]);
   };
 
   if (loading) {
@@ -767,6 +764,16 @@ const KanvasRemix = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Canvas export modal */}
+      {template && (
+        <ExportModal
+          open={exportModalOpen}
+          onClose={() => setExportModalOpen(false)}
+          exportOptions={exportOptions}
+          templateTitle={template.title}
+        />
       )}
 
       <button
