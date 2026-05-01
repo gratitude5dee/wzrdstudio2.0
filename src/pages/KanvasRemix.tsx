@@ -716,7 +716,7 @@ const KanvasRemix = () => {
                         {clip.posterUrl ? (
                           <img src={clip.posterUrl} alt="" className="h-full w-full object-cover" />
                         ) : (
-                          <video src={clip.url} muted className="h-full w-full object-cover" />
+                          <video src={`${clip.url}#t=0.5`} muted preload="metadata" playsInline className="h-full w-full object-cover" />
                         )}
                         <span className="absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded bg-black/70 text-[10px] font-bold text-[#f97316]">
                           {slot.slotIndex + 1}
