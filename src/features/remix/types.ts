@@ -73,6 +73,8 @@ export interface CreateRemixJobInput {
   filter: string;
   shuffleEach: boolean;
   clipIds?: string[];
+  aspectRatio?: AspectRatio;
+  timelineClipIds?: Array<string | null>;
 }
 
 export interface FootageFilters {
@@ -80,4 +82,12 @@ export interface FootageFilters {
   ratio?: 'all' | AspectRatio;
   filter?: string;
   sort?: 'newest' | 'oldest' | 'shortest' | 'longest';
+}
+
+// Timeline slot model
+export interface RemixTimelineSlot {
+  slotIndex: number;
+  startMs: number;
+  endMs: number;
+  clipId: string | null;
 }

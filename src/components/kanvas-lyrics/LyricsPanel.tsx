@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { Loader2, Pause, Play, Type } from 'lucide-react';
+import { Check, Loader2, Pause, Play, Type } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { WizardPanel } from './WizardPanel';
 import type { LyricBlock, TranscribeStatus, WizardStep } from './types';
@@ -61,20 +61,23 @@ export function LyricsPanel({
   const disabled = currentStep < 2;
   const isActive = currentStep === 2;
   const isComplete = currentStep > 2;
+  const [showEditor, setShowEditor] = useState(false);
 
   const wordCount = blocks.reduce((sum, b) => sum + b.words.length, 0);
-  const blockCount = blocks.length;
 
   const isProcessing =
     transcribeStatus === 'uploading' ||
     transcribeStatus === 'transcribing' ||
     transcribeStatus === 'parsing';
 
+  // If complete, show success state; if user clicks edit, show editor
+  const showSuccessState = isComplete && !showEditor && blocks.length > 0;
+
   return (
     <WizardPanel
       stepNumber={2}
       title="Lyrics"
-      subtitle="AI transcription — any language"
+      subtitle={isComplete ? 'Transcription complete' : 'AI transcription — any language'}
       icon={Type}
       active={isActive}
       complete={isComplete}
@@ -82,15 +85,6 @@ export function LyricsPanel({
       disabledMessage="Complete audio step first"
     >
       <div className="flex h-full flex-col gap-4">
-        <div>
-          <p className="text-sm font-semibold text-white">Edit Lyrics</p>
-          {!isProcessing && transcribeStatus !== 'failed' && (
-            <p className="text-[11px] text-slate-500">
-              {wordCount} words • {blockCount} block{blockCount === 1 ? '' : 's'}
-            </p>
-          )}
-        </div>
-
         {/* Processing skeleton */}
         {isProcessing && (
           <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-xl bg-[#0F1116] p-6 ring-1 ring-white/5">
@@ -158,9 +152,42 @@ export function LyricsPanel({
           </div>
         )}
 
+        {/* Success state (when complete) */}
+        {showSuccessState && (
+          <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-400/15 ring-1 ring-emerald-400/30">
+              <Check className="h-6 w-6 text-emerald-300" />
+            </div>
+            <div>
+              <h4 className="text-lg font-bold text-white">Lyrics Transcribed</h4>
+              <p className="mt-1 text-xs text-slate-400">
+                Your lyrics have been automatically transcribed<br />and are ready to preview
+              </p>
+            </div>
+            <div className="flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-1.5 text-xs font-bold text-emerald-300">
+              <Check className="h-3.5 w-3.5" />
+              READY FOR PREVIEW
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowEditor(true)}
+              className="mt-2 text-[11px] text-slate-500 underline-offset-2 transition-colors hover:text-cyan-300 hover:underline"
+            >
+              Edit lyrics
+            </button>
+          </div>
+        )}
+
         {/* Ready: editor */}
-        {!isProcessing && transcribeStatus !== 'failed' && (
+        {!isProcessing && transcribeStatus !== 'failed' && !showSuccessState && (
           <>
+            <div>
+              <p className="text-sm font-semibold text-white">Edit Lyrics</p>
+              <p className="text-[11px] text-slate-500">
+                {wordCount} words • {blocks.length} block{blocks.length === 1 ? '' : 's'}
+              </p>
+            </div>
+
             <div className="rounded-md border border-[#f97316]/15 bg-[#f97316]/[0.04] px-3 py-2 text-[11px] text-[#fb923c]/85">
               Perfect once — saved for all future generations
             </div>
@@ -244,7 +271,10 @@ export function LyricsPanel({
               </div>
               <button
                 type="button"
-                onClick={onDone}
+                onClick={() => {
+                  setShowEditor(false);
+                  onDone();
+                }}
                 disabled={blocks.length === 0}
                 className="rounded-full bg-gradient-to-r from-[#f97316] to-[#fb923c] px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-black shadow-[0_0_18px_rgba(249,115,22,0.4)] transition-transform hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
               >

@@ -1,5 +1,5 @@
 import type { CutMarker, LyricBlock } from '@/features/kanvas-lyrics/types';
-import type { FootageAsset } from '@/features/remix/types';
+import type { FootageAsset, RemixTimelineSlot } from '@/features/remix/types';
 
 export interface LyricCaption {
   text: string;
@@ -132,4 +132,73 @@ export function seededShuffle<T>(items: T[], seed = 1): T[] {
     [out[i], out[j]] = [out[j], out[i]];
   }
   return out;
+}
+
+// ── Timeline slot utilities ──────────────────────────────────────
+
+/**
+ * Build timeline slots from duration and cut markers.
+ * Each slot is ~1 second, split at marker boundaries.
+ * Returns `ceil(durationMs / 1000)` slots.
+ */
+export function buildRemixTimelineSlots(
+  durationMs: number,
+  cutMarkers: Array<{ timestampMs: number }> = []
+): RemixTimelineSlot[] {
+  const totalSlots = Math.max(1, Math.ceil(durationMs / 1000));
+  const slotDurationMs = durationMs / totalSlots;
+  const slots: RemixTimelineSlot[] = [];
+  for (let i = 0; i < totalSlots; i++) {
+    slots.push({
+      slotIndex: i,
+      startMs: Math.round(i * slotDurationMs),
+      endMs: Math.round((i + 1) * slotDurationMs),
+      clipId: null,
+    });
+  }
+  return slots;
+}
+
+/** Assign a clip to a specific slot (immutable). */
+export function assignClipToSlot(
+  slots: RemixTimelineSlot[],
+  slotIndex: number,
+  clipId: string | null
+): RemixTimelineSlot[] {
+  return slots.map((s) =>
+    s.slotIndex === slotIndex ? { ...s, clipId } : s
+  );
+}
+
+/** Swap clips between two slots (immutable). */
+export function moveTimelineClip(
+  slots: RemixTimelineSlot[],
+  fromIndex: number,
+  toIndex: number
+): RemixTimelineSlot[] {
+  const fromClip = slots.find((s) => s.slotIndex === fromIndex)?.clipId ?? null;
+  const toClip = slots.find((s) => s.slotIndex === toIndex)?.clipId ?? null;
+  return slots.map((s) => {
+    if (s.slotIndex === fromIndex) return { ...s, clipId: toClip };
+    if (s.slotIndex === toIndex) return { ...s, clipId: fromClip };
+    return s;
+  });
+}
+
+/** Find the nearest marker within a threshold. Returns the marker or null. */
+export function getNearestMarker<T extends { timestampMs: number }>(
+  markers: T[],
+  timestampMs: number,
+  thresholdMs = 500
+): T | null {
+  let nearest: T | null = null;
+  let minDist = Infinity;
+  for (const m of markers) {
+    const d = Math.abs(m.timestampMs - timestampMs);
+    if (d < minDist) {
+      nearest = m;
+      minDist = d;
+    }
+  }
+  return nearest && minDist <= thresholdMs ? nearest : null;
 }
