@@ -16,7 +16,7 @@ import { BaseNode } from './BaseNode';
 import { NodeStatusBadge } from '../status/NodeStatusBadge';
 import { ShotCameraControl } from './ShotCameraControl';
 import { cn } from '@/lib/utils';
-import type { Port, PortPosition } from '@/types/computeFlow';
+import type { NodeDefinition, Port, PortPosition } from '@/types/computeFlow';
 import {
   getModelSummaryLabel,
   getNodeModelSelection,
@@ -33,6 +33,19 @@ const checkerboardStyle = {
   backgroundColor: '#222222',
 } as const;
 
+const IMAGE_MODEL_WORKFLOW_TYPES = ['text-to-image', 'image-to-image', 'image-edit'];
+
+type ImageNodeData = Partial<Pick<NodeDefinition, 'label' | 'params' | 'preview' | 'status' | 'progress' | 'error' | 'inputs' | 'outputs'>> & {
+  incomingImageSources?: Array<{ url: string; name: string }>;
+  onGenerate?: () => void;
+  onModelSelectionChange?: (selection: { auto: boolean; selectedModelIds: string[]; useMultipleModels: boolean }) => void;
+  onOpenConnectionMenu?: (sourcePortId: string, rect?: DOMRect | null) => void;
+  onSelectNode?: (nodeId: string) => void;
+  onUpdateParams?: (paramUpdates: Record<string, unknown>) => void;
+  popoverBoundary?: HTMLElement | null;
+  popoverContainer?: HTMLElement | null;
+};
+
 const portPositionToReactFlow = (position: PortPosition) => {
   switch (position) {
     case 'right':
@@ -48,7 +61,7 @@ const portPositionToReactFlow = (position: PortPosition) => {
 };
 
 export const ReactFlowImageNode = memo(({ data, id, selected }: NodeProps) => {
-  const nodeData = (data as any) || {};
+  const nodeData = (data ?? {}) as ImageNodeData;
   const status = nodeData?.status || 'idle';
   const progress = nodeData?.progress || 0;
   const error = nodeData?.error;
@@ -66,7 +79,7 @@ export const ReactFlowImageNode = memo(({ data, id, selected }: NodeProps) => {
   const modelLabel = getModelSummaryLabel(modelSelection);
   const title = nodeData?.label || 'Image';
   const referenceImages = (nodeData?.incomingImageSources as Array<{ url: string; name: string }> | undefined) ?? [];
-  const aspectRatio = nodeData?.params?.aspectRatio ?? 'Auto';
+  const aspectRatio = typeof nodeData?.params?.aspectRatio === 'string' ? nodeData.params.aspectRatio : 'Auto';
   const shot = (nodeData?.params?.shot ?? {}) as ShotControl;
 
   const handleDownload = () => {
@@ -113,6 +126,7 @@ export const ReactFlowImageNode = memo(({ data, id, selected }: NodeProps) => {
       hoverMenu={{
         mediaType: 'image',
         modelSelection,
+        workflowTypes: IMAGE_MODEL_WORKFLOW_TYPES,
         aspectRatioLabel: aspectRatio,
         onModelSelectionChange: nodeData?.onModelSelectionChange,
         popoverBoundary: nodeData?.popoverBoundary,

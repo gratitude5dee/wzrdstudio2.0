@@ -117,6 +117,7 @@ export const ComputeNode = memo(({ id, data, selected }: NodeProps) => {
   const { models: catalogModels } = useCatalogModels({
     mediaType,
     provider: preferredProvider,
+    workflowTypes: modelWorkflowTypes,
     studioSurface: mediaType ? `studio:${mediaType}` : undefined,
     includeAdvanced: true,
     autoFetch: Boolean(mediaType),

@@ -22,12 +22,22 @@ export interface CatalogQueryFilters {
   category?: string;
   provider?: string;
   workflowType?: string;
+  workflowTypes?: string[];
   studioSurface?: CatalogSurface;
   kanvasMode?: CatalogKanvasMode;
   search?: string;
   capabilities?: string[];
+  limit?: number;
+  offset?: number;
+  scanLimit?: number;
   enabledOnly?: boolean;
   includeAdvanced?: boolean;
+}
+
+export interface CatalogListResult {
+  models: CatalogModel[];
+  total: number;
+  scanned: number;
 }
 
 function createCatalogClient() {
@@ -160,20 +170,28 @@ function matchesSearch(model: CatalogModel, search: string | undefined): boolean
     return true;
   }
 
-  const needle = search.toLowerCase();
-  return [
+  const needle = search.toLowerCase().trim();
+  if (!needle) {
+    return true;
+  }
+
+  const haystack = [
     model.id,
+    model.endpointId,
     model.name,
     model.description,
     model.category,
     model.provider,
     model.providerLabel,
+    model.pricingText,
     model.vendor ?? "",
     model.family ?? "",
     model.tier ?? "",
     ...model.tags,
     ...model.aliases,
-  ].some((value) => value.toLowerCase().includes(needle));
+  ].join(" ").toLowerCase();
+  const tokens = needle.split(/\s+/).filter(Boolean);
+  return haystack.includes(needle) || tokens.every((token) => haystack.includes(token));
 }
 
 function matchesCapabilities(model: CatalogModel, capabilities: string[] | undefined): boolean {
@@ -184,7 +202,15 @@ function matchesCapabilities(model: CatalogModel, capabilities: string[] | undef
   return capabilities.every((capability) => model.supports.includes(capability));
 }
 
-export async function listCatalogModels(filters: CatalogQueryFilters = {}): Promise<CatalogModel[]> {
+function clampPositiveInteger(value: number | undefined, fallback: number, max: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return Math.min(max, Math.max(1, Math.floor(value)));
+}
+
+export async function listCatalogModelsPage(filters: CatalogQueryFilters = {}): Promise<CatalogListResult> {
   const client = createCatalogClient();
   let query = client.from("ai_model_catalog").select("*");
 
@@ -212,6 +238,9 @@ export async function listCatalogModels(filters: CatalogQueryFilters = {}): Prom
   if (filters.workflowType) {
     query = query.eq("workflow_type", filters.workflowType);
   }
+  if (filters.workflowTypes?.length) {
+    query = query.in("workflow_type", filters.workflowTypes);
+  }
   if (filters.studioSurface) {
     query = query.contains("studio_surfaces", [filters.studioSurface]);
   }
@@ -219,20 +248,39 @@ export async function listCatalogModels(filters: CatalogQueryFilters = {}): Prom
     query = query.contains("kanvas_modes", [filters.kanvasMode]);
   }
 
+  const scanLimit = clampPositiveInteger(filters.scanLimit, 2000, 2000);
   const { data, error } = await query
     .order("is_default", { ascending: false })
     .order("default_rank", { ascending: true })
     .order("sort_rank", { ascending: true })
-    .order("name", { ascending: true });
+    .order("name", { ascending: true })
+    .range(0, scanLimit - 1);
 
   if (error) {
     throw new Error(`Failed to query ai_model_catalog: ${error.message}`);
   }
 
-  return (data ?? [])
+  const filtered = (data ?? [])
     .map((row) => normalizeCatalogModel(row as QueryableCatalogRow))
     .filter((model) => matchesSearch(model, filters.search))
     .filter((model) => matchesCapabilities(model, filters.capabilities));
+  const offset = typeof filters.offset === "number" && Number.isFinite(filters.offset)
+    ? Math.max(0, Math.floor(filters.offset))
+    : 0;
+  const limit = typeof filters.limit === "number" && Number.isFinite(filters.limit)
+    ? Math.max(1, Math.floor(filters.limit))
+    : undefined;
+
+  return {
+    models: limit ? filtered.slice(offset, offset + limit) : filtered.slice(offset),
+    total: filtered.length,
+    scanned: data?.length ?? 0,
+  };
+}
+
+export async function listCatalogModels(filters: CatalogQueryFilters = {}): Promise<CatalogModel[]> {
+  const result = await listCatalogModelsPage(filters);
+  return result.models;
 }
 
 export async function getCatalogModelById(

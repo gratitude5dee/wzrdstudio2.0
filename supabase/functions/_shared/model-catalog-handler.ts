@@ -1,5 +1,6 @@
 import {
   getCatalogModelById,
+  listCatalogModelsPage,
   listCatalogModels,
   toKanvasCatalogModel,
   toStudioCatalogModel,
@@ -31,6 +32,36 @@ function parseParams(url: URL, body: Record<string, unknown> | null) {
     }
     return raw === "true" || raw === "1";
   };
+  const getNumber = (key: string): number | undefined => {
+    const raw =
+      url.searchParams.get(key) ??
+      params?.get(key) ??
+      (typeof body?.[key] === "number" ? String(body[key]) : null) ??
+      (typeof body?.[key] === "string" ? String(body[key]) : null);
+    if (raw === null) {
+      return undefined;
+    }
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  };
+  const getStringArray = (key: string): string[] => {
+    const directValues = url.searchParams.getAll(key);
+    if (directValues.length > 0) {
+      return directValues.flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
+    }
+    const paramsValues = params?.getAll(key) ?? [];
+    if (paramsValues.length > 0) {
+      return paramsValues.flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
+    }
+    const bodyValue = body?.[key];
+    if (Array.isArray(bodyValue)) {
+      return bodyValue.map((value) => String(value).trim()).filter(Boolean);
+    }
+    if (typeof bodyValue === "string") {
+      return bodyValue.split(",").map((value) => value.trim()).filter(Boolean);
+    }
+    return [];
+  };
 
   const capabilities =
     url.searchParams.getAll("capabilities").length > 0
@@ -47,8 +78,11 @@ function parseParams(url: URL, body: Record<string, unknown> | null) {
     uiGroup: get("ui_group"),
     provider: get("provider"),
     workflowType: get("workflow_type"),
+    workflowTypes: getStringArray("workflow_types"),
     studioSurface: get("studio_surface") as CatalogSurface | null,
     search: get("search"),
+    limit: getNumber("limit"),
+    offset: getNumber("offset"),
     modelId: get("id"),
     studio: get("studio"),
     kanvasStudio: get("kanvas_studio") as KanvasStudio | null,
@@ -147,10 +181,13 @@ export async function handleModelCatalogRequest(req: Request): Promise<Response>
       studio,
       provider,
       workflowType,
+      workflowTypes,
       studioSurface,
       kanvasStudio,
       kanvasMode,
       includeAdvanced,
+      limit,
+      offset,
       capabilities,
     } = parseParams(url, body);
 
@@ -208,22 +245,26 @@ export async function handleModelCatalogRequest(req: Request): Promise<Response>
     }
 
     const effectiveUiGroup = uiGroup ?? (includeAdvanced ? undefined : "generation");
-    const models = (await listCatalogModels({
+    const workflowFilter = workflowTypes.length > 0 ? { workflowTypes } : { workflowType: workflowType ?? undefined };
+    const page = await listCatalogModelsPage({
       category: category ?? undefined,
       mediaType: mediaType ?? undefined,
       uiGroup: effectiveUiGroup,
       provider: provider ?? undefined,
-      workflowType: workflowType ?? undefined,
+      ...workflowFilter,
       studioSurface: studioSurface ?? undefined,
       search: search ?? undefined,
+      limit: limit ?? undefined,
+      offset: offset ?? undefined,
       capabilities,
-    }))
+    });
+    const models = page.models
       .filter(hasStudioSurface)
       .map(toStudioCatalogModel);
 
     return successResponse({
       models,
-      total: models.length,
+      total: page.total,
       categories: Array.from(new Set(models.map((model) => model.category))),
     });
   } catch (error) {

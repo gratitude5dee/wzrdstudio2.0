@@ -7,11 +7,14 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Switch } from '@/components/ui/switch';
 import {
+  normalizeCatalogModelSummary,
   useCatalogModels,
   type CatalogMediaType,
   type CatalogModelSummary,
+  type CatalogStudioSurface,
   type CatalogUiGroup,
 } from '@/hooks/useCatalogModels';
+import { supabase } from '@/integrations/supabase/client';
 import { getModelThumbnail } from '@/lib/studio/modelVisuals';
 import { cn } from '@/lib/utils';
 
@@ -31,6 +34,39 @@ interface MarketplaceProviderGroup {
   models: MarketplaceModel[];
 }
 
+const selectedModelLookupCache = new Map<string, Promise<CatalogModelSummary | null>>();
+
+function fetchSelectedCatalogModel(modelId: string, studioSurface: CatalogStudioSurface) {
+  const cacheKey = `${studioSurface}:${modelId}`;
+  const cached = selectedModelLookupCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const lookup = (async () => {
+    const { data, error } = await supabase.functions.invoke('model-catalog', {
+      body: {
+        id: modelId,
+        studio_surface: studioSurface,
+      },
+    });
+
+    if (error || !data?.model) {
+      return null;
+    }
+
+    return normalizeCatalogModelSummary(data.model);
+  })().catch(() => null);
+
+  selectedModelLookupCache.set(cacheKey, lookup);
+  void lookup.then((model) => {
+    if (!model) {
+      selectedModelLookupCache.delete(cacheKey);
+    }
+  });
+  return lookup;
+}
+
 export interface FloraModelMarketplaceValue {
   auto: boolean;
   selectedModelIds: string[];
@@ -42,6 +78,11 @@ interface FloraModelMarketplaceProps {
   value: FloraModelMarketplaceValue;
   onChange: (value: FloraModelMarketplaceValue) => void;
   uiGroup?: CatalogUiGroup;
+  workflowType?: string;
+  workflowTypes?: string[];
+  provider?: string;
+  studioSurface?: CatalogStudioSurface;
+  allowAdvancedSearch?: boolean;
   className?: string;
   compact?: boolean;
   align?: 'start' | 'center' | 'end';
@@ -211,7 +252,7 @@ function filterModel(model: MarketplaceModel, query: string): boolean {
     return true;
   }
 
-  return [
+  const haystack = [
     model.name,
     model.description,
     model.providerLabel,
@@ -219,8 +260,15 @@ function filterModel(model: MarketplaceModel, query: string): boolean {
     model.family ?? '',
     model.tier ?? '',
     model.pricing_text ?? '',
+    model.endpoint_id ?? '',
+    model.category,
+    model.workflow_type,
     model.id,
-  ].some((value) => value.toLowerCase().includes(normalized));
+    ...(model.tags ?? []),
+    ...model.aliases,
+  ].join(' ').toLowerCase();
+  const tokens = normalized.split(/\s+/).filter(Boolean);
+  return haystack.includes(normalized) || tokens.every((token) => haystack.includes(token));
 }
 
 export function FloraModelMarketplace({
@@ -228,6 +276,11 @@ export function FloraModelMarketplace({
   value,
   onChange,
   uiGroup = 'generation',
+  workflowType,
+  workflowTypes,
+  provider,
+  studioSurface,
+  allowAdvancedSearch = true,
   className,
   compact = false,
   align = 'start',
@@ -241,12 +294,94 @@ export function FloraModelMarketplace({
   const [activeProviderKey, setActiveProviderKey] = useState<string | null>(null);
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
   const [includeAdvanced, setIncludeAdvanced] = useState(false);
-  const { models: catalogModels } = useCatalogModels({
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [knownModels, setKnownModels] = useState<Record<string, CatalogModelSummary>>({});
+  const normalizedSearch = search.trim();
+  const selectedModelIdsKey = value.selectedModelIds.join('|');
+  const fullCatalogMode = allowAdvancedSearch && (includeAdvanced || debouncedSearch.trim().length > 0);
+  const effectiveWorkflowTypes = useMemo(
+    () => workflowTypes?.length ? workflowTypes : workflowType ? [workflowType] : undefined,
+    [workflowType, workflowTypes]
+  );
+  const effectiveStudioSurface = studioSurface ?? (`studio:${mediaType}` as CatalogStudioSurface);
+  const { models: catalogModels, total: catalogTotal = 0, isLoading } = useCatalogModels({
     mediaType,
-    uiGroup: includeAdvanced ? undefined : uiGroup,
-    includeAdvanced,
+    uiGroup: fullCatalogMode ? undefined : uiGroup,
+    provider,
+    workflowTypes: effectiveWorkflowTypes,
+    studioSurface: effectiveStudioSurface,
+    includeAdvanced: fullCatalogMode,
+    search: fullCatalogMode ? debouncedSearch.trim() : undefined,
+    limit: fullCatalogMode ? 250 : undefined,
+    offset: 0,
     autoFetch: true,
   });
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setDebouncedSearch(normalizedSearch);
+    }, 180);
+    return () => window.clearTimeout(timeout);
+  }, [normalizedSearch]);
+
+  useEffect(() => {
+    if (catalogModels.length === 0) {
+      return;
+    }
+
+    setKnownModels((previous) => {
+      let changed = false;
+      const next = { ...previous };
+      for (const model of catalogModels) {
+        if (next[model.id] !== model) {
+          next[model.id] = model;
+          changed = true;
+        }
+      }
+      return changed ? next : previous;
+    });
+  }, [catalogModels]);
+
+  useEffect(() => {
+    const currentModelIds = new Set(catalogModels.map((model) => model.id));
+    const missingModelIds = Array.from(new Set(value.selectedModelIds))
+      .filter((modelId) => modelId && !knownModels[modelId] && !currentModelIds.has(modelId));
+
+    if (missingModelIds.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+    void Promise.all(missingModelIds.map((modelId) => fetchSelectedCatalogModel(modelId, effectiveStudioSurface)))
+      .then((resolvedModels) => {
+        if (cancelled) {
+          return;
+        }
+
+        const compatibleModels = resolvedModels.filter(
+          (model): model is CatalogModelSummary => Boolean(model && model.media_type === mediaType)
+        );
+        if (compatibleModels.length === 0) {
+          return;
+        }
+
+        setKnownModels((previous) => {
+          let changed = false;
+          const next = { ...previous };
+          for (const model of compatibleModels) {
+            if (next[model.id] !== model) {
+              next[model.id] = model;
+              changed = true;
+            }
+          }
+          return changed ? next : previous;
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [catalogModels, effectiveStudioSurface, knownModels, mediaType, selectedModelIdsKey, value.selectedModelIds]);
 
   const togglePin = useCallback((modelId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -261,10 +396,16 @@ export function FloraModelMarketplace({
     });
   }, []);
 
-  const allModels = useMemo(
-    () => catalogModels.map((model) => toMarketplaceModel(mediaType, model)),
-    [catalogModels, mediaType]
-  );
+  const allModels = useMemo(() => {
+    const merged = new Map(catalogModels.map((model) => [model.id, model]));
+    for (const modelId of value.selectedModelIds) {
+      const knownModel = knownModels[modelId];
+      if (knownModel && knownModel.media_type === mediaType) {
+        merged.set(modelId, knownModel);
+      }
+    }
+    return Array.from(merged.values()).map((model) => toMarketplaceModel(mediaType, model));
+  }, [catalogModels, knownModels, mediaType, value.selectedModelIds]);
   const pinnedModels = useMemo(
     () => allModels.filter((model) => model.isPinned && filterModel(model, search)),
     [allModels, search]
@@ -353,6 +494,8 @@ export function FloraModelMarketplace({
   const rightPaneMaxHeight = isToolbarVariant ? 'min(352px, calc(100vh - 240px))' : 'min(452px, calc(100vh - 220px))';
   const resolvedWidth = isToolbarVariant ? 'min(760px, calc(100vw - 48px))' : 'min(860px, calc(100vw - 64px))';
   const activeProvider = providers.find((provider) => provider.key === activeProviderKey) ?? providers[0] ?? null;
+  const visibleModelCount = providers.reduce((count, currentProvider) => count + currentProvider.models.length, 0);
+  const totalModelCount = catalogTotal || catalogModels.length;
 
   const renderModelRow = (model: MarketplaceModel, compactRow = false) => {
     const isSelected = value.selectedModelIds.includes(model.id);
@@ -543,6 +686,43 @@ export function FloraModelMarketplace({
               ⌘K
             </kbd>
           </div>
+          {allowAdvancedSearch ? (
+            <div className="flex items-center justify-between gap-3">
+              <div className="inline-flex rounded-[14px] border border-[rgba(249,115,22,0.1)] bg-[#151515] p-1">
+                <button
+                  type="button"
+                  onClick={() => setIncludeAdvanced(false)}
+                  className={cn(
+                    'h-7 rounded-[10px] px-3 text-[11px] font-medium transition-colors',
+                    !includeAdvanced && normalizedSearch.length === 0
+                      ? 'bg-[#f97316] text-black'
+                      : 'text-zinc-500 hover:bg-[#1e1e1e] hover:text-zinc-300'
+                  )}
+                >
+                  Recommended
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIncludeAdvanced(true)}
+                  className={cn(
+                    'h-7 rounded-[10px] px-3 text-[11px] font-medium transition-colors',
+                    fullCatalogMode
+                      ? 'bg-[#f97316] text-black'
+                      : 'text-zinc-500 hover:bg-[#1e1e1e] hover:text-zinc-300'
+                  )}
+                >
+                  All
+                </button>
+              </div>
+              <div className="min-w-0 truncate text-[11px] text-zinc-600">
+                {isLoading
+                  ? 'Loading models...'
+                  : fullCatalogMode
+                    ? `${visibleModelCount} of ${totalModelCount} models`
+                    : `${visibleModelCount} recommended`}
+              </div>
+            </div>
+          ) : null}
 
           <div
             className="grid min-h-0 gap-3"
@@ -587,21 +767,6 @@ export function FloraModelMarketplace({
                   }
                   />
                 </div>
-                {!compact ? (
-                  <>
-                    <div className="h-px bg-[rgba(249,115,22,0.06)]" />
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="flex items-center gap-1.5 text-[13px] text-zinc-200">
-                          <span>Advanced</span>
-                          <Info className="h-3 w-3 text-zinc-600" />
-                        </div>
-                        <div className="mt-0.5 text-[10px] leading-tight text-zinc-600">Include full Fal catalog</div>
-                      </div>
-                      <Switch checked={includeAdvanced} onCheckedChange={setIncludeAdvanced} />
-                    </div>
-                  </>
-                ) : null}
               </div>
 
               {/* Pinned models */}

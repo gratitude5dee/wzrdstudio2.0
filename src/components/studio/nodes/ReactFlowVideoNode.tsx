@@ -16,7 +16,7 @@ import { BaseNode } from './BaseNode';
 import { NodeRuntimeStatus } from '../status/NodeRuntimeStatus';
 import { ShotCameraControl } from './ShotCameraControl';
 import { cn } from '@/lib/utils';
-import type { Port, PortPosition } from '@/types/computeFlow';
+import type { NodeDefinition, Port, PortPosition } from '@/types/computeFlow';
 import {
   getModelSummaryLabel,
   getNodeModelSelection,
@@ -36,6 +36,32 @@ const portPositionToReactFlow = (position: PortPosition) => {
     default:
       return Position.Left;
   }
+};
+
+const VIDEO_MODEL_WORKFLOW_TYPES = [
+  'text-to-video',
+  'image-to-video',
+  'video-to-video',
+  'video-edit',
+  'reference-to-video',
+  'video-reference',
+  'talking-head',
+  'lip-sync',
+  'video-compose',
+];
+const EMPTY_PORTS: Port[] = [];
+const EMPTY_PARAMS: Record<string, unknown> = {};
+const EMPTY_IMAGE_SOURCES: Array<{ url: string; name: string }> = [];
+
+type VideoNodeData = Partial<Pick<NodeDefinition, 'label' | 'params' | 'preview' | 'inputs' | 'outputs'>> & {
+  incomingImageSources?: Array<{ url: string; name: string }>;
+  onGenerate?: () => void;
+  onModelSelectionChange?: (selection: { auto: boolean; selectedModelIds: string[]; useMultipleModels: boolean }) => void;
+  onOpenConnectionMenu?: (sourcePortId: string, rect?: DOMRect | null) => void;
+  onSelectNode?: (nodeId: string) => void;
+  onUpdateParams?: (paramUpdates: Record<string, unknown>) => void;
+  popoverBoundary?: HTMLElement | null;
+  popoverContainer?: HTMLElement | null;
 };
 
 const VideoPreview = memo(({ nodeId, previewUrl, title }: { nodeId: string; previewUrl?: string; title: string }) => {
@@ -67,7 +93,7 @@ const VideoPreview = memo(({ nodeId, previewUrl, title }: { nodeId: string; prev
 VideoPreview.displayName = 'VideoPreview';
 
 export const ReactFlowVideoNode = memo(({ data, id, selected }: NodeProps) => {
-  const nodeData = (data as any) || {};
+  const nodeData = (data ?? {}) as VideoNodeData;
   const onGenerate = nodeData?.onGenerate;
   const onModelSelectionChange = nodeData?.onModelSelectionChange;
   const onOpenConnectionMenu = nodeData?.onOpenConnectionMenu;
@@ -75,11 +101,11 @@ export const ReactFlowVideoNode = memo(({ data, id, selected }: NodeProps) => {
   const onUpdateParams = nodeData?.onUpdateParams;
   const popoverBoundary = nodeData?.popoverBoundary;
   const popoverContainer = nodeData?.popoverContainer;
-  const inputPorts = (nodeData?.inputs as Port[] | undefined) ?? [];
-  const outputPorts = (nodeData?.outputs as Port[] | undefined) ?? [];
-  const params = nodeData?.params;
+  const inputPorts = nodeData?.inputs ?? EMPTY_PORTS;
+  const outputPorts = nodeData?.outputs ?? EMPTY_PORTS;
+  const params = nodeData?.params ?? EMPTY_PARAMS;
   const promptValue = getNodePromptValue({ params });
-  const previewUrl = nodeData?.preview?.url ?? params?.videoUrl;
+  const previewUrl = nodeData?.preview?.url ?? (typeof params.videoUrl === 'string' ? params.videoUrl : undefined);
   const modelSelection = useMemo(
     () =>
       getNodeModelSelection({
@@ -90,9 +116,9 @@ export const ReactFlowVideoNode = memo(({ data, id, selected }: NodeProps) => {
   );
   const modelLabel = getModelSummaryLabel(modelSelection);
   const title = nodeData?.label || 'Video';
-  const referenceImages = (nodeData?.incomingImageSources as Array<{ url: string; name: string }> | undefined) ?? [];
+  const referenceImages = nodeData?.incomingImageSources ?? EMPTY_IMAGE_SOURCES;
   const visibleReferenceImages = useMemo(() => referenceImages.slice(0, 4), [referenceImages]);
-  const aspectRatio = params?.aspectRatio ?? '16:9';
+  const aspectRatio = typeof params.aspectRatio === 'string' ? params.aspectRatio : '16:9';
   const shot = (params?.shot ?? {}) as ShotControl;
 
   const handleDownload = useCallback(() => {
@@ -136,6 +162,7 @@ export const ReactFlowVideoNode = memo(({ data, id, selected }: NodeProps) => {
     () => ({
       mediaType: 'video' as const,
       modelSelection,
+      workflowTypes: VIDEO_MODEL_WORKFLOW_TYPES,
       aspectRatioLabel: aspectRatio,
       onModelSelectionChange,
       popoverBoundary,

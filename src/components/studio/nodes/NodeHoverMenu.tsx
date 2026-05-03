@@ -7,7 +7,7 @@ import {
   type FloraModelMarketplaceValue,
 } from '@/components/studio/model-selector/FloraModelMarketplace';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import type { CatalogMediaType } from '@/hooks/useCatalogModels';
+import type { CatalogMediaType, CatalogStudioSurface } from '@/hooks/useCatalogModels';
 import { cn } from '@/lib/utils';
 
 export interface NodeHoverActionItem {
@@ -32,6 +32,11 @@ export interface NodeHoverMenuProps {
   mediaType?: CatalogMediaType;
   modelSelection?: FloraModelMarketplaceValue;
   onModelSelectionChange?: (value: FloraModelMarketplaceValue) => void;
+  workflowType?: string;
+  workflowTypes?: string[];
+  provider?: string;
+  studioSurface?: CatalogStudioSurface;
+  allowAdvancedSearch?: boolean;
   selectedModel?: string;
   modelOptions?: Array<{ id: string; label: string }>;
   onModelChange?: (value: string) => void;
@@ -78,6 +83,11 @@ export const NodeHoverMenu = ({
   mediaType,
   modelSelection,
   onModelSelectionChange,
+  workflowType,
+  workflowTypes,
+  provider,
+  studioSurface,
+  allowAdvancedSearch,
   selectedModel,
   modelOptions,
   onModelChange,
@@ -164,6 +174,11 @@ export const NodeHoverMenu = ({
               mediaType={mediaType!}
               value={modelSelection!}
               onChange={onModelSelectionChange!}
+              workflowType={workflowType}
+              workflowTypes={workflowTypes}
+              provider={provider}
+              studioSurface={studioSurface}
+              allowAdvancedSearch={allowAdvancedSearch}
               compact
               align="start"
               triggerVariant="toolbar"

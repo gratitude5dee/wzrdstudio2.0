@@ -5,7 +5,7 @@ import { Copy, Play, SendHorizontal, Trash2, Type } from 'lucide-react';
 import { BaseNode } from './BaseNode';
 import { NodeStatusBadge } from '../status/NodeStatusBadge';
 import { cn } from '@/lib/utils';
-import type { Port, PortPosition } from '@/types/computeFlow';
+import type { NodeDefinition, Port, PortPosition } from '@/types/computeFlow';
 import {
   getModelSummaryLabel,
   getNodeModelSelection,
@@ -27,8 +27,23 @@ const portPositionToReactFlow = (position: PortPosition) => {
   }
 };
 
+const TEXT_MODEL_WORKFLOW_TYPES = ['text-to-text'];
+
+type TextNodeData = Partial<Pick<NodeDefinition, 'label' | 'params' | 'preview' | 'status' | 'progress' | 'error' | 'inputs' | 'outputs'>> & {
+  incomingReferenceSources?: Array<{ url: string; name: string; type?: 'image' | 'video' }>;
+  onGenerate?: () => void;
+  onDuplicate?: () => void;
+  onDelete?: () => void;
+  onModelSelectionChange?: (selection: { auto: boolean; selectedModelIds: string[]; useMultipleModels: boolean }) => void;
+  onOpenConnectionMenu?: (sourcePortId: string, rect?: DOMRect | null) => void;
+  onSelectNode?: (nodeId: string) => void;
+  onUpdateParams?: (paramUpdates: Record<string, unknown>) => void;
+  popoverBoundary?: HTMLElement | null;
+  popoverContainer?: HTMLElement | null;
+};
+
 export const ReactFlowTextNode = memo(({ data, id, selected }: NodeProps) => {
-  const nodeData = (data as any) || {};
+  const nodeData = (data ?? {}) as TextNodeData;
   const status = nodeData?.status || 'idle';
   const progress = nodeData?.progress || 0;
   const error = nodeData?.error;
@@ -84,6 +99,7 @@ export const ReactFlowTextNode = memo(({ data, id, selected }: NodeProps) => {
       hoverMenu={{
         mediaType: 'text',
         modelSelection,
+        workflowTypes: TEXT_MODEL_WORKFLOW_TYPES,
         onModelSelectionChange: nodeData?.onModelSelectionChange,
         popoverBoundary: nodeData?.popoverBoundary,
         popoverContainer: nodeData?.popoverContainer,

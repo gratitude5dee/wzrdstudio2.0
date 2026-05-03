@@ -15,7 +15,7 @@ import {
 import { BaseNode } from './BaseNode';
 import { NodeRuntimeStatus } from '../status/NodeRuntimeStatus';
 import { cn } from '@/lib/utils';
-import { stableStringify } from '@/lib/studio/reactFlowReconciliation';
+import { getNodeModelSelection } from '@/lib/studio/nodeUtils';
 import {
   cloneImageEditParams,
   deriveImageEditOperationLabel,
@@ -38,6 +38,7 @@ type ImageEditNodeData = {
   incomingImageSources?: ImageEditIncomingSource[];
   incomingPrompt?: string;
   onUpdateNode?: (updates: Partial<NodeDefinition>) => void;
+  onModelSelectionChange?: (selection: { auto: boolean; selectedModelIds: string[]; useMultipleModels: boolean }) => void;
   onSelectNode?: (nodeId: string) => void;
   onOpenConnectionMenu?: (sourcePortId: string, rect?: DOMRect | null) => void;
   onDuplicate?: () => void;
@@ -55,6 +56,7 @@ const checkerboardStyle = {
 } as const;
 
 const EMPTY_IMAGE_SOURCES: ImageEditIncomingSource[] = [];
+const IMAGE_EDIT_MODEL_WORKFLOW_TYPES = ['image-to-image', 'image-edit'];
 
 const portPositionToReactFlow = (position: PortPosition) => {
   switch (position) {
@@ -78,10 +80,6 @@ export const ReactFlowImageEditNode = memo(({ id, data, selected }: NodeProps) =
   const popoverBoundary = nodeData.popoverBoundary;
   const popoverContainer = nodeData.popoverContainer;
   const incomingImageSources = nodeData.incomingImageSources ?? EMPTY_IMAGE_SOURCES;
-  const incomingImageSourcesSignature = useMemo(
-    () => stableStringify(incomingImageSources),
-    [incomingImageSources]
-  );
   const baseEditorParams = useMemo(
     () => cloneImageEditParams(nodeData.params),
     [nodeData.params]
@@ -104,9 +102,12 @@ export const ReactFlowImageEditNode = memo(({ id, data, selected }: NodeProps) =
   }, [
     baseEditorParams,
     incomingImageSources,
-    incomingImageSourcesSignature,
     nodeData.incomingPrompt,
   ]);
+  const modelSelection = useMemo(
+    () => getNodeModelSelection({ kind: 'ImageEdit', params: nodeData.params as NodeDefinition['params'] }),
+    [nodeData.params]
+  );
 
   const previewUrl = useMemo(
     () => getNodeImagePreviewUrl({ preview: nodeData.preview, params: editorParams as unknown as Record<string, unknown> }),
@@ -160,7 +161,10 @@ export const ReactFlowImageEditNode = memo(({ id, data, selected }: NodeProps) =
 
   const hoverMenu = useMemo(
     () => ({
-      leadingChipLabel: 'Auto',
+      mediaType: 'image' as const,
+      modelSelection,
+      workflowTypes: IMAGE_EDIT_MODEL_WORKFLOW_TYPES,
+      onModelSelectionChange: nodeData.onModelSelectionChange,
       aspectRatioLabel: editorParams.aspectRatio,
       popoverBoundary,
       popoverContainer,
@@ -254,6 +258,8 @@ export const ReactFlowImageEditNode = memo(({ id, data, selected }: NodeProps) =
     [
       editorParams.aspectRatio,
       handleDownload,
+      modelSelection,
+      nodeData.onModelSelectionChange,
       openDock,
       popoverBoundary,
       popoverContainer,

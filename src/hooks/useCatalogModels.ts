@@ -52,19 +52,28 @@ export interface CatalogModelSummary {
   default_rank?: number;
 }
 
-interface UseCatalogModelsOptions {
+export interface UseCatalogModelsOptions {
   category?: string;
   mediaType?: CatalogMediaType;
   uiGroup?: CatalogUiGroup;
   provider?: string;
   workflowType?: string;
+  workflowTypes?: string[];
   studioSurface?: CatalogStudioSurface;
   includeAdvanced?: boolean;
+  search?: string;
+  limit?: number;
+  offset?: number;
   autoFetch?: boolean;
 }
 
-const modelCache = new Map<string, CatalogModelSummary[]>();
-const pendingModelFetches = new Map<string, Promise<CatalogModelSummary[]>>();
+interface CatalogModelsPayload {
+  models: CatalogModelSummary[];
+  total: number;
+}
+
+const modelCache = new Map<string, CatalogModelsPayload>();
+const pendingModelFetches = new Map<string, Promise<CatalogModelsPayload>>();
 
 function buildCacheKey(options: Partial<UseCatalogModelsOptions>) {
   return JSON.stringify({
@@ -73,9 +82,47 @@ function buildCacheKey(options: Partial<UseCatalogModelsOptions>) {
     uiGroup: options.uiGroup ?? null,
     provider: options.provider ?? null,
     workflowType: options.workflowType ?? null,
+    workflowTypes: options.workflowTypes ?? null,
     studioSurface: options.studioSurface ?? null,
     includeAdvanced: options.includeAdvanced ?? false,
+    search: options.search ?? null,
+    limit: options.limit ?? null,
+    offset: options.offset ?? null,
   });
+}
+
+export function normalizeCatalogModelSummary(rawModel: unknown): CatalogModelSummary {
+  const model = rawModel && typeof rawModel === 'object' ? rawModel as Record<string, unknown> : {};
+  return {
+    id: String(model.id ?? ''),
+    name: String(model.name ?? ''),
+    description: String(model.description ?? ''),
+    category: typeof model.category === 'string' ? model.category : 'uncategorized',
+    media_type: model.media_type as CatalogMediaType,
+    workflow_type: String(model.workflow_type ?? ''),
+    ui_group: model.ui_group as CatalogUiGroup,
+    supports: Array.isArray(model.supports) ? model.supports.filter((value): value is string => typeof value === 'string') : [],
+    defaults: model.defaults && typeof model.defaults === 'object' ? model.defaults as Record<string, unknown> : {},
+    controls: Array.isArray(model.controls) ? model.controls as CatalogModelSummary['controls'] : [],
+    aliases: Array.isArray(model.aliases) ? model.aliases.filter((value): value is string => typeof value === 'string') : [],
+    icon: typeof model.icon === 'string' ? model.icon : 'image',
+    credits: typeof model.credits === 'number' ? model.credits : 1,
+    time: typeof model.time === 'string' ? model.time : '~30s',
+    provider: typeof model.provider === 'string' ? model.provider : undefined,
+    provider_label: typeof model.provider_label === 'string' ? model.provider_label : undefined,
+    endpoint_id: typeof model.endpoint_id === 'string' ? model.endpoint_id : undefined,
+    pricing_text: typeof model.pricing_text === 'string' ? model.pricing_text : undefined,
+    model_url: typeof model.model_url === 'string' ? model.model_url : undefined,
+    license: typeof model.license === 'string' ? model.license : undefined,
+    tags: Array.isArray(model.tags) ? model.tags.filter((value): value is string => typeof value === 'string') : [],
+    published_at: typeof model.published_at === 'string' ? model.published_at : undefined,
+    model_updated_at: typeof model.model_updated_at === 'string' ? model.model_updated_at : undefined,
+    vendor: typeof model.vendor === 'string' ? model.vendor : undefined,
+    family: typeof model.family === 'string' ? model.family : undefined,
+    tier: typeof model.tier === 'string' ? model.tier : undefined,
+    is_default: model.is_default === true,
+    default_rank: typeof model.default_rank === 'number' ? model.default_rank : undefined,
+  };
 }
 
 export const useCatalogModels = (options: UseCatalogModelsOptions = {}) => {
@@ -85,14 +132,20 @@ export const useCatalogModels = (options: UseCatalogModelsOptions = {}) => {
     uiGroup,
     provider,
     workflowType,
+    workflowTypes,
     studioSurface,
     includeAdvanced = false,
+    search,
+    limit,
+    offset,
     autoFetch = true,
   } = options;
   const [models, setModels] = useState<CatalogModelSummary[]>([]);
+  const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
+  const workflowTypesKey = useMemo(() => (workflowTypes ?? []).join('|'), [workflowTypes]);
 
   const fetchModels = async (overrides: Partial<UseCatalogModelsOptions> = {}) => {
     setIsLoading(true);
@@ -103,22 +156,31 @@ export const useCatalogModels = (options: UseCatalogModelsOptions = {}) => {
     const effectiveUiGroup = overrides.uiGroup || uiGroup;
     const effectiveProvider = overrides.provider || provider;
     const effectiveWorkflowType = overrides.workflowType || workflowType;
+    const effectiveWorkflowTypes = overrides.workflowTypes || workflowTypes;
     const effectiveStudioSurface = overrides.studioSurface || studioSurface;
     const effectiveIncludeAdvanced = overrides.includeAdvanced ?? includeAdvanced;
+    const effectiveSearch = overrides.search ?? search;
+    const effectiveLimit = overrides.limit ?? limit;
+    const effectiveOffset = overrides.offset ?? offset;
     const cacheKey = buildCacheKey({
       category: effectiveCategory,
       mediaType: effectiveMediaType,
       uiGroup: effectiveUiGroup,
       provider: effectiveProvider,
       workflowType: effectiveWorkflowType,
+      workflowTypes: effectiveWorkflowTypes,
       studioSurface: effectiveStudioSurface,
       includeAdvanced: effectiveIncludeAdvanced,
+      search: effectiveSearch,
+      limit: effectiveLimit,
+      offset: effectiveOffset,
     });
 
     try {
-      const cachedModels = modelCache.get(cacheKey);
-      if (cachedModels) {
-        setModels(cachedModels);
+      const cachedPayload = modelCache.get(cacheKey);
+      if (cachedPayload) {
+        setModels(cachedPayload.models);
+        setTotal(cachedPayload.total);
         return;
       }
 
@@ -132,8 +194,12 @@ export const useCatalogModels = (options: UseCatalogModelsOptions = {}) => {
               ui_group: effectiveUiGroup,
               provider: effectiveProvider,
               workflow_type: effectiveWorkflowType,
+              workflow_types: effectiveWorkflowTypes,
               studio_surface: effectiveStudioSurface,
               includeAdvanced: effectiveIncludeAdvanced,
+              search: effectiveSearch,
+              limit: effectiveLimit,
+              offset: effectiveOffset,
             },
           });
 
@@ -145,51 +211,25 @@ export const useCatalogModels = (options: UseCatalogModelsOptions = {}) => {
             throw new Error('Malformed model payload');
           }
 
-          const transformedModels: CatalogModelSummary[] = data.models.map((rawModel: unknown) => {
-            const model = rawModel && typeof rawModel === 'object' ? rawModel as Record<string, unknown> : {};
-            return {
-            id: String(model.id ?? ''),
-            name: String(model.name ?? ''),
-            description: String(model.description ?? ''),
-            category: typeof model.category === 'string' ? model.category : 'uncategorized',
-            media_type: model.media_type as CatalogMediaType,
-            workflow_type: String(model.workflow_type ?? ''),
-            ui_group: model.ui_group as CatalogUiGroup,
-            supports: Array.isArray(model.supports) ? model.supports.filter((value): value is string => typeof value === 'string') : [],
-            defaults: model.defaults && typeof model.defaults === 'object' ? model.defaults as Record<string, unknown> : {},
-            controls: Array.isArray(model.controls) ? model.controls as CatalogModelSummary['controls'] : [],
-            aliases: Array.isArray(model.aliases) ? model.aliases.filter((value): value is string => typeof value === 'string') : [],
-            icon: typeof model.icon === 'string' ? model.icon : 'image',
-            credits: typeof model.credits === 'number' ? model.credits : 1,
-            time: typeof model.time === 'string' ? model.time : '~30s',
-            provider: typeof model.provider === 'string' ? model.provider : undefined,
-            provider_label: typeof model.provider_label === 'string' ? model.provider_label : undefined,
-            endpoint_id: typeof model.endpoint_id === 'string' ? model.endpoint_id : undefined,
-            pricing_text: typeof model.pricing_text === 'string' ? model.pricing_text : undefined,
-            model_url: typeof model.model_url === 'string' ? model.model_url : undefined,
-            license: typeof model.license === 'string' ? model.license : undefined,
-            tags: Array.isArray(model.tags) ? model.tags.filter((value): value is string => typeof value === 'string') : [],
-            published_at: typeof model.published_at === 'string' ? model.published_at : undefined,
-            model_updated_at: typeof model.model_updated_at === 'string' ? model.model_updated_at : undefined,
-            vendor: typeof model.vendor === 'string' ? model.vendor : undefined,
-            family: typeof model.family === 'string' ? model.family : undefined,
-            tier: typeof model.tier === 'string' ? model.tier : undefined,
-            is_default: model.is_default === true,
-            default_rank: typeof model.default_rank === 'number' ? model.default_rank : undefined,
-            };
-          });
+          const transformedModels: CatalogModelSummary[] = data.models.map(normalizeCatalogModelSummary);
 
-          modelCache.set(cacheKey, transformedModels);
-          return transformedModels;
+          const payload = {
+            models: transformedModels,
+            total: typeof data.total === 'number' ? data.total : transformedModels.length,
+          };
+          modelCache.set(cacheKey, payload);
+          return payload;
         })();
         pendingModelFetches.set(cacheKey, fetchPromise);
       }
-      const transformedModels = await fetchPromise;
-      setModels(transformedModels);
+      const payload = await fetchPromise;
+      setModels(payload.models);
+      setTotal(payload.total);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch models';
       setError(errorMessage);
       setModels([]);
+      setTotal(0);
 
       toast({
         title: 'Model catalog unavailable',
@@ -216,11 +256,12 @@ export const useCatalogModels = (options: UseCatalogModelsOptions = {}) => {
       void fetchModels();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [category, mediaType, uiGroup, provider, workflowType, studioSurface, includeAdvanced, autoFetch]);
+  }, [category, mediaType, uiGroup, provider, workflowType, workflowTypesKey, studioSurface, includeAdvanced, search, limit, offset, autoFetch]);
 
   return {
     models,
     grouped,
+    total,
     isLoading,
     error,
     fetchModels,
