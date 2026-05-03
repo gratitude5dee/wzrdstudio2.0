@@ -23,13 +23,32 @@ export interface ClipTransition {
   direction?: 'left' | 'right' | 'up' | 'down';
 }
 
+export interface ClipEffect {
+  id: string;
+  name: string;
+  type: 'filter' | 'adjustment' | 'overlay';
+  params: Record<string, number>;
+}
+
+export interface TextClipStyle {
+  fontFamily?: string;
+  fontSize?: number;
+  fontWeight?: string;
+  color?: string;
+  backgroundColor?: string;
+  textAlign?: 'left' | 'center' | 'right';
+}
+
 export interface Clip {
   id: string;
   mediaItemId?: string;
-  type: 'video' | 'image';
+  type: 'video' | 'image' | 'text' | 'element';
   name: string;
   url: string;
   sourceId?: string | null;
+  text?: string;
+  style?: TextClipStyle;
+  effects?: ClipEffect[];
   startTime: number;
   duration: number;
   endTime?: number;
@@ -107,6 +126,9 @@ export interface Keyframe {
   targetId: string;
   time: number;
   properties: Record<string, any>;
+  targetType?: 'clip' | 'audio' | 'composition';
+  propertyPath?: string;
+  easing?: string;
 }
 
 export interface GenerationParams {
@@ -496,7 +518,18 @@ export const useVideoEditorStore = create<VideoEditorState>((set, get) => ({
           ...clip,
           ...updates,
           transforms: updates.transforms
-            ? { ...clip.transforms, ...updates.transforms }
+            ? {
+                ...clip.transforms,
+                ...updates.transforms,
+                position: {
+                  ...clip.transforms.position,
+                  ...(updates.transforms.position ?? {}),
+                },
+                scale: {
+                  ...clip.transforms.scale,
+                  ...(updates.transforms.scale ?? {}),
+                },
+              }
             : clip.transforms,
         };
         return updatedClip;
@@ -590,6 +623,7 @@ export const useVideoEditorStore = create<VideoEditorState>((set, get) => ({
   selectClip: (id, addToSelection = false) =>
     set((state) => ({
       selectedClipIds: addToSelection ? [...state.selectedClipIds, id] : [id],
+      selectedAudioTrackIds: addToSelection ? state.selectedAudioTrackIds : [],
     })),
   deselectClip: (id) =>
     set((state) => ({
@@ -600,6 +634,7 @@ export const useVideoEditorStore = create<VideoEditorState>((set, get) => ({
   selectAudioTrack: (id, addToSelection = false) =>
     set((state) => ({
       selectedAudioTrackIds: addToSelection ? [...state.selectedAudioTrackIds, id] : [id],
+      selectedClipIds: addToSelection ? state.selectedClipIds : [],
     })),
   deselectAudioTrack: (id) =>
     set((state) => ({
@@ -623,21 +658,39 @@ export const useVideoEditorStore = create<VideoEditorState>((set, get) => ({
         : state
     ),
 
-  addKeyframe: (keyframe) =>
+  addKeyframe: (keyframe) => {
+    get().pushHistory();
     set((state) => ({
       keyframes: [...state.keyframes, keyframe],
-    })),
-  updateKeyframe: (id, updates) =>
+    }));
+    const projectId = get().project.id;
+    if (projectId) {
+      videoEditorService.saveKeyframe(projectId, keyframe);
+    }
+  },
+  updateKeyframe: (id, updates) => {
+    let updatedKeyframe: Keyframe | undefined;
+    get().pushHistory();
     set((state) => ({
-      keyframes: state.keyframes.map((keyframe) =>
-        keyframe.id === id ? { ...keyframe, ...updates } : keyframe
-      ),
-    })),
-  removeKeyframe: (id) =>
+      keyframes: state.keyframes.map((keyframe) => {
+        if (keyframe.id !== id) return keyframe;
+        updatedKeyframe = { ...keyframe, ...updates };
+        return updatedKeyframe;
+      }),
+    }));
+    const projectId = get().project.id;
+    if (projectId && updatedKeyframe) {
+      videoEditorService.saveKeyframe(projectId, updatedKeyframe);
+    }
+  },
+  removeKeyframe: (id) => {
+    get().pushHistory();
     set((state) => ({
       keyframes: state.keyframes.filter((keyframe) => keyframe.id !== id),
       selectedKeyframeIds: state.selectedKeyframeIds.filter((keyframeId) => keyframeId !== id),
-    })),
+    }));
+    videoEditorService.deleteKeyframe(id);
+  },
   selectKeyframe: (id, addToSelection = false) =>
     set((state) => ({
       selectedKeyframeIds: addToSelection ? [...state.selectedKeyframeIds, id] : [id],
@@ -753,6 +806,16 @@ export const useVideoEditorStore = create<VideoEditorState>((set, get) => ({
           : track
       ),
     }));
+    const updated = get();
+    const projectId = updated.project.id;
+    if (projectId) {
+      updated.clips
+        .filter((clip) => updated.selectedClipIds.includes(clip.id))
+        .forEach((clip) => videoEditorService.saveTimelineClip(projectId, clip));
+      updated.audioTracks
+        .filter((track) => updated.selectedAudioTrackIds.includes(track.id))
+        .forEach((track) => videoEditorService.saveAudioTrack(projectId, track));
+    }
   },
 
   setCompositionSettings: (settings) => {
@@ -768,10 +831,11 @@ export const useVideoEditorStore = create<VideoEditorState>((set, get) => ({
 
   loadProject: async (projectId) => {
     try {
-      const [clips, audioTracks, composition] = await Promise.all([
+      const [clips, audioTracks, composition, keyframes] = await Promise.all([
         videoEditorService.getTimelineClips(projectId),
         videoEditorService.getAudioTracks(projectId),
         videoEditorService.getComposition(projectId),
+        videoEditorService.getKeyframes(projectId),
       ]);
 
       set((state) => ({
@@ -779,8 +843,10 @@ export const useVideoEditorStore = create<VideoEditorState>((set, get) => ({
         clips,
         audioTracks,
         composition,
+        keyframes,
         selectedClipIds: [],
         selectedAudioTrackIds: [],
+        selectedKeyframeIds: [],
         history: { ...state.history, past: [], future: [] },
         clipboard: [],
       }));

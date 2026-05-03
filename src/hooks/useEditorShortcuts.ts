@@ -3,7 +3,12 @@ import { useVideoEditorStore } from '@/store/videoEditorStore';
 
 const isMac = typeof navigator !== 'undefined' ? /Mac/i.test(navigator.platform) : false;
 
-export function useEditorShortcuts() {
+interface EditorShortcutHandlers {
+  onExport?: () => void;
+  onSave?: () => void;
+}
+
+export function useEditorShortcuts(handlers: EditorShortcutHandlers = {}) {
   const play = useVideoEditorStore((state) => state.play);
   const pause = useVideoEditorStore((state) => state.pause);
   const togglePlayPause = useVideoEditorStore((state) => state.togglePlayPause);
@@ -104,6 +109,18 @@ export function useEditorShortcuts() {
       if (meta && key.toLowerCase() === 'v') {
         event.preventDefault();
         pasteClipboard();
+        return;
+      }
+
+      if (meta && key.toLowerCase() === 'e') {
+        event.preventDefault();
+        handlers.onExport?.();
+        return;
+      }
+
+      if (meta && key.toLowerCase() === 's') {
+        event.preventDefault();
+        handlers.onSave?.();
       }
     };
 
@@ -125,6 +142,7 @@ export function useEditorShortcuts() {
     setInPoint,
     setOutPoint,
     setTimelineZoom,
+    handlers,
     timeline.gridSize,
     timeline.zoom,
     togglePlayPause,

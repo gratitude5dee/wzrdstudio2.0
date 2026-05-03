@@ -18,10 +18,9 @@ describe('StreamingTextAnimate', () => {
 
   it('renders empty when text is empty', () => {
     const { container } = render(<StreamingTextAnimate text="" />);
-    // Should have only the <p> wrapper, nothing meaningful inside
-    const p = container.querySelector('p');
-    expect(p).toBeTruthy();
-    expect(p!.textContent?.trim()).toBe('');
+    const root = container.querySelector('div');
+    expect(root).toBeTruthy();
+    expect(root!.textContent?.trim()).toBe('');
   });
 
   it('shows blinking cursor when isStreaming is true', () => {
@@ -31,7 +30,7 @@ describe('StreamingTextAnimate', () => {
     // The cursor is a motion.span with specific classes
     const spans = container.querySelectorAll('span');
     const cursorSpan = Array.from(spans).find(
-      (s) => s.className.includes('bg-primary') && s.className.includes('w-0.5')
+      (s) => s.className.includes('bg-primary') && s.className.includes('w-[2px]')
     );
     expect(cursorSpan).toBeTruthy();
   });
@@ -42,7 +41,7 @@ describe('StreamingTextAnimate', () => {
     );
     const spans = container.querySelectorAll('span');
     const cursorSpan = Array.from(spans).find(
-      (s) => s.className.includes('bg-primary') && s.className.includes('w-0.5')
+      (s) => s.className.includes('bg-primary') && s.className.includes('w-[2px]')
     );
     expect(cursorSpan).toBeFalsy();
   });
@@ -51,8 +50,8 @@ describe('StreamingTextAnimate', () => {
     const { container } = render(
       <StreamingTextAnimate text="test" className="text-red-500" />
     );
-    const p = container.querySelector('p');
-    expect(p?.className).toContain('text-red-500');
+    const root = container.querySelector('div');
+    expect(root?.className).toContain('text-red-500');
   });
 
   it('splits text into individual word spans', () => {
@@ -60,7 +59,7 @@ describe('StreamingTextAnimate', () => {
       <StreamingTextAnimate text="one two three" />
     );
     // Words + whitespace are split: ["one", " ", "two", " ", "three"]
-    const spans = container.querySelectorAll('p > span');
+    const spans = container.querySelectorAll('div > span');
     // At least the word spans should be present
     expect(spans.length).toBeGreaterThanOrEqual(3);
   });

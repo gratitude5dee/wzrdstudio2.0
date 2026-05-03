@@ -14,6 +14,7 @@ const executeGraphStreaming = vi.fn();
 
 vi.mock('react-router-dom', () => ({
   useParams: () => ({ projectId: 'project-1' }),
+  useNavigate: () => vi.fn(),
 }));
 vi.mock('@/store/appStore', () => ({
   useAppStore: () => ({
@@ -62,6 +63,9 @@ vi.mock('@/hooks/studio/useStudioGraphActions', () => ({
     addNodeOfType,
     scheduleSave,
   }),
+}));
+vi.mock('@/hooks/use-mobile', () => ({
+  useIsMobile: () => false,
 }));
 
 import StudioPage from './StudioPage';

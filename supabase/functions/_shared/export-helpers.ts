@@ -10,9 +10,9 @@ import {
 
 export interface ExportAsset {
   id: string;
-  type: 'image' | 'video' | 'audio';
-  subtype?: 'voiceover' | 'sfx' | 'music' | 'visual';
-  url: string;
+  type: 'image' | 'video' | 'audio' | 'text' | 'element';
+  subtype?: 'voiceover' | 'sfx' | 'music' | 'visual' | 'text' | 'element';
+  url?: string;
   duration_ms?: number;
   order_index: number;
   metadata?: Record<string, unknown>;
@@ -25,6 +25,7 @@ export interface ExportSettings {
   quality?: string;
   includeAudio?: boolean;
   provider?: 'auto' | 'fal' | 'editframe';
+  renderMode?: 'sync' | 'async';
 }
 
 export interface ShotFailure {
@@ -91,6 +92,24 @@ function parseResolution(resolution = '1920x1080') {
   const width = Number.isFinite(rawWidth) && rawWidth > 0 ? Math.round(rawWidth) : 1920;
   const height = Number.isFinite(rawHeight) && rawHeight > 0 ? Math.round(rawHeight) : 1080;
   return { width, height };
+}
+
+export function getEditframeSetupStatus() {
+  const hasApiKey = Boolean(Deno.env.get('EDITFRAME_API_KEY'));
+  const hasWebhookSecret = Boolean(Deno.env.get('EDITFRAME_WEBHOOK_SECRET'));
+  const setupErrors = [
+    !hasApiKey ? 'EDITFRAME_API_KEY is not configured' : '',
+    !hasWebhookSecret ? 'EDITFRAME_WEBHOOK_SECRET is not configured' : '',
+  ].filter(Boolean);
+
+  return {
+    provider: 'editframe',
+    renderer: EDITFRAME_RENDERER,
+    hasApiKey,
+    hasWebhookSecret,
+    ready: setupErrors.length === 0,
+    setupErrors,
+  };
 }
 
 function assetDuration(asset: ExportAsset): number {
@@ -222,6 +241,18 @@ async function preflightAssets(assets: ExportAsset[]) {
   const failures: ShotFailure[] = [];
 
   for (const asset of assets) {
+    if ((asset.type === 'text' || asset.type === 'element') && !asset.url) {
+      usable.push(asset);
+      continue;
+    }
+    if (!asset.url) {
+      failures.push({
+        assetId: asset.id,
+        orderIndex: asset.order_index,
+        reason: 'Missing asset URL',
+      });
+      continue;
+    }
     const result = await isUrlReachable(asset.url);
     if (result.ok) {
       usable.push({ ...asset, url: normalizeUrl(asset.url) });
@@ -379,6 +410,7 @@ function toEditframeAsset(asset: ExportAsset): EditframeCompositionAsset {
     id: asset.id,
     type: asset.type,
     url: asset.url,
+    text: typeof metadata.text === 'string' ? metadata.text : undefined,
     name: typeof metadata.name === 'string' ? metadata.name : undefined,
     durationMs: asset.duration_ms ?? getOptionalNumber(metadata.duration_ms),
     orderIndex: asset.order_index,
@@ -389,8 +421,225 @@ function toEditframeAsset(asset: ExportAsset): EditframeCompositionAsset {
     muted: metadata.isMuted === true,
     role: asset.subtype,
     transforms: metadata.transforms as EditframeCompositionAsset['transforms'],
+    style: metadata.style as EditframeCompositionAsset['style'],
+    effects: Array.isArray(metadata.effects) ? metadata.effects as EditframeCompositionAsset['effects'] : undefined,
+    transition: metadata.transition as EditframeCompositionAsset['transition'],
     metadata,
   };
+}
+
+function extractRenderId(render: unknown): string {
+  if (!render || typeof render !== 'object') return '';
+  const record = render as Record<string, unknown>;
+  const data = record.data && typeof record.data === 'object'
+    ? record.data as Record<string, unknown>
+    : {};
+  return String(record.id ?? record.render_id ?? record.renderId ?? data.id ?? '');
+}
+
+async function createEditframeRender(
+  assets: ExportAsset[],
+  settings: ExportSettings,
+  jobId: string,
+) {
+  const editframeKey = Deno.env.get('EDITFRAME_API_KEY');
+  if (!editframeKey) {
+    throw new Error('EDITFRAME_API_KEY is not configured');
+  }
+
+  const { Client, createRender } = await import('https://esm.sh/@editframe/api');
+  const { width, height } = parseResolution(settings.resolution);
+  const composition = buildEditframeCompositionHtml(assets.map(toEditframeAsset), {
+    width,
+    height,
+    fps: settings.fps ?? 30,
+    compositionId: `wzrd-export-${jobId}`,
+  });
+  const client = new Client(editframeKey);
+  const render = await createRender(client, {
+    html: composition.html,
+    width: composition.width,
+    height: composition.height,
+    fps: composition.fps,
+    duration_ms: composition.durationMs,
+    output: {
+      container: 'mp4',
+      video: { codec: 'h264' },
+      audio: { codec: 'aac' },
+    },
+  });
+  const renderId = extractRenderId(render);
+  if (!renderId) {
+    throw new Error('Editframe createRender returned no render id');
+  }
+
+  return { renderId, composition };
+}
+
+export async function createEditframeAsyncRender(
+  supabaseAdmin: any,
+  projectId: string,
+  assets: ExportAsset[],
+  jobId: string,
+  settings: ExportSettings = {}
+) {
+  const setup = getEditframeSetupStatus();
+  if (!setup.ready) {
+    const payload = {
+      stage: 'setup_required',
+      renderer: EDITFRAME_RENDERER,
+      setupErrors: setup.setupErrors,
+    };
+    await updateJobPayload(supabaseAdmin, jobId, payload, undefined, {
+      provider: 'editframe_remote',
+      provider_status: 'setup_required',
+      fallback_used: false,
+    });
+    throw new ExportProcessingError(setup.setupErrors.join('; '), payload, []);
+  }
+
+  const sorted = [...assets].sort((a, b) => a.order_index - b.order_index);
+  const preflight = await preflightAssets(sorted);
+  const shotFailures = preflight.failures;
+  const usable = preflight.usable.filter((a) => a.type !== 'audio' || settings.includeAudio !== false);
+  const visualCount = usable.filter((a) => a.type === 'image' || a.type === 'video' || a.type === 'text' || a.type === 'element').length;
+
+  if (visualCount === 0) {
+    const payload = {
+      stage: 'failed',
+      renderer: 'url_preflight',
+      shotFailures,
+      failedShotCount: shotFailures.length,
+    };
+    await updateJobPayload(supabaseAdmin, jobId, payload);
+    throw new ExportProcessingError('No reachable visual assets available for Editframe render', payload, shotFailures);
+  }
+
+  await updateJobPayload(
+    supabaseAdmin,
+    jobId,
+    {
+      stage: 'provider_processing',
+      renderer: EDITFRAME_RENDERER,
+      renderMode: 'async',
+      shotFailures,
+      failedShotCount: shotFailures.length,
+    },
+    35,
+    {
+      provider: 'editframe_remote',
+      provider_status: 'processing',
+      fallback_used: false,
+    }
+  );
+
+  const { renderId, composition } = await createEditframeRender(usable, settings, jobId);
+  const providerPayload = {
+    stage: 'waiting_for_webhook',
+    renderer: EDITFRAME_RENDERER,
+    renderMode: 'async',
+    editframeRenderId: renderId,
+    durationMs: composition.durationMs,
+    width: composition.width,
+    height: composition.height,
+    fps: composition.fps,
+    shotFailures,
+    failedShotCount: shotFailures.length,
+  };
+
+  await updateJobPayload(supabaseAdmin, jobId, providerPayload, 50, {
+    provider: 'editframe_remote',
+    provider_status: 'processing',
+    provider_job_id: renderId,
+  });
+
+  return {
+    renderId,
+    durationMs: composition.durationMs,
+    shotFailures,
+    providerPayload,
+  };
+}
+
+export async function finalizeEditframeRender(
+  supabaseAdmin: any,
+  job: {
+    id: string;
+    project_id: string;
+    user_id: string;
+    output_url?: string | null;
+    status?: string | null;
+    provider_job_id?: string | null;
+    provider_payload?: Record<string, unknown> | null;
+  },
+  exportBucket: string
+) {
+  if (job.status === 'completed' && job.output_url) {
+    return {
+      publicUrl: job.output_url,
+      providerPayload: {
+        ...(job.provider_payload ?? {}),
+        stage: 'completed',
+        idempotentReplay: true,
+      },
+    };
+  }
+
+  const editframeKey = Deno.env.get('EDITFRAME_API_KEY');
+  if (!editframeKey) {
+    throw new Error('EDITFRAME_API_KEY is not configured');
+  }
+  const renderId = job.provider_job_id;
+  if (!renderId) {
+    throw new Error('Export job has no Editframe render id');
+  }
+
+  const { Client, downloadRender } = await import('https://esm.sh/@editframe/api');
+  const client = new Client(editframeKey);
+  const response = await downloadRender(client, renderId);
+  if (!response.ok) {
+    throw new Error(`Editframe download failed (${response.status})`);
+  }
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  const publicUrl = await uploadFinalVideo(supabaseAdmin, job.project_id, job.id, exportBucket, bytes);
+  const providerPayload = {
+    ...(job.provider_payload ?? {}),
+    stage: 'completed',
+    fallbackStatus: 'completed',
+    editframeRenderId: renderId,
+  };
+
+  await supabaseAdmin
+    .from('export_jobs')
+    .update({
+      status: 'completed',
+      progress: 100,
+      output_url: publicUrl,
+      provider: 'editframe_remote',
+      provider_status: 'completed',
+      fallback_used: Boolean(job.provider_payload?.fallbackReason),
+      provider_payload: providerPayload,
+      completed_at: new Date().toISOString(),
+    })
+    .eq('id', job.id);
+
+  await supabaseAdmin
+    .from('final_project_assets')
+    .insert({
+      project_id: job.project_id,
+      user_id: job.user_id,
+      asset_type: 'video',
+      file_url: publicUrl,
+      metadata: {
+        name: 'Editframe Export',
+        asset_subtype: 'final_export',
+        export_job_id: job.id,
+        editframe_render_id: renderId,
+        url: publicUrl,
+      },
+    });
+
+  return { publicUrl, providerPayload };
 }
 
 async function renderWithEditframeFallback(
@@ -442,32 +691,10 @@ async function renderWithEditframeFallback(
   });
 
   try {
-    const { Client, createRender, getRenderProgress, downloadRender } =
+    const { Client, getRenderProgress, downloadRender } =
       await import('https://esm.sh/@editframe/api');
-    const { width, height } = parseResolution(settings.resolution);
-    const composition = buildEditframeCompositionHtml(assets.map(toEditframeAsset), {
-      width,
-      height,
-      fps: settings.fps ?? 30,
-      compositionId: `wzrd-export-${jobId}`,
-    });
+    const { renderId, composition } = await createEditframeRender(assets, settings, jobId);
     const client = new Client(editframeKey);
-    const render = await createRender(client, {
-      html: composition.html,
-      width: composition.width,
-      height: composition.height,
-      fps: composition.fps,
-      duration_ms: composition.durationMs,
-      output: {
-        container: 'mp4',
-        video: { codec: 'h264' },
-        audio: { codec: 'aac' },
-      },
-    });
-    const renderId = String(render?.id ?? render?.render_id ?? render?.renderId ?? '');
-    if (!renderId) {
-      throw new Error('Editframe createRender returned no render id');
-    }
 
     await updateJobPayload(
       supabaseAdmin,

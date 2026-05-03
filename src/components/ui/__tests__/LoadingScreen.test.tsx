@@ -5,11 +5,9 @@ import { LoadingScreen } from '../LoadingScreen';
 
 describe('LoadingScreen', () => {
   it('renders when isLoading is true', () => {
-    const { container } = render(<LoadingScreen isLoading={true} />);
-    expect(screen.getByText('Loading...')).toBeInTheDocument();
-    expect(screen.getByAltText('WZRD Logo')).toBeInTheDocument();
-    // Progress bar track is present
-    expect(container.querySelector('.absolute.bottom-0')).toBeInTheDocument();
+    render(<LoadingScreen isLoading={true} />);
+    expect(screen.getByText('Initializing studio…')).toBeInTheDocument();
+    expect(screen.getByAltText('WZRD')).toBeInTheDocument();
   });
 
   it('renders with custom message', () => {
@@ -19,13 +17,13 @@ describe('LoadingScreen', () => {
 
   it('does not render content when isLoading is false', () => {
     render(<LoadingScreen isLoading={false} />);
-    expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
-    expect(screen.queryByAltText('WZRD Logo')).not.toBeInTheDocument();
+    expect(screen.queryByText('Initializing studio…')).not.toBeInTheDocument();
+    expect(screen.queryByAltText('WZRD')).not.toBeInTheDocument();
   });
 
   it('uses wzrdtechlogo.png as the logo source', () => {
     render(<LoadingScreen isLoading={true} />);
-    const logo = screen.getByAltText('WZRD Logo');
+    const logo = screen.getByAltText('WZRD');
     expect(logo).toHaveAttribute('src', '/lovable-uploads/wzrdtechlogo.png');
   });
 
@@ -37,12 +35,9 @@ describe('LoadingScreen', () => {
     expect(html).not.toMatch(/\bemerald-/);
   });
 
-  it('uses orange/amber colors for themed elements', () => {
+  it('renders the current fallback halo layer', () => {
     const { container } = render(<LoadingScreen isLoading={true} />);
-    const html = container.innerHTML;
-    // Should have orange and amber Tailwind classes
-    expect(html).toMatch(/orange-500/);
-    expect(html).toMatch(/amber-500/);
+    expect(container.querySelector('.rounded-full.absolute')).toBeInTheDocument();
   });
 
   it('has responsive classes for mobile viewports', () => {

@@ -5,9 +5,13 @@ import type { AssetUploadRequest, ProjectAsset } from "@/types/assets";
 const mockInvoke = vi.fn();
 const mockFrom = vi.fn();
 const mockStorageFrom = vi.fn();
+const mockGetSession = vi.fn();
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
+    auth: {
+      getSession: (...args: any[]) => mockGetSession(...args),
+    },
     from: (...args: any[]) => mockFrom(...args),
     functions: {
       invoke: (...args: any[]) => mockInvoke(...args),
@@ -136,6 +140,10 @@ const baseAsset: ProjectAsset = {
 describe("assetService", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    mockGetSession.mockResolvedValue({
+      data: { session: { access_token: "test-access-token" } },
+      error: null,
+    });
   });
 
   describe("upload", () => {
@@ -158,7 +166,12 @@ describe("assetService", () => {
 
       const result = await assetService.upload(request);
       expect(result).toEqual(response);
-      expect(mockInvoke).toHaveBeenCalledWith("asset-upload", { body: request });
+      expect(mockInvoke).toHaveBeenCalledWith("asset-upload", {
+        body: request,
+        headers: {
+          Authorization: "Bearer test-access-token",
+        },
+      });
     });
 
     it("throws when the Supabase function fails", async () => {

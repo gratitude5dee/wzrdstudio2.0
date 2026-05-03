@@ -109,6 +109,7 @@ function createNode(overrides: Partial<NodeDefinition>): NodeDefinition {
 
 describe('StudioRightPanel', () => {
   beforeEach(() => {
+    window.localStorage.clear();
     mockNodeDefinitions = [];
     mockEdgeDefinitions = [];
     updateNode.mockReset();
@@ -119,10 +120,12 @@ describe('StudioRightPanel', () => {
   });
 
   it('keeps Gallery and Nodes tabs visible when a node is selected and switches to Nodes', async () => {
+    const user = userEvent.setup();
     mockNodeDefinitions = [createNode({ id: 'image-1' })];
 
     render(<StudioRightPanel projectId="project-1" selectedNodeId="image-1" />);
 
+    await user.click(await screen.findByRole('button', { name: /Expand Nodes/i }));
     expect(await screen.findByRole('button', { name: /Gallery/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Nodes/i })).toBeInTheDocument();
 
@@ -137,6 +140,7 @@ describe('StudioRightPanel', () => {
 
     render(<StudioRightPanel projectId="project-1" onCreateNode={onCreateNode} />);
 
+    await user.click(await screen.findByRole('button', { name: /Expand Gallery/i }));
     await user.click(await screen.findByRole('button', { name: /Nodes/i }));
     await screen.findByText('Build the graph from the rail.');
     await user.click(screen.getByRole('button', { name: /Image Edit/i }));
@@ -156,6 +160,7 @@ describe('StudioRightPanel', () => {
       <StudioRightPanel projectId="project-1" selectedNodeId="image-1" />
     );
 
+    await user.click(await screen.findByRole('button', { name: /Expand Nodes/i }));
     await waitFor(() => {
       expect(screen.getByText('Graphic Design')).toBeInTheDocument();
     });
@@ -194,6 +199,7 @@ describe('StudioRightPanel', () => {
       />
     );
 
+    await user.click(await screen.findByRole('button', { name: /Expand Nodes/i }));
     await waitFor(() => {
       expect(onWidthChange).toHaveBeenLastCalledWith(960);
     });

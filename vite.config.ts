@@ -42,5 +42,13 @@ export default defineConfig(({ mode }) => ({
     environment: "jsdom",
     setupFiles: "./vitest.setup.ts",
     css: false,
+    exclude: [
+      "**/node_modules/**",
+      "**/dist/**",
+      "tests/e2e/**",
+      "tests/performance.spec.ts",
+      "playwright.config.test.ts",
+      "supabase/functions/**/*.test.ts",
+    ],
   },
 }));

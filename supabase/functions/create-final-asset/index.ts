@@ -6,14 +6,22 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
-import { ExportAsset, ExportProcessingError, ExportSettings, processAssetsRemote } from '../_shared/export-helpers.ts';
+import {
+  ExportAsset,
+  ExportProcessingError,
+  ExportSettings,
+  createEditframeAsyncRender,
+  finalizeEditframeRender,
+  getEditframeSetupStatus,
+  processAssetsRemote,
+} from '../_shared/export-helpers.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 const EXPORT_BUCKET = 'final-exports';
 
 interface RequestBody {
-  action?: 'create' | 'status';
+  action?: 'create' | 'status' | 'setup' | 'reconcile';
   projectId?: string;
   assets?: ExportAsset[];
   jobId?: string;
@@ -57,6 +65,12 @@ serve(async (req) => {
     const body = (await req.json()) as RequestBody;
     const { action = 'create', projectId, assets, jobId, settings } = body;
 
+    if (action === 'setup') {
+      return new Response(JSON.stringify(getEditframeSetupStatus()), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     if (action === 'status' && jobId) {
       const { data: job, error } = await supabaseAdmin
         .from('export_jobs')
@@ -87,6 +101,56 @@ serve(async (req) => {
       );
     }
 
+    if (action === 'reconcile' && jobId) {
+      const { data: job, error } = await supabaseAdmin
+        .from('export_jobs')
+        .select('*')
+        .eq('id', jobId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (error || !job) {
+        return new Response(JSON.stringify({ error: 'Job not found' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      try {
+        const result = await finalizeEditframeRender(supabaseAdmin, job, EXPORT_BUCKET);
+        return new Response(
+          JSON.stringify({
+            status: 'completed',
+            jobId: job.id,
+            outputUrl: result.publicUrl,
+            providerPayload: result.providerPayload,
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Reconcile failed';
+        await supabaseAdmin
+          .from('export_jobs')
+          .update({
+            status: 'failed',
+            error_message: message,
+            provider_status: 'failed',
+            completed_at: new Date().toISOString(),
+            provider_payload: {
+              ...(job.provider_payload ?? {}),
+              stage: 'failed',
+              reconcileError: message,
+            },
+          })
+          .eq('id', job.id);
+
+        return new Response(JSON.stringify({ error: message }), {
+          status: 409,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
     if (!projectId || !assets || assets.length === 0) {
       return new Response(JSON.stringify({ error: 'Missing projectId or assets' }), {
         status: 400,
@@ -107,6 +171,22 @@ serve(async (req) => {
       });
     }
 
+    if (settings?.provider === 'editframe' && settings.renderMode === 'async') {
+      const setup = getEditframeSetupStatus();
+      if (!setup.ready) {
+        return new Response(
+          JSON.stringify({
+            error: 'Editframe setup incomplete',
+            setup,
+          }),
+          {
+            status: 412,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+    }
+
     const { data: job, error: jobError } = await supabaseAdmin
       .from('export_jobs')
       .insert({
@@ -116,7 +196,7 @@ serve(async (req) => {
         progress: 0,
         settings,
         started_at: new Date().toISOString(),
-        provider: 'fal_remote',
+        provider: settings?.provider === 'editframe' ? 'editframe_remote' : 'fal_remote',
         provider_status: 'processing',
         fallback_used: false,
       })
@@ -128,6 +208,29 @@ serve(async (req) => {
     }
 
     try {
+      if (settings?.provider === 'editframe' && settings.renderMode === 'async') {
+        const asyncResult = await createEditframeAsyncRender(
+          supabaseAdmin,
+          projectId,
+          assets,
+          job.id,
+          settings
+        );
+
+        return new Response(
+          JSON.stringify({
+            status: 'processing',
+            jobId: job.id,
+            provider: 'editframe_remote',
+            providerJobId: asyncResult.renderId,
+            progress: 50,
+            shotFailures: asyncResult.shotFailures,
+            providerPayload: asyncResult.providerPayload,
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       const result = await processAssetsRemote(
         supabaseAdmin,
         projectId,

@@ -1,3 +1,5 @@
+import { describe } from 'vitest';
+
 // Tests disabled - bun:test not available
 /*
 describe('timeline snapping helpers', () => {
@@ -25,4 +27,4 @@ describe('timeline snapping helpers', () => {
 });
 */
 
-export {};
+describe.skip('timeline snapping legacy tests', () => {});

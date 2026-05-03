@@ -1,3 +1,5 @@
+import { describe } from 'vitest';
+
 // Tests disabled - bun:test not available
 /*
 describe('runExportRequest', () => {
@@ -30,4 +32,4 @@ describe('runExportRequest', () => {
 });
 */
 
-export {};
+describe.skip('useExport legacy tests', () => {});

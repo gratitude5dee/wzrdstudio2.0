@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Upload, Image, Video, Music, FileText, CheckCircle2, X, Loader2 } from 'lucide-react';
 import { editorTheme, typography } from '@/lib/editor/theme';
@@ -23,11 +23,11 @@ export function AssetDropZone() {
   const loadMediaLibrary = useVideoEditorStore((state) => state.loadMediaLibrary);
 
   // Load existing media on mount
-  useState(() => {
+  useEffect(() => {
     if (projectId) {
       loadMediaLibrary(projectId);
     }
-  });
+  }, [loadMediaLibrary, projectId]);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();

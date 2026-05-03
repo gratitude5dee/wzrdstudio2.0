@@ -13,6 +13,9 @@ interface MediaItemProps {
 export function MediaItem({ item, viewMode }: MediaItemProps) {
   const addClip = useVideoEditorStore(s => s.addClip);
   const addAudioTrack = useVideoEditorStore(s => s.addAudioTrack);
+  const selectClip = useVideoEditorStore(s => s.selectClip);
+  const selectAudioTrack = useVideoEditorStore(s => s.selectAudioTrack);
+  const clips = useVideoEditorStore(s => s.clips);
   const audioTracks = useVideoEditorStore(s => s.audioTracks);
   
   // Enable drag functionality
@@ -45,44 +48,55 @@ export function MediaItem({ item, viewMode }: MediaItemProps) {
     const durationMs = Math.max(1, item.durationSeconds ?? 5) * 1000;
     
     if (item.mediaType === 'audio') {
-      const nextTrackIndex = audioTracks.length
-        ? Math.max(...audioTracks.map((track) => track.trackIndex ?? 0)) + 1
-        : 0;
-      addAudioTrack({
+      const startTime = audioTracks.reduce(
+        (cursor, track) => Math.max(cursor, track.endTime ?? (track.startTime ?? 0) + (track.duration ?? 0)),
+        0
+      );
+      const audioTrack = {
         id: uuidv4(),
         mediaItemId: item.id,
         type: 'audio',
         name: item.name,
         url: item.url,
-        startTime: 0,
+        startTime,
         duration: durationMs,
-        endTime: durationMs,
+        endTime: startTime + durationMs,
         volume: 1,
         isMuted: false,
-        trackIndex: nextTrackIndex,
+        trackIndex: 0,
         fadeInDuration: 0,
         fadeOutDuration: 0,
-      });
+      } as const;
+      addAudioTrack(audioTrack);
+      selectAudioTrack(audioTrack.id);
       toast.success('Audio added to timeline');
       return;
     }
     
-    addClip({
+    const startTime = clips.reduce(
+      (cursor, clip) => Math.max(cursor, clip.endTime ?? (clip.startTime ?? 0) + (clip.duration ?? 0)),
+      0
+    );
+    const clip = {
       id: uuidv4(),
       mediaItemId: item.id,
       type: item.mediaType === 'image' ? 'image' : 'video',
       name: item.name,
       url: item.url,
-      startTime: 0,
+      startTime,
       duration: durationMs,
+      endTime: startTime + durationMs,
       layer: 0,
+      trackIndex: 0,
       transforms: {
         position: { x: 0, y: 0 },
         scale: { x: 1, y: 1 },
         rotation: 0,
         opacity: 1,
       },
-    });
+    } as const;
+    addClip(clip);
+    selectClip(clip.id);
     toast.success('Clip added to timeline');
   };
   

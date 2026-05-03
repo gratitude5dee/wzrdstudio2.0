@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { useVideoEditorStore, ClipTransition } from '@/store/videoEditorStore';
+import { v4 as uuidv4 } from 'uuid';
+import { useVideoEditorStore, Clip, ClipEffect, ClipTransition, AudioTrack } from '@/store/videoEditorStore';
 import { useComputeFlowSync } from '@/hooks/useComputeFlowSync';
 import { useRealtimeTimelineSync } from '@/hooks/useRealtimeTimelineSync';
 import { useEditorShortcuts } from '@/hooks/useEditorShortcuts';
-import { useEditorKeyboardShortcuts } from '@/hooks/editor/useEditorKeyboardShortcuts';
 import { usePropertySync } from '@/hooks/editor/usePropertySync';
 import { EditorHeader } from './EditorHeader';
 import { EditorIconBar, EditorTab } from './EditorIconBar';
@@ -25,12 +25,25 @@ export default function VideoEditorMain() {
   const clips = useVideoEditorStore((state) => state.clips);
   const audioTracks = useVideoEditorStore((state) => state.audioTracks);
   const composition = useVideoEditorStore((state) => state.composition);
+  const history = useVideoEditorStore((state) => state.history);
+  const addClip = useVideoEditorStore((state) => state.addClip);
+  const addAudioTrack = useVideoEditorStore((state) => state.addAudioTrack);
   const updateClip = useVideoEditorStore((state) => state.updateClip);
+  const selectClip = useVideoEditorStore((state) => state.selectClip);
+  const selectAudioTrack = useVideoEditorStore((state) => state.selectAudioTrack);
   const undo = useVideoEditorStore((state) => state.undo);
   const redo = useVideoEditorStore((state) => state.redo);
 
   const [activeMediaTab, setActiveMediaTab] = useState<EditorTab>('assets');
   const [isExporting, setIsExporting] = useState(false);
+  const [exportState, setExportState] = useState<{
+    status: 'idle' | 'setup_error' | 'processing' | 'completed' | 'failed';
+    jobId?: string;
+    providerJobId?: string;
+    outputUrl?: string;
+    message?: string;
+    setupErrors?: string[];
+  }>({ status: 'idle' });
 
   // Handler for applying transitions to selected clips
   const handleApplyTransition = useCallback(
@@ -52,6 +65,83 @@ export default function VideoEditorMain() {
     [selectedClipIds, updateClip]
   );
 
+  const handleApplyEffect = useCallback(
+    (effect: ClipEffect) => {
+      if (selectedClipIds.length === 0) {
+        toast.info('Select a clip to apply an effect');
+        return;
+      }
+      selectedClipIds.forEach((id) => {
+        const clip = clips.find((item) => item.id === id);
+        if (!clip) return;
+        const nextEffects = [...(clip.effects ?? []).filter((item) => item.id !== effect.id), effect];
+        updateClip(id, { effects: nextEffects });
+      });
+      toast.success(`Applied ${effect.name}`);
+    },
+    [clips, selectedClipIds, updateClip]
+  );
+
+  const handleAddToTimeline = useCallback(
+    (item: any) => {
+      const visualStart = clips.reduce(
+        (cursor, clip) => Math.max(cursor, clip.endTime ?? (clip.startTime ?? 0) + (clip.duration ?? 0)),
+        0
+      );
+      const audioStart = audioTracks.reduce(
+        (cursor, track) => Math.max(cursor, track.endTime ?? (track.startTime ?? 0) + (track.duration ?? 0)),
+        0
+      );
+      const durationMs = Math.max(1000, item.duration > 1000 ? item.duration : (item.duration ?? 5) * 1000);
+
+      if (item.type === 'audio') {
+        const track: AudioTrack = {
+          id: uuidv4(),
+          type: 'audio',
+          name: item.name ?? 'Audio',
+          url: item.url ?? '',
+          startTime: audioStart,
+          duration: durationMs,
+          endTime: audioStart + durationMs,
+          volume: 1,
+          isMuted: false,
+          trackIndex: 0,
+          fadeInDuration: 0,
+          fadeOutDuration: 0,
+        };
+        addAudioTrack(track);
+        selectAudioTrack(track.id);
+        return;
+      }
+
+      const clip: Clip = {
+        id: uuidv4(),
+        type: item.type === 'text' ? 'text' : item.type === 'element' ? 'element' : item.type === 'image' ? 'image' : 'video',
+        name: item.name ?? (item.text ? item.text.slice(0, 32) : 'Timeline clip'),
+        url: item.url ?? '',
+        text: item.text,
+        style: item.style,
+        startTime: visualStart,
+        duration: durationMs,
+        endTime: visualStart + durationMs,
+        trackIndex: 0,
+        layer: Math.max(0, clips.reduce((max, current) => Math.max(max, current.layer ?? 0), 0)),
+        transforms: {
+          position: item.position
+            ? { x: Number(item.position.x ?? 0), y: Number(item.position.y ?? 0) }
+            : { x: 0, y: 0 },
+          scale: { x: 1, y: 1 },
+          rotation: 0,
+          opacity: 1,
+        },
+        effects: item.effects ?? [],
+      };
+      addClip(clip);
+      selectClip(clip.id);
+    },
+    [addAudioTrack, addClip, audioTracks, clips, selectAudioTrack, selectClip]
+  );
+
   useEffect(() => {
     if (projectId && projectId !== storeProjectId) {
       loadProject(projectId);
@@ -60,8 +150,6 @@ export default function VideoEditorMain() {
 
   useComputeFlowSync(projectId ?? storeProjectId);
   useRealtimeTimelineSync(projectId ?? storeProjectId);
-  useEditorShortcuts();
-  useEditorKeyboardShortcuts();
   usePropertySync();
 
   const handleTitleChange = (title: string) => {
@@ -78,22 +166,27 @@ export default function VideoEditorMain() {
 
     const visualAssets = [...clips]
       .sort((a, b) => (a.startTime ?? 0) - (b.startTime ?? 0))
-      .filter((clip) => Boolean(clip.url))
+      .filter((clip) => Boolean(clip.url) || clip.type === 'text' || clip.type === 'element')
       .map((clip, index) => ({
         id: clip.id,
         type: clip.type,
-        subtype: 'visual',
-        url: clip.url,
+        subtype: clip.type === 'text' ? 'text' : clip.type === 'element' ? 'element' : 'visual',
+        url: clip.url || undefined,
         duration_ms: clip.duration,
         order_index: index,
         metadata: {
           name: clip.name,
+          text: clip.text,
           start_ms: clip.startTime ?? 0,
           duration_ms: clip.duration,
           trimStartMs: clip.trimStart,
           trimEndMs: clip.trimEnd,
           transforms: clip.transforms,
           layer: clip.layer,
+          trackIndex: clip.trackIndex,
+          transition: clip.transition,
+          effects: clip.effects,
+          style: clip.style,
           source: 'editor_timeline',
         },
       }));
@@ -126,6 +219,19 @@ export default function VideoEditorMain() {
 
     setIsExporting(true);
     try {
+      setExportState({ status: 'processing', message: 'Checking Editframe setup' });
+      const { data: setupData, error: setupError } = await supabase.functions.invoke('create-final-asset', {
+        body: { action: 'setup' },
+      });
+
+      if (setupError) throw setupError;
+      if (setupData?.ready === false) {
+        const setupErrors = setupData.setupErrors ?? ['Editframe server secrets are not configured'];
+        setExportState({ status: 'setup_error', setupErrors, message: setupErrors.join('\n') });
+        toast.error('Editframe setup incomplete');
+        return;
+      }
+
       toast.info('Submitting Editframe render...');
       const { data, error } = await supabase.functions.invoke('create-final-asset', {
         body: {
@@ -133,6 +239,7 @@ export default function VideoEditorMain() {
           assets: exportAssets,
           settings: {
             provider: 'editframe',
+            renderMode: 'async',
             includeAudio: true,
             resolution: `${composition.width}x${composition.height}`,
             fps: composition.fps,
@@ -141,18 +248,92 @@ export default function VideoEditorMain() {
       });
 
       if (error) throw error;
-      if (data?.outputUrl) {
-        toast.success('Editor export complete');
-      } else {
-        toast.success('Editor export submitted');
+      const jobId = data?.jobId;
+      setExportState({
+        status: data?.status === 'processing' ? 'processing' : 'completed',
+        jobId,
+        providerJobId: data?.providerJobId,
+        outputUrl: data?.outputUrl,
+        message: data?.status === 'processing' ? 'Waiting for Editframe webhook' : 'Export complete',
+      });
+
+      if (jobId) {
+        for (let attempt = 0; attempt < 24; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 3500));
+          const { data: statusData, error: statusError } = await supabase.functions.invoke('create-final-asset', {
+            body: { action: 'status', jobId, projectId: activeProjectId },
+          });
+          if (statusError) throw statusError;
+          if (statusData?.status === 'completed' && statusData?.outputUrl) {
+            setExportState({
+              status: 'completed',
+              jobId,
+              providerJobId: data?.providerJobId,
+              outputUrl: statusData.outputUrl,
+              message: 'Export complete',
+            });
+            toast.success('Editor export complete');
+            return;
+          }
+          if (statusData?.status === 'failed') {
+            setExportState({
+              status: 'failed',
+              jobId,
+              providerJobId: data?.providerJobId,
+              message: statusData.error || 'Editframe export failed',
+            });
+            toast.error(statusData.error || 'Editframe export failed');
+            return;
+          }
+          setExportState((current) => ({
+            ...current,
+            status: 'processing',
+            message: statusData?.providerPayload?.stage ?? 'Rendering with Editframe',
+          }));
+        }
       }
+      toast.success('Editor export submitted');
     } catch (error) {
       console.error('Editor export failed:', error);
+      setExportState({
+        status: 'failed',
+        message: error instanceof Error ? error.message : 'Editor export failed',
+      });
       toast.error(error instanceof Error ? error.message : 'Editor export failed');
     } finally {
       setIsExporting(false);
     }
   }, [audioTracks, clips, composition.fps, composition.height, composition.width, projectId, storeProjectId]);
+
+  const handleReconcileExport = useCallback(async () => {
+    const activeProjectId = projectId ?? storeProjectId;
+    if (!activeProjectId || !exportState.jobId) return;
+    setIsExporting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-final-asset', {
+        body: { action: 'reconcile', projectId: activeProjectId, jobId: exportState.jobId },
+      });
+      if (error) throw error;
+      if (data?.outputUrl) {
+        setExportState({ status: 'completed', jobId: exportState.jobId, outputUrl: data.outputUrl, message: 'Export complete' });
+        toast.success('Editframe render reconciled');
+      } else {
+        setExportState((current) => ({ ...current, message: data?.error ?? 'Render is not complete yet' }));
+        toast.info('Render is not complete yet');
+      }
+    } catch (error) {
+      setExportState((current) => ({
+        ...current,
+        status: 'failed',
+        message: error instanceof Error ? error.message : 'Reconcile failed',
+      }));
+      toast.error(error instanceof Error ? error.message : 'Reconcile failed');
+    } finally {
+      setIsExporting(false);
+    }
+  }, [exportState.jobId, projectId, storeProjectId]);
+
+  useEditorShortcuts({ onExport: isExporting ? undefined : handleExport });
 
   const handleShare = () => {
     console.log('Share clicked');
@@ -170,13 +351,47 @@ export default function VideoEditorMain() {
       <EditorHeader
         projectTitle={projectName || 'Untitled video'}
         onTitleChange={handleTitleChange}
-        canUndo={false}
-        canRedo={false}
+        canUndo={history.past.length > 0}
+        canRedo={history.future.length > 0}
         onUndo={undo}
         onRedo={redo}
         onShare={handleShare}
         onExport={isExporting ? () => undefined : handleExport}
       />
+
+      {exportState.status !== 'idle' && (
+        <div className="border-b border-white/10 bg-black/70 px-4 py-2 text-sm text-zinc-200">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <span className="font-medium">
+                {exportState.status === 'setup_error'
+                  ? 'Editframe setup required'
+                  : exportState.status === 'completed'
+                    ? 'Export complete'
+                    : exportState.status === 'failed'
+                      ? 'Export failed'
+                      : 'Editframe render processing'}
+              </span>
+              {exportState.message && <span className="ml-2 text-zinc-400">{exportState.message}</span>}
+              {exportState.outputUrl && (
+                <a className="ml-3 text-orange-300 underline" href={exportState.outputUrl} target="_blank" rel="noreferrer">
+                  Open MP4
+                </a>
+              )}
+            </div>
+            {exportState.jobId && exportState.status !== 'completed' && (
+              <button
+                type="button"
+                onClick={handleReconcileExport}
+                className="rounded border border-white/10 px-3 py-1 text-xs text-zinc-100 hover:bg-white/10"
+                disabled={isExporting}
+              >
+                Reconcile
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Main Content */}
       <div className="flex flex-1 overflow-hidden">
@@ -188,7 +403,9 @@ export default function VideoEditorMain() {
           />
           <EditorMediaPanel
             activeTab={activeMediaTab}
+            onAddToTimeline={handleAddToTimeline}
             onApplyTransition={handleApplyTransition}
+            onApplyEffect={handleApplyEffect}
             projectId={projectId ?? storeProjectId ?? undefined}
           />
         </div>

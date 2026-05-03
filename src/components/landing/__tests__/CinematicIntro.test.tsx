@@ -14,6 +14,7 @@ vi.mock('@react-three/fiber', () => ({
   useFrame: vi.fn(),
   useThree: () => ({
     viewport: { width: 10, height: 8 },
+    size: { width: 1280, height: 720 },
   }),
 }));
 
@@ -33,6 +34,25 @@ vi.mock('three', () => ({
   Points: class {},
   BufferAttribute: class {},
   ShaderMaterial: class {},
+  CanvasTexture: class {
+    minFilter: unknown;
+    magFilter: unknown;
+    constructor(public canvas: HTMLCanvasElement) {}
+  },
+  LinearFilter: 'LinearFilter',
+  Texture: class {},
+  TextureLoader: class {
+    load(_url: string, onLoad: (texture: any) => void) {
+      onLoad({ minFilter: null, magFilter: null });
+    }
+  },
+  Vector2: class {
+    constructor(public x: number, public y: number) {}
+    set(x: number, y: number) {
+      this.x = x;
+      this.y = y;
+    }
+  },
 }));
 
 import CinematicIntro from '../CinematicIntro';
@@ -47,6 +67,18 @@ function mockWebGLAvailable(available: boolean) {
       const el = realCreateElement(tagName, options);
       if (tagName === 'canvas') {
         (el as HTMLCanvasElement).getContext = ((id: string) => {
+          if (id === '2d') {
+            return {
+              font: '',
+              fillStyle: '',
+              textAlign: '',
+              textBaseline: '',
+              scale: vi.fn(),
+              clearRect: vi.fn(),
+              fillText: vi.fn(),
+              measureText: (text: string) => ({ width: text.length * 12 }),
+            } as unknown as CanvasRenderingContext2D;
+          }
           if (
             available &&
             (id === 'webgl2' || id === 'webgl' || id === 'experimental-webgl')
@@ -79,14 +111,14 @@ describe('CinematicIntro', () => {
     expect(screen.getByTestId('r3f-canvas')).toBeInTheDocument();
   });
 
-  it('calls onComplete after full animation sequence (~5s)', () => {
+  it('calls onComplete after the safety timeout in jsdom', () => {
     const onComplete = vi.fn();
     render(<CinematicIntro onComplete={onComplete} />);
 
     expect(onComplete).not.toHaveBeenCalled();
 
     act(() => {
-      vi.advanceTimersByTime(5100);
+      vi.advanceTimersByTime(7100);
     });
 
     expect(onComplete).toHaveBeenCalledTimes(1);
@@ -114,7 +146,7 @@ describe('CinematicIntro', () => {
     render(<CinematicIntro onComplete={onComplete} />);
 
     act(() => {
-      vi.advanceTimersByTime(5100);
+      vi.advanceTimersByTime(7100);
     });
 
     expect(screen.queryByTestId('r3f-canvas')).not.toBeInTheDocument();

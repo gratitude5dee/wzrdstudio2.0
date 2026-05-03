@@ -51,8 +51,49 @@ describe('buildEditframeCompositionHtml', () => {
 
     expect(result.durationMs).toBe(14000);
     expect(result.html).toContain('width:1920px;height:1080px');
-    expect(result.html).toContain('duration="2s"');
+    expect(result.html).toContain('offset="2s"');
     expect(result.html).toContain('volume="0.35"');
     expect(result.html).toContain('<ef-audio src="https://media.example.com/music.mp3"');
+  });
+
+  it('serializes layered text, transforms, transitions, and deterministic effects', () => {
+    const result = buildEditframeCompositionHtml(
+      [
+        {
+          id: 'title-1',
+          type: 'text',
+          text: 'WZRD Cut',
+          startMs: 1000,
+          durationMs: 2500,
+          layer: 4,
+          transforms: {
+            position: { x: 120, y: -80 },
+            scale: { x: 1.2, y: 1.2 },
+            rotation: 6,
+            opacity: 0.85,
+          },
+          style: {
+            fontFamily: 'Inter',
+            fontSize: 96,
+            fontWeight: '800',
+            color: '#f97316',
+            textAlign: 'center',
+          },
+          effects: [{ id: 'blur', params: { radius: 3 } }],
+          transition: { type: 'fade', duration: 400 },
+        },
+      ],
+      { width: 1920, height: 1080, fps: 30, compositionId: 'layered-test' }
+    );
+
+    expect(result.durationMs).toBe(5000);
+    expect(result.html).toContain('<ef-text');
+    expect(result.html).toContain('WZRD Cut');
+    expect(result.html).toContain('translate(120px, -80px)');
+    expect(result.html).toContain('rotate(6deg)');
+    expect(result.html).toContain('opacity: 0.85');
+    expect(result.html).toContain('filter: blur(3px)');
+    expect(result.html).toContain('wzrd-transition-fade');
+    expect(result.html).toContain('@keyframes wzrd-fade-in');
   });
 });

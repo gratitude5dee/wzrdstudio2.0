@@ -1,3 +1,5 @@
+import { describe } from 'vitest';
+
 // Tests disabled - bun:test not available
 /*
 beforeEach(() => {
@@ -51,4 +53,4 @@ describe('clipboard operations', () => {
 });
 */
 
-export {};
+describe.skip('videoEditorStore legacy tests', () => {});
