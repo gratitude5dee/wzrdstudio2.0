@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  buildFalTracks,
   ExportProcessingError,
+  exportAssetToEditframeAsset,
   extractVideoUrl,
   processAssetsRemote,
   type ExportAsset,
 } from '../../../../supabase/functions/_shared/export-helpers';
+import { buildMixedDirectorCutExportAssets } from './exportFixtures';
 
 describe('extractVideoUrl', () => {
   it('reads common fal top-level output shapes', () => {
@@ -198,5 +201,57 @@ describe('processAssetsRemote', () => {
         falRequestId: 'failed-compose',
       },
     } satisfies Partial<ExportProcessingError>);
+  });
+});
+
+describe('fal and Editframe export fixtures', () => {
+  it('maps a mixed Director\'s Cut timeline to deterministic fal tracks', () => {
+    const assets = buildMixedDirectorCutExportAssets();
+    const visualAssets = assets.filter((asset) => asset.type === 'image' || asset.type === 'video');
+    const audioAssets = assets.filter((asset) => asset.type === 'audio');
+    const tracks = buildFalTracks(visualAssets, audioAssets);
+
+    expect(tracks).toMatchObject([
+      {
+        id: 'visual-0',
+        type: 'image',
+        keyframes: [{ timestamp: 0, duration: 4200 }],
+      },
+      {
+        id: 'visual-1',
+        type: 'video',
+        keyframes: [{ timestamp: 4200, duration: 5200 }],
+      },
+      {
+        id: 'voiceover-0',
+        type: 'audio',
+        keyframes: [{ timestamp: 0, duration: 8000 }],
+      },
+    ]);
+  });
+
+  it('preserves trims, transforms, transitions, effects, and audio fades for Editframe fallback', () => {
+    const assets = buildMixedDirectorCutExportAssets().map(exportAssetToEditframeAsset);
+
+    expect(assets[0]).toMatchObject({
+      id: 'shot-image-1',
+      type: 'image',
+      startMs: 0,
+      transforms: { scale: { x: 1.05, y: 1.05 }, opacity: 0.92 },
+      effects: [{ id: 'brightness', params: { value: 108 } }],
+      transition: { type: 'dissolve', duration: 450 },
+    });
+    expect(assets[1]).toMatchObject({
+      type: 'video',
+      trimStartMs: 800,
+      trimEndMs: 6000,
+      transition: { type: 'slide', duration: 300, direction: 'left' },
+    });
+    expect(assets[3]).toMatchObject({
+      type: 'audio',
+      volume: 0.84,
+      fadeInMs: 300,
+      fadeOutMs: 500,
+    });
   });
 });

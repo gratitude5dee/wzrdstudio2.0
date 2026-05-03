@@ -6,7 +6,7 @@ import { LoadingScreen } from '../LoadingScreen';
 describe('LoadingScreen', () => {
   it('renders when isLoading is true', () => {
     render(<LoadingScreen isLoading={true} />);
-    expect(screen.getByText('Initializing studio…')).toBeInTheDocument();
+    expect(screen.getByText('Initializing studio...')).toBeInTheDocument();
     expect(screen.getByAltText('WZRD')).toBeInTheDocument();
   });
 
@@ -17,7 +17,7 @@ describe('LoadingScreen', () => {
 
   it('does not render content when isLoading is false', () => {
     render(<LoadingScreen isLoading={false} />);
-    expect(screen.queryByText('Initializing studio…')).not.toBeInTheDocument();
+    expect(screen.queryByText('Initializing studio...')).not.toBeInTheDocument();
     expect(screen.queryByAltText('WZRD')).not.toBeInTheDocument();
   });
 

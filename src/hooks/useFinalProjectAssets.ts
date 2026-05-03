@@ -7,9 +7,9 @@ import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useVideoEditorStore } from '@/store/videoEditorStore';
+import type { Database, Json } from '@/integrations/supabase/types';
 
-// Type-safe wrapper for Supabase queries on tables not yet in generated types
-const db = supabase as any;
+type FinalProjectAssetRow = Database['public']['Tables']['final_project_assets']['Row'];
 
 export interface FinalProjectAsset {
   id: string;
@@ -26,21 +26,16 @@ export interface FinalProjectAsset {
   created_at: string;
 }
 
-interface FinalProjectAssetRow {
-  id: string;
-  project_id: string;
-  user_id: string;
-  asset_type: 'image' | 'video' | 'audio' | string;
-  file_url?: string | null;
-  duration_ms?: number | null;
-  metadata?: Record<string, unknown> | null;
-  created_at: string;
-}
-
 export interface SaveTimelineToFinalOptions {
   includeVideo?: boolean;
   includeAudio?: boolean;
   audioTypes?: ('voiceover' | 'sfx' | 'music')[];
+}
+
+function asRecord(value: Json | Record<string, unknown> | null | undefined): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }
 
 function metadataString(metadata: Record<string, unknown>, key: string, fallback = ''): string {
@@ -59,7 +54,7 @@ function metadataOptionalNumber(metadata: Record<string, unknown>, key: string):
 }
 
 function mapFinalProjectAsset(row: FinalProjectAssetRow): FinalProjectAsset {
-  const metadata = row.metadata && typeof row.metadata === 'object' ? row.metadata : {};
+  const metadata = asRecord(row.metadata);
   const url = row.file_url ?? metadataString(metadata, 'url');
   const assetType = row.asset_type === 'image' || row.asset_type === 'video' || row.asset_type === 'audio'
     ? row.asset_type
@@ -108,7 +103,7 @@ export function useFinalProjectAssets(projectId: string | undefined) {
 
     setIsLoading(true);
     try {
-      const { data, error } = await db
+      const { data, error } = await supabase
         .from('final_project_assets')
         .select('*')
         .eq('project_id', projectId)
@@ -139,7 +134,7 @@ export function useFinalProjectAssets(projectId: string | undefined) {
     setIsSaving(true);
     try {
       const userId = await getCurrentUserId();
-      const { data, error } = await db
+      const { data, error } = await supabase
         .from('final_project_assets')
         .insert({
           project_id: projectId,
@@ -155,7 +150,7 @@ export function useFinalProjectAssets(projectId: string | undefined) {
             thumbnail_url: asset.thumbnail_url,
             shot_card_id: asset.shot_card_id,
             url: asset.url,
-          },
+          } as Json,
         })
         .select()
         .single();
@@ -259,14 +254,14 @@ export function useFinalProjectAssets(projectId: string | undefined) {
       const userId = await getCurrentUserId();
 
       // Clear existing assets first (optional - could be a merge instead)
-      await db
+      await supabase
         .from('final_project_assets')
         .delete()
         .eq('project_id', projectId)
         .eq('user_id', userId);
 
       // Insert all new assets
-      const { data, error } = await db
+      const { data, error } = await supabase
         .from('final_project_assets')
         .insert(assetsToSave.map(asset => ({
           project_id: projectId,
@@ -282,7 +277,7 @@ export function useFinalProjectAssets(projectId: string | undefined) {
             thumbnail_url: asset.thumbnail_url,
             shot_card_id: asset.shot_card_id,
             url: asset.url,
-          },
+          } as Json,
         })))
         .select();
 
@@ -315,7 +310,7 @@ export function useFinalProjectAssets(projectId: string | undefined) {
         const asset = assetMap.get(id);
         if (!asset) return;
 
-        const { error } = await db
+        const { error } = await supabase
           .from('final_project_assets')
           .update({
             metadata: {
@@ -326,7 +321,7 @@ export function useFinalProjectAssets(projectId: string | undefined) {
               shot_card_id: asset.shot_card_id,
               url: asset.url,
               order_index: index,
-            },
+            } as Json,
           })
           .eq('id', id)
           .eq('project_id', projectId);
@@ -366,7 +361,7 @@ export function useFinalProjectAssets(projectId: string | undefined) {
    */
   const removeAsset = useCallback(async (assetId: string) => {
     try {
-      const { error } = await db
+      const { error } = await supabase
         .from('final_project_assets')
         .delete()
         .eq('id', assetId);

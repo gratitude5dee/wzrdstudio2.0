@@ -7,6 +7,7 @@ import {
   buildEditframeCompositionHtml,
   type EditframeCompositionAsset,
 } from '../../../shared/editframeComposition.ts';
+import { safeLog } from './safe-logger.ts';
 
 export interface ExportAsset {
   id: string;
@@ -268,7 +269,7 @@ async function preflightAssets(assets: ExportAsset[]) {
   return { usable, failures };
 }
 
-function buildFalTracks(visualAssets: ExportAsset[], audioAssets: ExportAsset[]) {
+export function buildFalTracks(visualAssets: ExportAsset[], audioAssets: ExportAsset[]) {
   const tracks: Array<{
     id: string;
     type: 'video' | 'audio' | 'image';
@@ -404,7 +405,7 @@ async function renderWithFal(
   return { url: result.url, renderer: COMPOSE_MODEL, requestId: result.requestId };
 }
 
-function toEditframeAsset(asset: ExportAsset): EditframeCompositionAsset {
+export function exportAssetToEditframeAsset(asset: ExportAsset): EditframeCompositionAsset {
   const metadata = asset.metadata ?? {};
   return {
     id: asset.id,
@@ -419,6 +420,8 @@ function toEditframeAsset(asset: ExportAsset): EditframeCompositionAsset {
     trimEndMs: getOptionalNumber(metadata.trimEndMs) ?? getOptionalNumber(metadata.trim_end_ms),
     volume: getNumber(metadata.volume, 1),
     muted: metadata.isMuted === true,
+    fadeInMs: getOptionalNumber(metadata.fadeInMs) ?? getOptionalNumber(metadata.fadeInDuration) ?? getOptionalNumber(metadata.fade_in_ms),
+    fadeOutMs: getOptionalNumber(metadata.fadeOutMs) ?? getOptionalNumber(metadata.fadeOutDuration) ?? getOptionalNumber(metadata.fade_out_ms),
     role: asset.subtype,
     transforms: metadata.transforms as EditframeCompositionAsset['transforms'],
     style: metadata.style as EditframeCompositionAsset['style'],
@@ -449,7 +452,7 @@ async function createEditframeRender(
 
   const { Client, createRender } = await import('https://esm.sh/@editframe/api');
   const { width, height } = parseResolution(settings.resolution);
-  const composition = buildEditframeCompositionHtml(assets.map(toEditframeAsset), {
+  const composition = buildEditframeCompositionHtml(assets.map(exportAssetToEditframeAsset), {
     width,
     height,
     fps: settings.fps ?? 30,
@@ -865,7 +868,12 @@ export async function processAssetsRemote(
   } catch (falError) {
     const falMessage = errorMessage(falError, 'FAL render failed');
     const falRequestId = falError instanceof FalRenderError ? falError.requestId : undefined;
-    console.warn('FAL render failed; attempting Editframe fallback:', falMessage);
+    safeLog('warn', 'export.fal.failed_fallback_started', {
+      error: falError,
+      falRequestId,
+      visualCount: visuals.length,
+      audioCount: audioAssets.length,
+    });
     await updateJobPayload(
       supabaseAdmin,
       jobId,

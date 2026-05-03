@@ -37,6 +37,19 @@ export default defineConfig(({ mode }) => ({
   optimizeDeps: {
     exclude: ['@sparkjsdev/spark'],
   },
+  build: mode === 'editframe'
+    ? undefined
+    : {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('@editframe/')) return 'editor-editframe';
+            if (id.includes('@react-three/') || id.includes('/three/')) return 'visual-3d';
+            return undefined;
+          },
+        },
+      },
+    },
   test: {
     globals: true,
     environment: "jsdom",

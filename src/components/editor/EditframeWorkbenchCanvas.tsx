@@ -1,4 +1,5 @@
 import React, { CSSProperties, useCallback, useMemo, useRef } from 'react';
+import '@editframe/elements/styles.css';
 import {
   Audio,
   Controls,

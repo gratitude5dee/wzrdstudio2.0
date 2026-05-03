@@ -2,7 +2,13 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { authenticateRequest, AuthError } from '../_shared/auth.ts';
 import { corsHeaders, handleCors, errorResponse, successResponse } from '../_shared/response.ts';
+import { safeLog } from '../_shared/safe-logger.ts';
 import { MEDIA_ACTIONS } from '../../../shared/mediaActionRegistry.ts';
+import {
+  extractWzrdOpenAIText,
+  normalizeWzrdProviderConfig,
+  validateWzrdBlueprintContract,
+} from '../../../shared/wzrdAgentContract.ts';
 
 type WorkflowMode = 'legacy' | 'plan' | 'materialize' | 'repair' | 'health';
 
@@ -136,35 +142,13 @@ const ACTION_CATALOG = MEDIA_ACTIONS.map((action) => ({
 }));
 
 function getWzrdProviderConfig() {
-  const rawProvider = (Deno.env.get('WZRD_AGENT_PROVIDER') || 'codex').trim().toLowerCase();
-  const provider = rawProvider === 'groq' || rawProvider === 'codex' ? rawProvider : 'codex';
-  const model = Deno.env.get('WZRD_AGENT_MODEL') || '';
-  const fallbackModel = Deno.env.get('WZRD_AGENT_FALLBACK_MODEL') || 'llama-3.3-70b-versatile';
-  const hasOpenAIKey = Boolean(Deno.env.get('OPENAI_API_KEY'));
-  const hasGroqKey = Boolean(Deno.env.get('GROQ_API_KEY'));
-  const setupErrors: string[] = [];
-
-  if (rawProvider !== provider) {
-    setupErrors.push(`WZRD_AGENT_PROVIDER must be "codex" or "groq"; received "${rawProvider}".`);
-  }
-  if (provider === 'codex') {
-    if (!hasOpenAIKey) setupErrors.push('OPENAI_API_KEY is not configured in Supabase Edge Function secrets.');
-    if (!model) setupErrors.push('WZRD_AGENT_MODEL is not configured in Supabase Edge Function secrets.');
-  }
-  if (provider === 'groq' && !hasGroqKey) {
-    setupErrors.push('GROQ_API_KEY is not configured in Supabase Edge Function secrets.');
-  }
-
-  return {
-    provider,
-    rawProvider,
-    model,
-    fallbackModel,
-    hasOpenAIKey,
-    hasGroqKey,
-    ready: setupErrors.length === 0,
-    setupErrors,
-  };
+  return normalizeWzrdProviderConfig({
+    rawProvider: Deno.env.get('WZRD_AGENT_PROVIDER') || 'codex',
+    model: Deno.env.get('WZRD_AGENT_MODEL') || '',
+    fallbackModel: Deno.env.get('WZRD_AGENT_FALLBACK_MODEL') || 'llama-3.3-70b-versatile',
+    hasOpenAIKey: Boolean(Deno.env.get('OPENAI_API_KEY')),
+    hasGroqKey: Boolean(Deno.env.get('GROQ_API_KEY')),
+  });
 }
 
 function assertCodexConfigured() {
@@ -476,27 +460,13 @@ function legacyBlueprint(prompt: string, settings?: WorkflowSettings): WorkflowB
   };
 }
 
-function extractTextFromOpenAIResponse(data: Record<string, unknown>): string | null {
-  if (typeof data.output_text === 'string') return data.output_text;
-  const output = Array.isArray(data.output) ? data.output : [];
-  for (const item of output) {
-    const content = (item as Record<string, unknown>)?.content;
-    if (!Array.isArray(content)) continue;
-    for (const part of content) {
-      const p = part as Record<string, unknown>;
-      if (typeof p.text === 'string') return p.text;
-    }
-  }
-  return null;
-}
-
 async function fetchEnabledModelIds(supabaseAdmin: any) {
   const { data, error } = await supabaseAdmin
     .from('ai_model_catalog')
     .select('id, endpoint_id, enabled')
     .eq('enabled', true);
   if (error) {
-    console.warn('Unable to load model catalog for workflow validation:', error.message);
+    safeLog('warn', 'wzrd.model_catalog.load_failed', { error });
     return new Set<string>();
   }
   const ids = new Set<string>();
@@ -566,7 +536,7 @@ async function loadProjectAssetRefs(
     .limit(12);
 
   if (uploadedError) {
-    console.warn('Unable to load project assets for WZRD context:', uploadedError.message);
+    safeLog('warn', 'wzrd.project_assets.load_failed', { error: uploadedError });
   } else {
     for (const asset of (uploadedAssets ?? []) as Array<{
       id: string;
@@ -603,7 +573,7 @@ async function loadProjectAssetRefs(
     .limit(8);
 
   if (generatedError) {
-    console.warn('Unable to load generated assets for WZRD context:', generatedError.message);
+    safeLog('warn', 'wzrd.generation_outputs.load_failed', { error: generatedError });
   } else {
     for (const asset of (generatedAssets ?? []) as Array<{
       id: string;
@@ -638,7 +608,7 @@ async function loadProjectAssetRefs(
     .limit(8);
 
   if (finalError) {
-    console.warn('Unable to load final assets for WZRD context:', finalError.message);
+    safeLog('warn', 'wzrd.final_assets.load_failed', { error: finalError });
   } else {
     for (const asset of (finalAssets ?? []) as Array<{
       id: string;
@@ -669,32 +639,7 @@ async function loadProjectAssetRefs(
 }
 
 function validateBlueprint(blueprint: WorkflowBlueprint, enabledModelIds: Set<string>): string[] {
-  const errors: string[] = [];
-  if (!Array.isArray(blueprint.nodes) || blueprint.nodes.length === 0) {
-    errors.push('Blueprint must include at least one node.');
-  }
-
-  blueprint.nodes?.forEach((node, index) => {
-    if (node.actionId && !ACTION_IDS.has(node.actionId)) {
-      errors.push(`Node ${index} uses unsupported actionId "${node.actionId}".`);
-    }
-    const modelId = node.modelId ?? node.model;
-    const shouldValidateModel = typeof modelId === 'string' && (modelId.includes('/') || modelId.startsWith('gmi-'));
-    if (shouldValidateModel && enabledModelIds.size > 0 && !enabledModelIds.has(modelId)) {
-      errors.push(`Node ${index} uses model "${modelId}" that is not enabled in the model catalog.`);
-    }
-  });
-
-  blueprint.edges?.forEach((edge, index) => {
-    if (edge.from < 0 || edge.from >= blueprint.nodes.length || edge.to < 0 || edge.to >= blueprint.nodes.length) {
-      errors.push(`Edge ${index} references a missing node.`);
-    }
-    if (edge.from === edge.to) {
-      errors.push(`Edge ${index} connects a node to itself.`);
-    }
-  });
-
-  return errors;
+  return validateWzrdBlueprintContract(blueprint, ACTION_IDS, enabledModelIds);
 }
 
 function extractFunctionCalls(data: Record<string, unknown>): OpenAIFunctionCall[] {
@@ -800,7 +745,7 @@ async function callCodexAgent(input: {
     text: textFormat,
   });
 
-  let outputText = extractTextFromOpenAIResponse(data);
+  let outputText = extractWzrdOpenAIText(data);
   const functionCalls = extractFunctionCalls(data);
   if (!outputText && functionCalls.length > 0) {
     const toolOutputs = functionCalls.map((call) => ({
@@ -818,7 +763,7 @@ async function callCodexAgent(input: {
       input: toolOutputs,
       text: textFormat,
     });
-    outputText = extractTextFromOpenAIResponse(data);
+    outputText = extractWzrdOpenAIText(data);
   }
 
   if (!outputText) {
@@ -899,7 +844,7 @@ async function callGroqLegacy(prompt: string, context: WorkflowContext, settings
 async function recordWzrdSession(supabaseAdmin: any, row: Record<string, unknown>) {
   const { error } = await supabaseAdmin.from('wzrd_agent_sessions').insert(row);
   if (error) {
-    console.warn('Unable to record WZRD session:', error.message);
+    safeLog('warn', 'wzrd.session.record_failed', { error });
   }
 }
 
@@ -997,7 +942,7 @@ serve(async (req) => {
       if (providerPreference === 'codex') {
         throw error;
       }
-      console.warn('WZRD provider failed; using fallback planner:', error instanceof Error ? error.message : error);
+      safeLog('warn', 'wzrd.provider.fallback_used', { error });
       provider = 'fallback';
       agentResponse = {
         assistantMessage: 'I drafted a safe starter workflow and a few setup choices.',
@@ -1056,7 +1001,7 @@ serve(async (req) => {
           });
         }
       } catch (repairError) {
-        console.warn('WZRD repair failed:', repairError instanceof Error ? repairError.message : repairError);
+        safeLog('warn', 'wzrd.repair.failed', { error: repairError });
       }
     }
 
@@ -1090,10 +1035,10 @@ serve(async (req) => {
       return errorResponse(error.message, 401);
     }
     if (error instanceof WzrdProviderSetupError) {
-      console.warn('WZRD setup error:', error.message, error.details);
+      safeLog('warn', 'wzrd.setup.error', { error, details: error.details });
       return errorResponse(error.message, error.status, error.details);
     }
-    console.error('Workflow generation error:', error);
+    safeLog('error', 'wzrd.generation.error', { error });
     return errorResponse(error instanceof Error ? error.message : 'Internal server error', 500);
   }
 });

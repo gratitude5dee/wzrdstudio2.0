@@ -1,4 +1,6 @@
 
+import { safeLog } from './safe-logger.ts';
+
 // Standard CORS headers for all responses
 export const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -62,11 +64,10 @@ export function safeErrorResponse(error: unknown, context?: string): Response {
   const errorMsg = error instanceof Error ? error.message : String(error);
   const errorStack = error instanceof Error ? error.stack : undefined;
 
-  // Log full details server-side
-  console.error(`[${context || 'edge-function'}] Error:`, {
+  safeLog('error', context || 'edge-function.error', {
+    error,
     message: errorMsg,
     stack: errorStack,
-    timestamp: new Date().toISOString(),
   });
 
   // Return generic message to client

@@ -28,6 +28,8 @@ export interface EditframeCompositionAsset {
   trackIndex?: number;
   volume?: number;
   muted?: boolean;
+  fadeInMs?: number;
+  fadeOutMs?: number;
   role?: string;
   transition?: EditframeTransition | null;
   effects?: EditframeEffect[] | null;
@@ -143,6 +145,14 @@ function assetTrimStartMs(asset: EditframeCompositionAsset): number | undefined 
 
 function assetTrimEndMs(asset: EditframeCompositionAsset): number | undefined {
   return asset.trimEndMs ?? metadataNumber(asset, 'trimEndMs') ?? metadataNumber(asset, 'trim_end_ms');
+}
+
+function assetFadeInMs(asset: EditframeCompositionAsset): number | undefined {
+  return asset.fadeInMs ?? metadataNumber(asset, 'fadeInMs') ?? metadataNumber(asset, 'fadeInDuration') ?? metadataNumber(asset, 'fade_in_ms');
+}
+
+function assetFadeOutMs(asset: EditframeCompositionAsset): number | undefined {
+  return asset.fadeOutMs ?? metadataNumber(asset, 'fadeOutMs') ?? metadataNumber(asset, 'fadeOutDuration') ?? metadataNumber(asset, 'fade_out_ms');
 }
 
 function assetLayer(asset: EditframeCompositionAsset): number {
@@ -318,7 +328,14 @@ function buildAudioElement(asset: EditframeCompositionAsset): string {
     trimEnd !== undefined ? `sourceout="${seconds(trimEnd)}"` : '',
   ].filter(Boolean).join(' ');
   const volume = asset.muted ? 0 : isFiniteNumber(asset.volume) ? asset.volume : metadataNumber(asset, 'volume') ?? 1;
-  const audio = `<ef-audio src="${escapeAttr(asset.url ?? '')}" ${sourceAttrs} volume="${clamp(volume, 0, 1)}"></ef-audio>`;
+  const fadeIn = assetFadeInMs(asset);
+  const fadeOut = assetFadeOutMs(asset);
+  const fadeAttrs = [
+    fadeIn && fadeIn > 0 ? `data-fade-in-ms="${Math.round(fadeIn)}"` : '',
+    fadeOut && fadeOut > 0 ? `data-fade-out-ms="${Math.round(fadeOut)}"` : '',
+  ].filter(Boolean).join(' ');
+  const audioAttrs = [sourceAttrs, fadeAttrs, `volume="${clamp(volume, 0, 1)}"`].filter(Boolean).join(' ');
+  const audio = `<ef-audio src="${escapeAttr(asset.url ?? '')}" ${audioAttrs}></ef-audio>`;
 
   return `<ef-timegroup mode="fixed" offset="${seconds(startMs)}" duration="${seconds(durationMs)}" data-asset-id="${escapeAttr(asset.id)}" data-role="${escapeAttr(assetRole(asset))}">${audio}</ef-timegroup>`;
 }

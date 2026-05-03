@@ -6,6 +6,7 @@ import {
   ExportProcessingError,
   processAssetsRemote,
 } from '../_shared/export-helpers.ts';
+import { safeLog } from '../_shared/safe-logger.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
@@ -299,7 +300,7 @@ const runDirectorCutJob = async (
       });
 
     if (finalAssetError) {
-      console.warn('Failed to record final Director cut asset:', finalAssetError.message);
+      safeLog('warn', 'director-cut.final_asset.record_failed', { error: finalAssetError, jobId, projectId });
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Processing failed';
@@ -311,7 +312,7 @@ const runDirectorCutJob = async (
           failedShotCount: error.shotFailures.length,
         }
       : { stage: 'failed', error: message };
-    console.error('Director cut processing failed:', message);
+    safeLog('error', 'director-cut.processing.failed', { error, jobId, projectId, providerPayload });
     await supabaseAdmin
       .from('export_jobs')
       .update({
@@ -330,6 +331,7 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  let requestBody: RequestBody | null = null;
   try {
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const authHeader = req.headers.get('Authorization');
@@ -353,8 +355,8 @@ serve(async (req) => {
       });
     }
 
-    const body = (await req.json()) as RequestBody;
-    const { action, projectId, jobId, settings } = body;
+    requestBody = (await req.json()) as RequestBody;
+    const { action, projectId, jobId, settings } = requestBody;
 
     if (!action) {
       return new Response(JSON.stringify({ error: 'action is required' }), {
@@ -494,7 +496,7 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {
-    console.error('director-cut error:', error);
+    safeLog('error', 'director-cut.error', { error, projectId: requestBody?.projectId, jobId: requestBody?.jobId });
     const message = error instanceof Error ? error.message : 'Unknown error';
     return new Response(JSON.stringify({ error: message }), {
       status: 500,

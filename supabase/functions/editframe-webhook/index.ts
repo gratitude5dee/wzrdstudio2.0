@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
 import { finalizeEditframeRender } from '../_shared/export-helpers.ts';
+import { safeLog } from '../_shared/safe-logger.ts';
 import { verifyEditframeWebhookSignature } from '../../../shared/editframeWebhookSignature.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
@@ -141,6 +142,7 @@ serve(async (req) => {
 
   if (!job) {
     await recordWebhookEvent(supabaseAdmin, payload, signature, topic, renderId, null, 'ignored', 'Export job not found');
+    safeLog('warn', 'editframe-webhook.job_not_found', { topic, renderId });
     return new Response(JSON.stringify({ ok: true, status: 'ignored' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
@@ -189,6 +191,7 @@ serve(async (req) => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Webhook processing failed';
+    safeLog('error', 'editframe-webhook.processing_failed', { error, topic, renderId, jobId: job.id });
     await recordWebhookEvent(supabaseAdmin, payload, signature, topic, renderId, job, 'failed', message);
     await supabaseAdmin
       .from('export_jobs')

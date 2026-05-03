@@ -9,6 +9,7 @@ import { ThirdwebProvider } from "thirdweb/react";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/providers/AuthProvider";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import ProjectAccessGate from "@/components/ProjectAccessGate";
 import PerfShell from "@/components/perf/PerfShell";
 import { StudioErrorBoundary } from "@/components/studio/StudioErrorBoundary";
 import CustomCursor from "@/components/CustomCursor";
@@ -100,6 +101,11 @@ const RedirectLegacyDirectorsCut = () => {
   return projectId ? <Navigate to={appRoutes.projects.directorsCut(projectId)} replace /> : <Navigate to={appRoutes.home} replace />;
 };
 
+const ProtectedProjectRoute = ({ children }: { children: React.ReactNode }) => {
+  const { projectId } = useParams();
+  return <ProjectAccessGate projectId={projectId}>{children}</ProjectAccessGate>;
+};
+
 const CursorWrapper = () => {
   const { isLoading } = useCursorLoading();
   return <CustomCursor isLoading={isLoading} />;
@@ -174,7 +180,9 @@ const App = () => {
                       path="/projects/:projectId/studio"
                       element={
                         <ProtectedRoute>
-                          <StudioPage />
+                          <ProtectedProjectRoute>
+                            <StudioPage />
+                          </ProtectedProjectRoute>
                         </ProtectedRoute>
                       }
                     />
@@ -198,7 +206,9 @@ const App = () => {
                       path="/projects/:projectId/timeline"
                       element={
                         <ProtectedRoute>
-                          <StoryboardPage />
+                          <ProtectedProjectRoute>
+                            <StoryboardPage />
+                          </ProtectedProjectRoute>
                         </ProtectedRoute>
                       }
                     />
@@ -206,7 +216,9 @@ const App = () => {
                       path="/projects/:projectId/observability"
                       element={
                         <ProtectedRoute>
-                          <ProjectObservabilityPage />
+                          <ProtectedProjectRoute>
+                            <ProjectObservabilityPage />
+                          </ProtectedProjectRoute>
                         </ProtectedRoute>
                       }
                     />
@@ -214,7 +226,9 @@ const App = () => {
                       path="/projects/:projectId/directors-cut"
                       element={
                         <ProtectedRoute>
-                          <DirectorCutPage />
+                          <ProtectedProjectRoute>
+                            <DirectorCutPage />
+                          </ProtectedProjectRoute>
                         </ProtectedRoute>
                       }
                     />
@@ -222,7 +236,9 @@ const App = () => {
                       path="/projects/:projectId/editor"
                       element={
                         <ProtectedRoute>
-                          <EditorPage />
+                          <ProtectedProjectRoute>
+                            <EditorPage />
+                          </ProtectedProjectRoute>
                         </ProtectedRoute>
                       }
                     />

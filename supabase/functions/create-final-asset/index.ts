@@ -6,6 +6,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
+import { safeLog } from '../_shared/safe-logger.ts';
 import {
   ExportAsset,
   ExportProcessingError,
@@ -300,7 +301,7 @@ serve(async (req) => {
       throw processingError;
     }
   } catch (error) {
-    console.error('create-final-asset error:', error);
+    safeLog('error', 'create-final-asset.error', { error });
     const message = error instanceof Error ? error.message : 'Unknown error';
     return new Response(JSON.stringify({ error: message }), {
       status: 500,

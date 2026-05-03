@@ -2,6 +2,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { authenticateRequest, AuthError } from '../_shared/auth.ts';
 import { corsHeaders, errorResponse, successResponse, handleCors } from '../_shared/response.ts';
+import { safeLog } from '../_shared/safe-logger.ts';
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -13,13 +14,12 @@ serve(async (req) => {
     // Authenticate the request
     await authenticateRequest(req.headers);
 
-    // Log the received request
-    console.log('Received headers:', Object.fromEntries(req.headers.entries()));
+    safeLog('info', 'fal-proxy.request.received', { headers: Object.fromEntries(req.headers.entries()) });
 
     // Retrieve FAL_KEY from the environment
     const falKey = Deno.env.get('FAL_KEY');
     if (!falKey) {
-      console.error('FAL_KEY environment variable is not set');
+      safeLog('error', 'fal-proxy.setup.missing_fal_key');
       return errorResponse('Server configuration error: FAL_KEY not set', 500);
     }
 
@@ -34,14 +34,14 @@ serve(async (req) => {
       if (!endpoint) return errorResponse('endpoint is required', 400);
       if (!input) return errorResponse('input is required', 400);
       
-      console.log('Request body:', { endpoint, input, mode });
+      safeLog('info', 'fal-proxy.request.parsed', { endpoint, input, mode });
     } catch (e) {
-      console.error('Failed to parse request:', e);
+      safeLog('warn', 'fal-proxy.request.parse_failed', { error: e });
       return errorResponse('Invalid request body', 400);
     }
 
     // Submit request to fal.ai
-    console.log(`Sending request to fal.ai endpoint: ${endpoint}`);
+    safeLog('info', 'fal-proxy.submit', { endpoint, mode });
     const response = await fetch(`https://fal.run/v1/${endpoint}`, {
       method: 'POST',
       headers: {
@@ -55,7 +55,7 @@ serve(async (req) => {
     });
 
     const responseText = await response.text();
-    console.log('Fal.ai response:', responseText);
+    safeLog('info', 'fal-proxy.response.received', { endpoint, status: response.status, responseBody: responseText });
 
     if (!response.ok) {
       let errorMessage;
@@ -72,11 +72,11 @@ serve(async (req) => {
     try {
       data = JSON.parse(responseText);
     } catch (e) {
-      console.error('Failed to parse fal.ai response:', e);
+      safeLog('error', 'fal-proxy.response.parse_failed', { error: e, endpoint, status: response.status });
       return errorResponse('Invalid response from fal.ai', 500);
     }
     
-    console.log('Sending response:', {
+    safeLog('info', 'fal-proxy.response.returned', {
       requestId: data.request_id,
       status: data.status,
       result: data.result
@@ -88,7 +88,7 @@ serve(async (req) => {
       result: data.result,
     });
   } catch (error) {
-    console.error('Edge function error:', error);
+    safeLog('error', 'fal-proxy.error', { error });
     
     // Handle authentication errors specifically
     if (error instanceof AuthError) {

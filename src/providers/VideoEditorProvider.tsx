@@ -4,6 +4,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from "sonner";
 import { useParams } from "react-router-dom";
 
+const bypassAuthForTests = import.meta.env.DEV && import.meta.env.VITE_BYPASS_AUTH_FOR_TESTS === 'true';
+
 const clearMediaState = () => {
   useVideoEditorStore.setState((state) => ({
     ...state,
@@ -49,6 +51,13 @@ export function VideoEditorProvider({ children }: { children: ReactNode }) {
 
       if (!activeProjectId) {
         clearMediaState();
+        setIsLoading(false);
+        return;
+      }
+
+      if (bypassAuthForTests) {
+        setProjectId(activeProjectId);
+        setProjectName('Test Project');
         setIsLoading(false);
         return;
       }
