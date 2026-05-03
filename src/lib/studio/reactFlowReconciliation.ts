@@ -1,4 +1,39 @@
 import type { Edge, Node } from '@xyflow/react';
+import type { NodeDefinition } from '@/types/computeFlow';
+
+const SIGNATURE_METADATA_OMITS = new Set([
+  'clientWriteId',
+  'client_write_id',
+  'runId',
+  'run_id',
+  'startedAt',
+  'started_at',
+  'finishedAt',
+  'finished_at',
+  'queuedAt',
+  'queued_at',
+  'completedAt',
+  'completed_at',
+  'lastSavedAt',
+  'last_saved_at',
+  'lastModifiedAt',
+  'last_modified_at',
+  'status',
+  'progress',
+  'error',
+  'isDirty',
+  'is_dirty',
+]);
+
+interface ReactFlowNodeDataSignatureInput {
+  node: NodeDefinition;
+  chips?: unknown;
+  byHandle?: unknown;
+  incomingPrompt?: unknown;
+  inputValue?: unknown;
+  inputType?: unknown;
+  includeRuntime?: boolean;
+}
 
 export function stableStringify(value: unknown): string {
   if (value === null || typeof value !== 'object') {
@@ -20,6 +55,73 @@ function getDataSignature(data: unknown): unknown {
   }
 
   return (data as Record<string, unknown>).__signature;
+}
+
+function sanitizeSignatureMetadata(metadata: NodeDefinition['metadata']): Record<string, unknown> | undefined {
+  if (!metadata || typeof metadata !== 'object') {
+    return undefined;
+  }
+
+  return Object.fromEntries(
+    Object.entries(metadata).filter(([key]) => !SIGNATURE_METADATA_OMITS.has(key))
+  );
+}
+
+function sanitizeSignatureBatch(batch: NodeDefinition['batch']): NodeDefinition['batch'] | undefined {
+  if (!batch) {
+    return undefined;
+  }
+
+  return {
+    policy: batch.policy,
+    items: batch.items,
+  };
+}
+
+export function buildReactFlowNodeDataSignature({
+  node,
+  chips,
+  byHandle,
+  incomingPrompt,
+  inputValue,
+  inputType,
+  includeRuntime = false,
+}: ReactFlowNodeDataSignatureInput): string {
+  return stableStringify({
+    node: {
+      id: node.id,
+      kind: node.kind,
+      actionId: node.actionId,
+      mediaType: node.mediaType,
+      workflowType: node.workflowType,
+      executor: node.executor,
+      controls: node.controls,
+      batch: sanitizeSignatureBatch(node.batch),
+      variants: node.variants,
+      assetRefs: node.assetRefs,
+      version: node.version,
+      label: node.label,
+      size: node.size,
+      inputs: node.inputs,
+      outputs: node.outputs,
+      params: node.params,
+      metadata: sanitizeSignatureMetadata(node.metadata),
+      preview: node.preview,
+      ...(includeRuntime
+        ? {
+            status: node.status,
+            progress: node.progress,
+            error: node.error,
+            isDirty: node.isDirty,
+          }
+        : {}),
+    },
+    chips,
+    byHandle,
+    incomingPrompt,
+    inputValue,
+    inputType,
+  });
 }
 
 export function reconcileReactFlowNodes<TNode extends Node>(

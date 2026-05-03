@@ -409,6 +409,7 @@ let executionAbortController: AbortController | null = null;
 
 const pendingSseNodeUpdates = new Map<string, Partial<NodeDefinition>>();
 let pendingSseNodeFlushScheduled = false;
+const SSE_PROGRESS_FLUSH_MS = 225;
 
 function shouldApplyNodeUpdates(
   node: NodeDefinition | undefined,
@@ -444,12 +445,7 @@ function queueSseNodeUpdate(
   }
 
   pendingSseNodeFlushScheduled = true;
-  if (typeof requestAnimationFrame === 'function') {
-    requestAnimationFrame(() => flushQueuedSseNodeUpdates(get));
-    return;
-  }
-
-  setTimeout(() => flushQueuedSseNodeUpdates(get), 50);
+  setTimeout(() => flushQueuedSseNodeUpdates(get), SSE_PROGRESS_FLUSH_MS);
 }
 
 export const useComputeFlowStore = create<ComputeFlowState>((set, get) => ({
@@ -1641,6 +1637,9 @@ function handleSSEEvent(
         preview: output ?? existingNode?.preview,
         error: error || undefined,
       });
+      if (isCompleted) {
+        flushQueuedSseNodeUpdates(get);
+      }
       set((state: ComputeFlowState) => ({
         execution: {
           ...state.execution,

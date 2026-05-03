@@ -1,4 +1,4 @@
-import { memo, type MouseEvent, useEffect, useMemo, useState } from 'react';
+import { memo, type MouseEvent, useCallback, useMemo } from 'react';
 import { NodeProps, Position } from '@xyflow/react';
 import {
   Bookmark,
@@ -13,8 +13,9 @@ import {
 } from 'lucide-react';
 
 import { BaseNode } from './BaseNode';
-import { NodeStatusBadge } from '../status/NodeStatusBadge';
+import { NodeRuntimeStatus } from '../status/NodeRuntimeStatus';
 import { cn } from '@/lib/utils';
+import { stableStringify } from '@/lib/studio/reactFlowReconciliation';
 import {
   cloneImageEditParams,
   deriveImageEditOperationLabel,
@@ -53,6 +54,8 @@ const checkerboardStyle = {
   backgroundColor: '#222222',
 } as const;
 
+const EMPTY_IMAGE_SOURCES: ImageEditIncomingSource[] = [];
+
 const portPositionToReactFlow = (position: PortPosition) => {
   switch (position) {
     case 'left':
@@ -69,48 +72,41 @@ const portPositionToReactFlow = (position: PortPosition) => {
 
 export const ReactFlowImageEditNode = memo(({ id, data, selected }: NodeProps) => {
   const nodeData = (data ?? {}) as ImageEditNodeData;
-  const [editorParams, setEditorParams] = useState<ImageEditNodeParams>(() =>
-    cloneImageEditParams(nodeData.params)
+  const onOpenConnectionMenu = nodeData.onOpenConnectionMenu;
+  const onSelectNode = nodeData.onSelectNode;
+  const onUpdateNode = nodeData.onUpdateNode;
+  const popoverBoundary = nodeData.popoverBoundary;
+  const popoverContainer = nodeData.popoverContainer;
+  const incomingImageSources = nodeData.incomingImageSources ?? EMPTY_IMAGE_SOURCES;
+  const incomingImageSourcesSignature = useMemo(
+    () => stableStringify(incomingImageSources),
+    [incomingImageSources]
   );
+  const baseEditorParams = useMemo(
+    () => cloneImageEditParams(nodeData.params),
+    [nodeData.params]
+  );
+  const editorParams = useMemo(() => {
+    let next = baseEditorParams;
 
-  useEffect(() => {
-    setEditorParams(cloneImageEditParams(nodeData.params));
-  }, [nodeData.params]);
-
-  useEffect(() => {
-    if (!nodeData.incomingPrompt || editorParams.pendingPrompt?.trim().length > 0) {
-      return;
-    }
-
-    const next = {
-      ...editorParams,
-      pendingPrompt: nodeData.incomingPrompt,
-    };
-    setEditorParams(next);
-    nodeData.onUpdateNode?.({
-      params: {
+    if (nodeData.incomingPrompt && (next.pendingPrompt?.trim() ?? '').length === 0) {
+      next = {
         ...next,
-      },
-    });
-  }, [editorParams, nodeData]);
-
-  useEffect(() => {
-    if (!nodeData.incomingImageSources?.length) {
-      return;
+        pendingPrompt: nodeData.incomingPrompt,
+      };
     }
 
-    const next = syncIncomingImageLayers(editorParams, nodeData.incomingImageSources);
-    if (JSON.stringify(next.layers) === JSON.stringify(editorParams.layers)) {
-      return;
+    if (incomingImageSources.length > 0) {
+      next = syncIncomingImageLayers(next, incomingImageSources);
     }
 
-    setEditorParams(next);
-    nodeData.onUpdateNode?.({
-      params: {
-        ...next,
-      },
-    });
-  }, [editorParams, nodeData.incomingImageSources, nodeData.onUpdateNode]);
+    return next;
+  }, [
+    baseEditorParams,
+    incomingImageSources,
+    incomingImageSourcesSignature,
+    nodeData.incomingPrompt,
+  ]);
 
   const previewUrl = useMemo(
     () => getNodeImagePreviewUrl({ preview: nodeData.preview, params: editorParams as unknown as Record<string, unknown> }),
@@ -118,39 +114,40 @@ export const ReactFlowImageEditNode = memo(({ id, data, selected }: NodeProps) =
   );
 
   const buildHandles = useMemo(() => {
-    const handles = [...(nodeData.inputs || []), ...(nodeData.outputs || [])];
+    const outputPorts = nodeData.outputs || [];
+    const outputPortIds = new Set(outputPorts.map((output) => output.id));
+    const handles = [...(nodeData.inputs || []), ...outputPorts];
     return handles.map((port) => ({
       id: port.id,
-      type: (nodeData.outputs || []).some((output) => output.id === port.id) ? ('source' as const) : ('target' as const),
+      type: outputPortIds.has(port.id) ? ('source' as const) : ('target' as const),
       position: portPositionToReactFlow(port.position),
       dataType: port.datatype,
       label: port.name,
       variant: 'flora' as const,
-      onClick: (nodeData.outputs || []).some((output) => output.id === port.id)
+      onClick: outputPortIds.has(port.id)
         ? (event: MouseEvent<HTMLDivElement>) =>
-            nodeData.onOpenConnectionMenu?.(port.id, event.currentTarget.getBoundingClientRect())
+            onOpenConnectionMenu?.(port.id, event.currentTarget.getBoundingClientRect())
         : undefined,
     }));
-  }, [nodeData.inputs, nodeData.onOpenConnectionMenu, nodeData.outputs]);
+  }, [nodeData.inputs, nodeData.outputs, onOpenConnectionMenu]);
 
-  const openDock = (tool?: ImageEditTool) => {
+  const openDock = useCallback((tool?: ImageEditTool) => {
     if (tool) {
       const next = {
         ...editorParams,
         activeTool: tool,
       };
-      setEditorParams(next);
-      nodeData.onUpdateNode?.({
+      onUpdateNode?.({
         params: {
           ...next,
         },
       });
     }
 
-    nodeData.onSelectNode?.(id);
-  };
+    onSelectNode?.(id);
+  }, [editorParams, id, onSelectNode, onUpdateNode]);
 
-  const handleDownload = () => {
+  const handleDownload = useCallback(() => {
     if (!previewUrl) {
       return;
     }
@@ -159,7 +156,110 @@ export const ReactFlowImageEditNode = memo(({ id, data, selected }: NodeProps) =
     link.href = previewUrl;
     link.download = `${(nodeData.label || 'image-edit').replace(/\s+/g, '-').toLowerCase()}.png`;
     link.click();
-  };
+  }, [nodeData.label, previewUrl]);
+
+  const hoverMenu = useMemo(
+    () => ({
+      leadingChipLabel: 'Auto',
+      aspectRatioLabel: editorParams.aspectRatio,
+      popoverBoundary,
+      popoverContainer,
+      toolItems: [
+        {
+          key: 'enhancePrompt',
+          label: 'Enhance prompt',
+          icon: Sparkles,
+          onClick: () => openDock('enhancePrompt'),
+        },
+        {
+          key: 'upscale',
+          label: 'Upscale',
+          icon: ZoomIn,
+          disabled: true,
+        },
+        {
+          key: 'crop',
+          label: 'Crop',
+          icon: Crop,
+          disabled: true,
+        },
+        {
+          key: 'inpaint',
+          label: 'Inpaint',
+          icon: Wand2,
+          onClick: () => openDock('inpaint'),
+        },
+        {
+          key: 'outpaint',
+          label: 'Outpaint',
+          icon: Expand,
+          disabled: true,
+        },
+        {
+          key: 'removeBackground',
+          label: 'Remove background',
+          icon: ScanText,
+          onClick: () => openDock('removeBackground'),
+        },
+        {
+          key: 'splitLayers',
+          label: 'Split into layers',
+          icon: Sparkles,
+          onClick: () => openDock('splitLayers'),
+          trailing: (
+            <>
+              {[2, 3, 4, 5].map((count) => (
+                <span key={count} className="rounded-full border border-[rgba(249,115,22,0.08)] px-1.5 py-0.5">
+                  {count}
+                </span>
+              ))}
+            </>
+          ),
+        },
+      ],
+      actionItems: [
+        {
+          key: 'enhance',
+          icon: Sparkles,
+          ariaLabel: 'Enhance prompt',
+          onClick: () => openDock('enhancePrompt'),
+        },
+        {
+          key: 'lock',
+          icon: Lock,
+          ariaLabel: 'Lock',
+          disabled: true,
+        },
+        {
+          key: 'bookmark',
+          icon: Bookmark,
+          ariaLabel: 'Bookmark',
+          disabled: true,
+        },
+        {
+          key: 'download',
+          icon: Download,
+          ariaLabel: 'Download',
+          onClick: previewUrl ? handleDownload : undefined,
+          disabled: !previewUrl,
+        },
+        {
+          key: 'expand',
+          icon: Expand,
+          ariaLabel: 'Open editor',
+          onClick: () => openDock(),
+        },
+      ],
+    }),
+    [
+      editorParams.aspectRatio,
+      handleDownload,
+      openDock,
+      popoverBoundary,
+      popoverContainer,
+      previewUrl,
+    ]
+  );
 
   return (
     <BaseNode
@@ -168,105 +268,9 @@ export const ReactFlowImageEditNode = memo(({ id, data, selected }: NodeProps) =
       isSelected={selected}
       minimalChrome
       className="overflow-visible text-white"
-      hoverMenu={{
-        leadingChipLabel: 'Auto',
-        aspectRatioLabel: editorParams.aspectRatio,
-        popoverBoundary: nodeData?.popoverBoundary,
-        popoverContainer: nodeData?.popoverContainer,
-        toolItems: [
-          {
-            key: 'enhancePrompt',
-            label: 'Enhance prompt',
-            icon: Sparkles,
-            onClick: () => openDock('enhancePrompt'),
-          },
-          {
-            key: 'upscale',
-            label: 'Upscale',
-            icon: ZoomIn,
-            disabled: true,
-          },
-          {
-            key: 'crop',
-            label: 'Crop',
-            icon: Crop,
-            disabled: true,
-          },
-          {
-            key: 'inpaint',
-            label: 'Inpaint',
-            icon: Wand2,
-            onClick: () => openDock('inpaint'),
-          },
-          {
-            key: 'outpaint',
-            label: 'Outpaint',
-            icon: Expand,
-            disabled: true,
-          },
-          {
-            key: 'removeBackground',
-            label: 'Remove background',
-            icon: ScanText,
-            onClick: () => openDock('removeBackground'),
-          },
-          {
-            key: 'splitLayers',
-            label: 'Split into layers',
-            icon: Sparkles,
-            onClick: () => openDock('splitLayers'),
-            trailing: (
-              <>
-                {[2, 3, 4, 5].map((count) => (
-                  <span key={count} className="rounded-full border border-[rgba(249,115,22,0.08)] px-1.5 py-0.5">
-                    {count}
-                  </span>
-                ))}
-              </>
-            ),
-          },
-        ],
-        actionItems: [
-          {
-            key: 'enhance',
-            icon: Sparkles,
-            ariaLabel: 'Enhance prompt',
-            onClick: () => openDock('enhancePrompt'),
-          },
-          {
-            key: 'lock',
-            icon: Lock,
-            ariaLabel: 'Lock',
-            disabled: true,
-          },
-          {
-            key: 'bookmark',
-            icon: Bookmark,
-            ariaLabel: 'Bookmark',
-            disabled: true,
-          },
-          {
-            key: 'download',
-            icon: Download,
-            ariaLabel: 'Download',
-            onClick: previewUrl ? handleDownload : undefined,
-            disabled: !previewUrl,
-          },
-          {
-            key: 'expand',
-            icon: Expand,
-            ariaLabel: 'Open editor',
-            onClick: () => openDock(),
-          },
-        ],
-      }}
+      hoverMenu={hoverMenu}
     >
-      <NodeStatusBadge
-        status={(nodeData.status as any) || 'idle'}
-        progress={nodeData.progress || 0}
-        error={nodeData.error}
-        className="right-0 top-0"
-      />
+      <NodeRuntimeStatus nodeId={id} className="right-0 top-0" />
       <div className="w-[404px]">
         <div className="mb-2 flex items-center justify-between gap-3 px-1.5">
           <div className="min-w-0 truncate text-[11px] uppercase tracking-[0.22em] text-zinc-500">
@@ -286,7 +290,14 @@ export const ReactFlowImageEditNode = memo(({ id, data, selected }: NodeProps) =
         >
           <div className="aspect-[16/9] w-full" style={checkerboardStyle}>
             {previewUrl ? (
-              <img src={previewUrl} alt={nodeData.label || 'Image Edit preview'} className="h-full w-full object-cover" />
+              <img
+                src={previewUrl}
+                alt={nodeData.label || 'Image Edit preview'}
+                className="h-full w-full object-cover"
+                loading="lazy"
+                decoding="async"
+                draggable={false}
+              />
             ) : (
               <div className="flex h-full items-center justify-center text-sm text-zinc-500">
                 Connect one or more images to start compositing

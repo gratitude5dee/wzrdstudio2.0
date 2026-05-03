@@ -1,4 +1,4 @@
-import { memo, type MouseEvent } from 'react';
+import { memo, type MouseEvent, useCallback, useMemo } from 'react';
 import { NodeProps, Position } from '@xyflow/react';
 import {
   Bookmark,
@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 
 import { BaseNode } from './BaseNode';
-import { NodeStatusBadge } from '../status/NodeStatusBadge';
+import { NodeRuntimeStatus } from '../status/NodeRuntimeStatus';
 import { ShotCameraControl } from './ShotCameraControl';
 import { cn } from '@/lib/utils';
 import type { Port, PortPosition } from '@/types/computeFlow';
@@ -38,26 +38,60 @@ const portPositionToReactFlow = (position: PortPosition) => {
   }
 };
 
+const VideoPreview = memo(({ previewUrl, title }: { previewUrl?: string; title: string }) => {
+  if (previewUrl) {
+    return (
+      <video
+        src={previewUrl}
+        className="aspect-[16/9] w-full object-cover"
+        muted
+        loop
+        playsInline
+        preload="metadata"
+      />
+    );
+  }
+
+  return (
+    <div className="flex aspect-[16/9] items-center justify-center gap-2 text-sm text-zinc-500">
+      <PlayCircle className="h-4 w-4" />
+      <span>{title} preview will appear here</span>
+    </div>
+  );
+});
+
+VideoPreview.displayName = 'VideoPreview';
+
 export const ReactFlowVideoNode = memo(({ data, id, selected }: NodeProps) => {
   const nodeData = (data as any) || {};
-  const status = nodeData?.status || 'idle';
-  const progress = nodeData?.progress || 0;
-  const error = nodeData?.error;
+  const onGenerate = nodeData?.onGenerate;
+  const onModelSelectionChange = nodeData?.onModelSelectionChange;
+  const onOpenConnectionMenu = nodeData?.onOpenConnectionMenu;
+  const onSelectNode = nodeData?.onSelectNode;
+  const onUpdateParams = nodeData?.onUpdateParams;
+  const popoverBoundary = nodeData?.popoverBoundary;
+  const popoverContainer = nodeData?.popoverContainer;
   const inputPorts = (nodeData?.inputs as Port[] | undefined) ?? [];
   const outputPorts = (nodeData?.outputs as Port[] | undefined) ?? [];
-  const promptValue = getNodePromptValue({ params: nodeData?.params });
-  const previewUrl = nodeData?.preview?.url ?? nodeData?.params?.videoUrl;
-  const modelSelection = getNodeModelSelection({
-    kind: 'Video',
-    params: nodeData?.params,
-  });
+  const params = nodeData?.params;
+  const promptValue = getNodePromptValue({ params });
+  const previewUrl = nodeData?.preview?.url ?? params?.videoUrl;
+  const modelSelection = useMemo(
+    () =>
+      getNodeModelSelection({
+        kind: 'Video',
+        params,
+      }),
+    [params]
+  );
   const modelLabel = getModelSummaryLabel(modelSelection);
   const title = nodeData?.label || 'Video';
   const referenceImages = (nodeData?.incomingImageSources as Array<{ url: string; name: string }> | undefined) ?? [];
-  const aspectRatio = nodeData?.params?.aspectRatio ?? '16:9';
-  const shot = (nodeData?.params?.shot ?? {}) as ShotControl;
+  const visibleReferenceImages = useMemo(() => referenceImages.slice(0, 4), [referenceImages]);
+  const aspectRatio = params?.aspectRatio ?? '16:9';
+  const shot = (params?.shot ?? {}) as ShotControl;
 
-  const handleDownload = () => {
+  const handleDownload = useCallback(() => {
     if (!previewUrl) {
       return;
     }
@@ -66,30 +100,95 @@ export const ReactFlowVideoNode = memo(({ data, id, selected }: NodeProps) => {
     link.href = previewUrl;
     link.download = `${title.replace(/\s+/g, '-').toLowerCase() || 'video'}.mp4`;
     link.click();
-  };
+  }, [previewUrl, title]);
 
-  const handles = [
-    ...inputPorts.map((port) => ({
-      id: port.id,
-      type: 'target' as const,
-      position: portPositionToReactFlow(port.position),
-      dataType: port.datatype,
-      label: port.name,
-      maxConnections: port.cardinality === '1' ? 1 : undefined,
-      variant: 'flora' as const,
-    })),
-    ...outputPorts.map((port) => ({
-      id: port.id,
-      type: 'source' as const,
-      position: portPositionToReactFlow(port.position),
-      dataType: port.datatype,
-      label: port.name,
-      maxConnections: port.cardinality === '1' ? 1 : undefined,
-      variant: 'flora' as const,
-      onClick: (event: MouseEvent<HTMLDivElement>) =>
-        nodeData?.onOpenConnectionMenu?.(port.id, event.currentTarget.getBoundingClientRect()),
-    })),
-  ];
+  const handles = useMemo(
+    () => [
+      ...inputPorts.map((port) => ({
+        id: port.id,
+        type: 'target' as const,
+        position: portPositionToReactFlow(port.position),
+        dataType: port.datatype,
+        label: port.name,
+        maxConnections: port.cardinality === '1' ? 1 : undefined,
+        variant: 'flora' as const,
+      })),
+      ...outputPorts.map((port) => ({
+        id: port.id,
+        type: 'source' as const,
+        position: portPositionToReactFlow(port.position),
+        dataType: port.datatype,
+        label: port.name,
+        maxConnections: port.cardinality === '1' ? 1 : undefined,
+        variant: 'flora' as const,
+        onClick: (event: MouseEvent<HTMLDivElement>) =>
+          onOpenConnectionMenu?.(port.id, event.currentTarget.getBoundingClientRect()),
+      })),
+    ],
+    [inputPorts, onOpenConnectionMenu, outputPorts]
+  );
+
+  const hoverMenu = useMemo(
+    () => ({
+      mediaType: 'video' as const,
+      modelSelection,
+      aspectRatioLabel: aspectRatio,
+      onModelSelectionChange,
+      popoverBoundary,
+      popoverContainer,
+      toolItems: [
+        { key: 'enhance-prompt', label: 'Enhance prompt', icon: Sparkles, disabled: true },
+        { key: 'upscale', label: 'Upscale', icon: Expand, disabled: true },
+        { key: 'crop', label: 'Crop', icon: Wand2, disabled: true },
+        { key: 'outpaint', label: 'Outpaint', icon: Wand2, disabled: true },
+      ],
+      actionItems: [
+        {
+          key: 'generate',
+          icon: PlayCircle,
+          ariaLabel: 'Generate',
+          onClick: onGenerate,
+        },
+        {
+          key: 'lock',
+          icon: Lock,
+          ariaLabel: 'Lock',
+          disabled: true,
+        },
+        {
+          key: 'bookmark',
+          icon: Bookmark,
+          ariaLabel: 'Bookmark',
+          disabled: true,
+        },
+        {
+          key: 'download',
+          icon: Download,
+          ariaLabel: 'Download',
+          onClick: previewUrl ? handleDownload : undefined,
+          disabled: !previewUrl,
+        },
+        {
+          key: 'expand',
+          icon: Expand,
+          ariaLabel: 'Open node',
+          onClick: () => onSelectNode?.(id),
+        },
+      ],
+    }),
+    [
+      aspectRatio,
+      handleDownload,
+      id,
+      modelSelection,
+      onGenerate,
+      onModelSelectionChange,
+      onSelectNode,
+      popoverBoundary,
+      popoverContainer,
+      previewUrl,
+    ]
+  );
 
   return (
     <BaseNode
@@ -98,55 +197,9 @@ export const ReactFlowVideoNode = memo(({ data, id, selected }: NodeProps) => {
       isSelected={selected}
       minimalChrome
       className="text-white"
-      hoverMenu={{
-        mediaType: 'video',
-        modelSelection,
-        aspectRatioLabel: aspectRatio,
-        onModelSelectionChange: nodeData?.onModelSelectionChange,
-        popoverBoundary: nodeData?.popoverBoundary,
-        popoverContainer: nodeData?.popoverContainer,
-        toolItems: [
-          { key: 'enhance-prompt', label: 'Enhance prompt', icon: Sparkles, disabled: true },
-          { key: 'upscale', label: 'Upscale', icon: Expand, disabled: true },
-          { key: 'crop', label: 'Crop', icon: Wand2, disabled: true },
-          { key: 'outpaint', label: 'Outpaint', icon: Wand2, disabled: true },
-        ],
-        actionItems: [
-          {
-            key: 'generate',
-            icon: PlayCircle,
-            ariaLabel: 'Generate',
-            onClick: nodeData?.onGenerate,
-          },
-          {
-            key: 'lock',
-            icon: Lock,
-            ariaLabel: 'Lock',
-            disabled: true,
-          },
-          {
-            key: 'bookmark',
-            icon: Bookmark,
-            ariaLabel: 'Bookmark',
-            disabled: true,
-          },
-          {
-            key: 'download',
-            icon: Download,
-            ariaLabel: 'Download',
-            onClick: previewUrl ? handleDownload : undefined,
-            disabled: !previewUrl,
-          },
-          {
-            key: 'expand',
-            icon: Expand,
-            ariaLabel: 'Open node',
-            onClick: () => nodeData?.onSelectNode?.(id),
-          },
-        ],
-      }}
+      hoverMenu={hoverMenu}
     >
-      <NodeStatusBadge status={status} progress={progress} error={error} className="right-0 top-0" />
+      <NodeRuntimeStatus nodeId={id} className="right-0 top-0" />
 
       <div className="w-[396px]">
         <div className="mb-2 flex items-center justify-between gap-3 px-1.5">
@@ -169,12 +222,15 @@ export const ReactFlowVideoNode = memo(({ data, id, selected }: NodeProps) => {
             {referenceImages.length > 0 ? (
               <div className="flex items-center gap-3">
                 <div className="flex -space-x-2.5">
-                  {referenceImages.slice(0, 4).map((source) => (
+                  {visibleReferenceImages.map((source) => (
                     <img
                       key={`${source.name}-${source.url}`}
                       src={source.url}
                       alt={source.name}
                       className="h-10 w-10 rounded-xl border border-[rgba(249,115,22,0.08)] object-cover"
+                      loading="lazy"
+                      decoding="async"
+                      draggable={false}
                     />
                   ))}
                 </div>
@@ -185,30 +241,16 @@ export const ReactFlowVideoNode = memo(({ data, id, selected }: NodeProps) => {
             ) : null}
 
             <div className="overflow-hidden rounded-[18px] border border-[rgba(249,115,22,0.06)] bg-[#111111]">
-              {previewUrl ? (
-                <video
-                  src={previewUrl}
-                  className="aspect-[16/9] w-full object-cover"
-                  muted
-                  loop
-                  autoPlay
-                  playsInline
-                />
-              ) : (
-                <div className="flex aspect-[16/9] items-center justify-center gap-2 text-sm text-zinc-500">
-                  <PlayCircle className="h-4 w-4" />
-                  <span>{status === 'running' ? `Generating ${progress}%` : 'Generated video preview will appear here'}</span>
-                </div>
-              )}
+              <VideoPreview previewUrl={previewUrl} title="Generated video" />
             </div>
 
             <div className="rounded-[18px] border border-[rgba(249,115,22,0.06)] bg-[#111111]">
               <textarea
                 value={promptValue}
-                onChange={(event) => nodeData?.onUpdateParams?.({ prompt: event.target.value })}
+                onChange={(event) => onUpdateParams?.({ prompt: event.target.value })}
                 onMouseDown={(event) => event.stopPropagation()}
                 onClick={(event) => event.stopPropagation()}
-                className="min-h-[112px] w-full resize-none bg-transparent px-4 py-4 text-sm leading-6 text-zinc-100 outline-none placeholder:text-zinc-500"
+                className="nodrag nowheel min-h-[112px] w-full resize-none bg-transparent px-4 py-4 text-sm leading-6 text-zinc-100 outline-none placeholder:text-zinc-500"
                 placeholder='Describe the shot, motion, and atmosphere...'
               />
               <div className="flex items-center justify-between gap-2 border-t border-[rgba(249,115,22,0.06)] px-3 py-2.5">
@@ -222,18 +264,18 @@ export const ReactFlowVideoNode = memo(({ data, id, selected }: NodeProps) => {
                   <ShotCameraControl
                     mediaType="video"
                     value={shot}
-                    onChange={(next) => nodeData?.onUpdateParams?.({ shot: next })}
-                    popoverContainer={nodeData?.popoverContainer}
+                    onChange={(next) => onUpdateParams?.({ shot: next })}
+                    popoverContainer={popoverContainer}
                   />
                 </div>
                 <button
                   type="button"
                   onClick={(event) => {
                     event.stopPropagation();
-                    nodeData?.onGenerate?.();
+                    onGenerate?.();
                   }}
                   disabled={!promptValue.trim()}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white text-black transition-colors hover:bg-[#E8E8E8] disabled:cursor-not-allowed disabled:bg-white/20 disabled:text-zinc-500"
+                  className="nodrag inline-flex h-9 w-9 items-center justify-center rounded-full bg-white text-black transition-colors hover:bg-[#E8E8E8] disabled:cursor-not-allowed disabled:bg-white/20 disabled:text-zinc-500"
                 >
                   <SendHorizontal className="h-4 w-4" />
                 </button>

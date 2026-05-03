@@ -71,6 +71,7 @@ import { resolveIncomingForUI } from '@/lib/compute/applyBinding';
 import { buildFloraSeedGraph, FLORA_EXAMPLE_COPY, isFloraSeedNode } from '@/lib/studio/floraSeed';
 import { getMediaActionById } from '@/lib/studio/mediaActionRegistry';
 import {
+  buildReactFlowNodeDataSignature,
   reconcileReactFlowEdges,
   reconcileReactFlowNodes,
   stableStringify,
@@ -479,13 +480,15 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
         }
       }
 
-      const dataSignature = stableStringify({
+      const isolateRuntimeFromNodeData = nodeDef.kind === 'ImageEdit' || nodeDef.kind === 'Video';
+      const dataSignature = buildReactFlowNodeDataSignature({
         node: nodeDef,
         chips,
         byHandle,
         incomingPrompt,
         inputValue,
         inputType,
+        includeRuntime: !isolateRuntimeFromNodeData,
       });
       const nodeData = {
         __signature: dataSignature,
