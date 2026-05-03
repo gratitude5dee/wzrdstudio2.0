@@ -42,7 +42,8 @@ describe('useStudioGraphActions', () => {
     expect(materialized.nodes).toHaveLength(3);
     expect(materialized.edges).toHaveLength(2);
 
-    expect(materialized.nodes[0].inputs[0].name).toBe('input');
+    expect(materialized.nodes[0].inputs).toHaveLength(0);
+    expect(materialized.nodes[0].outputs.map((port) => port.name)).toContain('text');
     expect(materialized.nodes[1].inputs.map((port) => port.name)).toContain('prompt');
     expect(materialized.nodes[1].outputs.map((port) => port.name)).toContain('image');
 
@@ -64,7 +65,7 @@ describe('useStudioGraphActions', () => {
       edges: [],
     });
 
-    expect(materialized.nodes[0].params.model).toBe('fal-ai/flux/schnell');
+    expect(materialized.nodes[0].params.model).toBe('fal-ai/nano-banana-2');
     expect(materialized.nodes[1].params.model).toBe('fal-ai/kling-video/o3/standard/text-to-video');
   });
 });

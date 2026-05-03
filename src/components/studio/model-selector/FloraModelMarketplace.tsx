@@ -12,6 +12,7 @@ import {
   type CatalogModelSummary,
   type CatalogUiGroup,
 } from '@/hooks/useCatalogModels';
+import { getModelThumbnail } from '@/lib/studio/modelVisuals';
 import { cn } from '@/lib/utils';
 
 interface MarketplaceModel extends CatalogModelSummary {
@@ -21,6 +22,7 @@ interface MarketplaceModel extends CatalogModelSummary {
   multiModelEligible: boolean;
   providerKey: string;
   providerLabel: string;
+  thumbnailUrl: string;
 }
 
 interface MarketplaceProviderGroup {
@@ -51,14 +53,16 @@ interface FloraModelMarketplaceProps {
 
 const PINNED_MODELS: Partial<Record<CatalogMediaType, string[]>> = {
   image: [
+    'fal-ai/nano-banana-2',
+    'fal-ai/nano-banana-2/edit',
+    'openai/gpt-image-2',
     'gmi/seedream-5.0-lite',
-    'gmi/gemini-3.1-flash-image-preview',
-    'fal-ai/nano-banana-pro',
   ],
   video: [
+    'fal-ai/kling-video/o3/standard/text-to-video',
+    'fal-ai/kling-video/o3/standard/image-to-video',
     'gmi/veo3',
     'gmi/kling-v3-omni',
-    'fal-ai/kling-video/o3/standard/text-to-video',
   ],
   text: [
     'gmi/deepseek-r1',
@@ -66,12 +70,22 @@ const PINNED_MODELS: Partial<Record<CatalogMediaType, string[]>> = {
     'openai/gpt-5',
   ],
   audio: [
-    'gmi/minime-talks-workflow',
     'fal-ai/elevenlabs/tts/turbo-v2.5',
+    'gmi/minime-talks-workflow',
+  ],
+  '3d': [
+    'fal-ai/trellis/multi',
   ],
 };
 
 const NEW_MODELS = new Set<string>([
+  'fal-ai/nano-banana-2',
+  'fal-ai/nano-banana-2/edit',
+  'openai/gpt-image-2',
+  'fal-ai/kling-video/o3/standard/text-to-video',
+  'fal-ai/kling-video/o3/standard/image-to-video',
+  'fal-ai/elevenlabs/tts/turbo-v2.5',
+  'fal-ai/trellis/multi',
   'gmi/seedream-5.0-lite',
   'gmi/gemini-3.1-flash-image-preview',
   'gmi/kling-v3-omni',
@@ -85,7 +99,13 @@ const NEW_MODELS = new Set<string>([
   'gmi/luma-ray2',
 ]);
 
-function getProviderLabel(provider?: string, modelId?: string): string {
+function getProviderLabel(provider?: string, modelId?: string, providerLabel?: string): string {
+  if (providerLabel) {
+    return providerLabel === 'fal.ai' ? 'Fal' : providerLabel;
+  }
+  if (provider === 'fal-ai') {
+    return 'Fal';
+  }
   if (provider === 'gmi-cloud' || modelId?.startsWith('gmi/')) {
     return 'GMI Cloud';
   }
@@ -110,6 +130,8 @@ function inferCapabilities(model: CatalogModelSummary): string[] {
   if (model.media_type === 'image') capabilities.add('I');
   if (model.media_type === 'video') capabilities.add('V');
   if (model.media_type === 'audio') capabilities.add('A');
+  if (model.media_type === '3d') capabilities.add('3D');
+  if (model.media_type === 'json') capabilities.add('JSON');
   if (model.supports.includes('image_url') || model.supports.includes('image_urls')) capabilities.add('R');
   if (model.supports.includes('num_images') || model.supports.includes('batch')) capabilities.add('B');
   if (model.supports.includes('style') || model.workflow_type.includes('edit')) capabilities.add('S');
@@ -119,7 +141,7 @@ function inferCapabilities(model: CatalogModelSummary): string[] {
 }
 
 function toMarketplaceModel(mediaType: CatalogMediaType, model: CatalogModelSummary): MarketplaceModel {
-  const providerLabel = getProviderLabel(model.provider, model.id);
+  const providerLabel = getProviderLabel(model.provider, model.id, model.provider_label);
   const providerKey = providerLabel.toLowerCase();
 
   return {
@@ -130,10 +152,11 @@ function toMarketplaceModel(mediaType: CatalogMediaType, model: CatalogModelSumm
     multiModelEligible: model.ui_group === 'generation',
     providerKey,
     providerLabel,
+    thumbnailUrl: getModelThumbnail(model),
   };
 }
 
-function groupProviders(models: MarketplaceModel[]): MarketplaceProviderGroup[] {
+function groupProviders(models: MarketplaceModel[], mediaType: CatalogMediaType): MarketplaceProviderGroup[] {
   const grouped = new Map<string, MarketplaceProviderGroup>();
 
   for (const model of models) {
@@ -151,8 +174,12 @@ function groupProviders(models: MarketplaceModel[]): MarketplaceProviderGroup[] 
   }
 
   return Array.from(grouped.values()).sort((left, right) => {
-    if (left.key === 'gmi cloud') return -1;
-    if (right.key === 'gmi cloud') return 1;
+    const preferred = mediaType === 'text' ? ['gmi cloud', 'lovable ai', 'fal'] : ['fal', 'gmi cloud', 'lovable ai'];
+    const leftIndex = preferred.indexOf(left.key);
+    const rightIndex = preferred.indexOf(right.key);
+    if (leftIndex !== -1 || rightIndex !== -1) {
+      return (leftIndex === -1 ? 999 : leftIndex) - (rightIndex === -1 ? 999 : rightIndex);
+    }
     return left.label.localeCompare(right.label);
   });
 }
@@ -188,6 +215,10 @@ function filterModel(model: MarketplaceModel, query: string): boolean {
     model.name,
     model.description,
     model.providerLabel,
+    model.vendor ?? '',
+    model.family ?? '',
+    model.tier ?? '',
+    model.pricing_text ?? '',
     model.id,
   ].some((value) => value.toLowerCase().includes(normalized));
 }
@@ -237,14 +268,14 @@ export function FloraModelMarketplace({
     [allModels, search]
   );
   const providers = useMemo(() => {
-    const raw = groupProviders(allModels)
+    const raw = groupProviders(allModels, mediaType)
       .map((provider) => ({
         ...provider,
         models: provider.models.filter((model) => filterModel(model, search)),
       }))
       .filter((provider) => provider.models.length > 0);
     return raw;
-  }, [allModels, search]);
+  }, [allModels, mediaType, search]);
   const featuredModels = useMemo(() => {
     const allModels = providers.flatMap((provider) => provider.models);
     const pinned = pinnedModels.slice(0, 3);
@@ -265,10 +296,10 @@ export function FloraModelMarketplace({
       .find(Boolean);
 
     const nextProviderKey =
-      selectedProviderKey && providers.some((provider) => provider.key === selectedProviderKey)
-        ? selectedProviderKey
-        : activeProviderKey && providers.some((provider) => provider.key === activeProviderKey)
-          ? activeProviderKey
+      activeProviderKey && providers.some((provider) => provider.key === activeProviderKey)
+        ? activeProviderKey
+        : selectedProviderKey && providers.some((provider) => provider.key === selectedProviderKey)
+          ? selectedProviderKey
           : providers[0]?.key ?? null;
 
     if (nextProviderKey !== activeProviderKey) {
@@ -324,12 +355,35 @@ export function FloraModelMarketplace({
   const renderModelRow = (model: MarketplaceModel, compactRow = false) => {
     const isSelected = value.selectedModelIds.includes(model.id);
     const isPinned = pinnedIds.has(model.id) || model.isPinned;
+    const handleRowKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        toggleModel(model.id);
+      }
+    };
+    const handlePinKeyDown = (event: React.KeyboardEvent<HTMLSpanElement>) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        event.stopPropagation();
+        setPinnedIds((prev) => {
+          const next = new Set(prev);
+          if (next.has(model.id)) {
+            next.delete(model.id);
+          } else {
+            next.add(model.id);
+          }
+          return next;
+        });
+      }
+    };
 
     return (
-      <button
+      <div
         key={model.id}
-        type="button"
+        role="button"
+        tabIndex={0}
         onClick={() => toggleModel(model.id)}
+        onKeyDown={handleRowKeyDown}
         className={cn(
           'group relative flex w-full items-start gap-3 text-left transition-all duration-150',
           compactRow
@@ -343,10 +397,16 @@ export function FloraModelMarketplace({
         )}
       >
         <div className={cn(
-          'mt-0.5 flex flex-none items-center justify-center rounded-xl border border-[rgba(249,115,22,0.1)] bg-[#1D1D1D] text-[10px] font-semibold tracking-wide text-zinc-300',
-          compactRow ? 'h-8 w-8' : 'h-9 w-9'
+          'mt-0.5 flex flex-none overflow-hidden rounded-lg border border-[rgba(249,115,22,0.1)] bg-[#1D1D1D]',
+          compactRow ? 'h-9 w-9' : 'h-11 w-11'
         )}>
-          {model.providerLabel.slice(0, 2).toUpperCase()}
+          <img
+            src={model.thumbnailUrl}
+            alt=""
+            aria-hidden="true"
+            className="h-full w-full object-cover"
+            draggable={false}
+          />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
@@ -365,22 +425,33 @@ export function FloraModelMarketplace({
           <div className={cn('text-xs leading-relaxed text-zinc-500', compactRow ? 'mt-0.5 line-clamp-1' : 'mt-0.5 line-clamp-2')}>
             {model.description}
           </div>
-          <div className={cn('flex items-center gap-0 text-[10px] text-zinc-500', compactRow ? 'mt-1' : 'mt-1.5')}>
-            <span className="text-zinc-400">⊕{model.credits}</span>
-            <span className="mx-1.5 text-zinc-600">·</span>
+          <div className={cn('flex flex-wrap items-center gap-1 text-[10px] text-zinc-500', compactRow ? 'mt-1' : 'mt-1.5')}>
+            <span className="rounded-md bg-black/30 px-1.5 py-0.5 text-zinc-300">{model.providerLabel}</span>
+            {model.family ? (
+              <span className="max-w-[88px] truncate rounded-md bg-black/30 px-1.5 py-0.5 text-zinc-400">{model.family}</span>
+            ) : null}
+            {model.tier ? (
+              <span className="rounded-md bg-black/30 px-1.5 py-0.5 capitalize text-zinc-500">{model.tier}</span>
+            ) : null}
+            <span className="rounded-md bg-black/30 px-1.5 py-0.5 text-zinc-400">⊕{model.credits}</span>
             <span>{model.time}</span>
-            {model.capabilities.map((capability, i) => (
-              <span key={`${model.id}-${capability}`} className="contents">
-                <span className="mx-1.5 text-zinc-600">·</span>
-                <span>{capability}</span>
+            {model.pricing_text ? (
+              <span className="max-w-[112px] truncate text-zinc-600">{model.pricing_text}</span>
+            ) : null}
+            {model.capabilities.map((capability) => (
+              <span key={`${model.id}-${capability}`} className="rounded-md bg-black/20 px-1.5 py-0.5">
+                {capability}
               </span>
             ))}
           </div>
         </div>
         <div className="flex flex-col items-end gap-1.5 pt-0.5">
-          <button
-            type="button"
+          <span
+            role="button"
+            tabIndex={0}
+            aria-label={isPinned ? `Unpin ${model.name}` : `Pin ${model.name}`}
             onClick={(e) => togglePin(model.id, e)}
+            onKeyDown={handlePinKeyDown}
             className={cn(
               'flex h-5 w-5 items-center justify-center rounded-md transition-all',
               isPinned
@@ -389,7 +460,7 @@ export function FloraModelMarketplace({
             )}
           >
             <Pin className={cn('h-3 w-3', isPinned && 'fill-current')} />
-          </button>
+          </span>
           {isSelected ? (
             <div className="flex h-4.5 w-4.5 items-center justify-center rounded-full bg-[#f97316]">
               <Check className="h-3 w-3 text-black" />
@@ -398,7 +469,7 @@ export function FloraModelMarketplace({
             <div className="h-4.5 w-4.5 rounded-full border border-[rgba(249,115,22,0.12)] bg-[#101010]" />
           )}
         </div>
-      </button>
+      </div>
     );
   };
 
@@ -420,11 +491,19 @@ export function FloraModelMarketplace({
           <span className="flex min-w-0 items-center gap-2">
             <span
               className={cn(
-                'flex flex-none items-center justify-center border border-[rgba(249,115,22,0.12)] bg-[#232323] text-[10px] font-semibold text-zinc-200',
+                'flex flex-none overflow-hidden border border-[rgba(249,115,22,0.12)] bg-[#232323]',
                 isToolbarVariant ? 'h-5 w-5 rounded-full' : 'h-6 w-6 rounded-full'
               )}
             >
-              {(summaryModel?.providerLabel ?? 'M').slice(0, 1)}
+              {summaryModel ? (
+                <img
+                  src={summaryModel.thumbnailUrl}
+                  alt=""
+                  aria-hidden="true"
+                  className="h-full w-full object-cover"
+                  draggable={false}
+                />
+              ) : null}
             </span>
             <span className="truncate">{getSummaryLabel(value, allModels)}</span>
           </span>
@@ -556,8 +635,14 @@ export function FloraModelMarketplace({
                             <div className="absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-r-full bg-[#f97316]" />
                           )}
                           <div className="flex items-center gap-2.5">
-                            <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-[rgba(249,115,22,0.1)] bg-[#1D1D1D] text-[10px] font-semibold tracking-wide text-zinc-400">
-                              {provider.label.slice(0, 2).toUpperCase()}
+                            <div className="flex h-7 w-7 overflow-hidden rounded-lg border border-[rgba(249,115,22,0.1)] bg-[#1D1D1D]">
+                              <img
+                                src={provider.models[0]?.thumbnailUrl}
+                                alt=""
+                                aria-hidden="true"
+                                className="h-full w-full object-cover"
+                                draggable={false}
+                              />
                             </div>
                             <div>
                               <div className="text-[13px] font-medium text-white">{provider.label}</div>

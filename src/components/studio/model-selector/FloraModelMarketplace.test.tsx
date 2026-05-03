@@ -89,6 +89,10 @@ describe('FloraModelMarketplace', () => {
 
     await waitFor(() => {
       expect(screen.getAllByText('Google').length).toBeGreaterThan(0);
+    });
+
+    await user.click(screen.getByRole('button', { name: /openai 1 model/i }));
+    await waitFor(() => {
       expect(screen.getByText('GPT-5 Mini')).toBeInTheDocument();
     });
   });

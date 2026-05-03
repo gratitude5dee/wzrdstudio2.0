@@ -3,17 +3,118 @@ import { supabase } from '@/integrations/supabase/client';
 import { useComputeFlowStore } from '@/store/computeFlowStore';
 import type { NodeDefinition, EdgeDefinition, Port, DataType, NodeStatus } from '@/types/computeFlow';
 import { normalizeNodeKind, normalizeNodeStatus } from '@/lib/compute/contract';
-import { isWithinEchoWindow } from '@/lib/studio/clientWriteId';
+import { isOwnClientWriteId, isWithinEchoWindow } from '@/lib/studio/clientWriteId';
+
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(',')}]`;
+  }
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`)
+    .join(',')}}`;
+}
+
+function realtimeNodeFromPayload(record: any): NodeDefinition {
+  return {
+    id: record.id,
+    kind: normalizeNodeKind(record.kind) ?? 'Transform',
+    version: record.version,
+    label: record.label,
+    position: record.position,
+    size: record.size,
+    inputs: record.inputs as Port[],
+    outputs: record.outputs as Port[],
+    params: record.params,
+    metadata: record.metadata,
+    preview: record.preview,
+    status: normalizeNodeStatus(record.status) as NodeStatus,
+    progress: record.progress,
+    error: record.error,
+    isDirty: record.is_dirty,
+  };
+}
+
+function realtimeEdgeFromPayload(record: any): EdgeDefinition {
+  return {
+    id: record.id,
+    source: {
+      nodeId: record.source_node_id,
+      portId: record.source_port_id,
+      handle: record.source_handle ?? undefined,
+    },
+    target: {
+      nodeId: record.target_node_id,
+      portId: record.target_port_id,
+      handle: record.target_handle ?? undefined,
+    },
+    dataType: record.data_type as DataType,
+    status: record.status,
+    metadata: record.metadata,
+  };
+}
+
+function nodesEquivalent(left: NodeDefinition, right: NodeDefinition): boolean {
+  return stableStringify({
+    kind: left.kind,
+    version: left.version,
+    label: left.label,
+    position: left.position,
+    size: left.size,
+    inputs: left.inputs,
+    outputs: left.outputs,
+    params: left.params,
+    metadata: left.metadata,
+    preview: left.preview,
+    status: left.status,
+    progress: left.progress,
+    error: left.error,
+    isDirty: left.isDirty,
+  }) === stableStringify({
+    kind: right.kind,
+    version: right.version,
+    label: right.label,
+    position: right.position,
+    size: right.size,
+    inputs: right.inputs,
+    outputs: right.outputs,
+    params: right.params,
+    metadata: right.metadata,
+    preview: right.preview,
+    status: right.status,
+    progress: right.progress,
+    error: right.error,
+    isDirty: right.isDirty,
+  });
+}
+
+function edgesEquivalent(left: EdgeDefinition, right: EdgeDefinition): boolean {
+  return stableStringify({
+    source: left.source,
+    target: left.target,
+    dataType: left.dataType,
+    status: left.status,
+    metadata: left.metadata,
+  }) === stableStringify({
+    source: right.source,
+    target: right.target,
+    dataType: right.dataType,
+    status: right.status,
+    metadata: right.metadata,
+  });
+}
 
 export function useComputeFlowRealtime(projectId: string | undefined) {
-  const { 
-    addNodeSilent,
-    updateNodeSilent,
-    removeNodeSilent,
-    addEdgeSilent,
-    removeEdgeSilent,
-    setNodeStatus,
-  } = useComputeFlowStore();
+  const addNodeSilent = useComputeFlowStore((state) => state.addNodeSilent);
+  const updateNodeSilent = useComputeFlowStore((state) => state.updateNodeSilent);
+  const removeNodeSilent = useComputeFlowStore((state) => state.removeNodeSilent);
+  const addEdgeSilent = useComputeFlowStore((state) => state.addEdgeSilent);
+  const removeEdgeSilent = useComputeFlowStore((state) => state.removeEdgeSilent);
+  const setNodeStatus = useComputeFlowStore((state) => state.setNodeStatus);
 
   useEffect(() => {
     if (!projectId) return;
@@ -32,28 +133,18 @@ export function useComputeFlowRealtime(projectId: string | undefined) {
           filter: `project_id=eq.${projectId}`,
         },
         (payload) => {
-          if (isWithinEchoWindow(projectId)) {
+          if (isWithinEchoWindow(projectId) || isOwnClientWriteId((payload.new as any)?.metadata)) {
             return;
           }
           console.log('📥 Node inserted:', payload.new);
-          const n = payload.new as any;
-          const node: NodeDefinition = {
-            id: n.id,
-            kind: normalizeNodeKind(n.kind) ?? 'Transform',
-            version: n.version,
-            label: n.label,
-            position: n.position,
-            size: n.size,
-            inputs: n.inputs as Port[],
-            outputs: n.outputs as Port[],
-            params: n.params,
-            metadata: n.metadata,
-            preview: n.preview,
-            status: normalizeNodeStatus(n.status) as NodeStatus,
-            progress: n.progress,
-            error: n.error,
-            isDirty: n.is_dirty,
-          };
+          const node = realtimeNodeFromPayload(payload.new as any);
+          const existing = useComputeFlowStore.getState().nodeDefinitions.find((candidate) => candidate.id === node.id);
+          if (existing) {
+            if (!nodesEquivalent(existing, node)) {
+              updateNodeSilent(node.id, node);
+            }
+            return;
+          }
           addNodeSilent(node);
         }
       )
@@ -66,26 +157,19 @@ export function useComputeFlowRealtime(projectId: string | undefined) {
           filter: `project_id=eq.${projectId}`,
         },
         (payload) => {
-          if (isWithinEchoWindow(projectId)) {
+          if (isWithinEchoWindow(projectId) || isOwnClientWriteId((payload.new as any)?.metadata)) {
             return;
           }
           console.log('📝 Node updated:', payload.new);
-          const n = payload.new as any;
-          updateNodeSilent(n.id, {
-            kind: normalizeNodeKind(n.kind) ?? 'Transform',
-            label: n.label,
-            position: n.position,
-            size: n.size,
-            inputs: n.inputs as Port[],
-            outputs: n.outputs as Port[],
-            params: n.params,
-            metadata: n.metadata,
-            preview: n.preview,
-            status: normalizeNodeStatus(n.status) as NodeStatus,
-            progress: n.progress,
-            error: n.error,
-            isDirty: n.is_dirty,
-          });
+          const node = realtimeNodeFromPayload(payload.new as any);
+          const existing = useComputeFlowStore.getState().nodeDefinitions.find((candidate) => candidate.id === node.id);
+          if (!existing) {
+            addNodeSilent(node);
+            return;
+          }
+          if (!nodesEquivalent(existing, node)) {
+            updateNodeSilent(node.id, node);
+          }
         }
       )
       .on(
@@ -97,7 +181,7 @@ export function useComputeFlowRealtime(projectId: string | undefined) {
           filter: `project_id=eq.${projectId}`,
         },
         (payload) => {
-          if (isWithinEchoWindow(projectId)) {
+          if (isWithinEchoWindow(projectId) || isOwnClientWriteId((payload.old as any)?.metadata)) {
             return;
           }
           console.log('🗑️ Node deleted:', payload.old);
@@ -120,27 +204,19 @@ export function useComputeFlowRealtime(projectId: string | undefined) {
           filter: `project_id=eq.${projectId}`,
         },
         (payload) => {
-          if (isWithinEchoWindow(projectId)) {
+          if (isWithinEchoWindow(projectId) || isOwnClientWriteId((payload.new as any)?.metadata)) {
             return;
           }
           console.log('📥 Edge inserted:', payload.new);
-          const e = payload.new as any;
-          const edge: EdgeDefinition = {
-            id: e.id,
-            source: {
-              nodeId: e.source_node_id,
-              portId: e.source_port_id,
-              handle: e.source_handle ?? undefined,
-            },
-            target: {
-              nodeId: e.target_node_id,
-              portId: e.target_port_id,
-              handle: e.target_handle ?? undefined,
-            },
-            dataType: e.data_type as DataType,
-            status: e.status,
-            metadata: e.metadata,
-          };
+          const edge = realtimeEdgeFromPayload(payload.new as any);
+          const existing = useComputeFlowStore.getState().edgeDefinitions.find((candidate) => candidate.id === edge.id);
+          if (existing) {
+            if (!edgesEquivalent(existing, edge)) {
+              removeEdgeSilent(edge.id);
+              addEdgeSilent(edge);
+            }
+            return;
+          }
           addEdgeSilent(edge);
         }
       )
@@ -153,7 +229,7 @@ export function useComputeFlowRealtime(projectId: string | undefined) {
           filter: `project_id=eq.${projectId}`,
         },
         (payload) => {
-          if (isWithinEchoWindow(projectId)) {
+          if (isWithinEchoWindow(projectId) || isOwnClientWriteId((payload.old as any)?.metadata)) {
             return;
           }
           console.log('🗑️ Edge deleted:', payload.old);

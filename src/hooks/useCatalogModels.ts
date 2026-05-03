@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
-export type CatalogMediaType = 'text' | 'image' | 'video' | 'audio';
+export type CatalogMediaType = 'text' | 'image' | 'video' | 'audio' | 'json' | '3d';
 export type CatalogUiGroup = 'generation' | 'advanced';
 
 export interface CatalogModelSummary {
@@ -30,7 +30,17 @@ export interface CatalogModelSummary {
   credits?: number;
   time?: string;
   provider?: string;
+  provider_label?: string;
   endpoint_id?: string;
+  pricing_text?: string;
+  model_url?: string;
+  license?: string;
+  tags?: string[];
+  published_at?: string;
+  model_updated_at?: string;
+  vendor?: string;
+  family?: string;
+  tier?: string;
   is_default?: boolean;
   default_rank?: number;
 }
@@ -115,7 +125,17 @@ export const useCatalogModels = (options: UseCatalogModelsOptions = {}) => {
             credits: typeof model.credits === 'number' ? model.credits : 1,
             time: model.time || '~30s',
             provider: model.provider,
+            provider_label: model.provider_label,
             endpoint_id: model.endpoint_id,
+            pricing_text: model.pricing_text,
+            model_url: model.model_url,
+            license: model.license,
+            tags: Array.isArray(model.tags) ? model.tags : [],
+            published_at: model.published_at,
+            model_updated_at: model.model_updated_at,
+            vendor: model.vendor,
+            family: model.family,
+            tier: model.tier,
             is_default: model.is_default === true,
             default_rank: typeof model.default_rank === 'number' ? model.default_rank : undefined,
           }));

@@ -2,9 +2,10 @@ export type CatalogTransportType =
   | "chat_completion"
   | "request_queue"
   | "fal_queue"
-  | "edge_function";
+  | "edge_function"
+  | "direct_http";
 
-export type CatalogMediaType = "text" | "image" | "video" | "audio";
+export type CatalogMediaType = "text" | "image" | "video" | "audio" | "json" | "3d";
 export type CatalogUiGroup = "generation" | "advanced";
 export type CatalogKanvasMode =
   | "text-to-image"
@@ -20,6 +21,8 @@ export type CatalogSurface =
   | "studio:image"
   | "studio:video"
   | "studio:audio"
+  | "studio:json"
+  | "studio:3d"
   | "kanvas:image"
   | "kanvas:video"
   | "kanvas:edit"
@@ -62,6 +65,14 @@ export interface CatalogModel {
   category: string;
   pricingText: string;
   pricing: CatalogPricing;
+  modelUrl?: string;
+  license?: string;
+  tags?: string[];
+  publishedAt?: string;
+  modelUpdatedAt?: string;
+  vendor?: string;
+  family?: string;
+  tier?: string;
   transportType: CatalogTransportType;
   mediaType: CatalogMediaType;
   workflowType: string;

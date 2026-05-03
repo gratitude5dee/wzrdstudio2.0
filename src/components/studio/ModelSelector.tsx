@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Check, ChevronDown, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getModelThumbnail } from '@/lib/studio/modelVisuals';
 
 export interface Model {
   id: string;
@@ -10,10 +11,15 @@ export interface Model {
   time?: string;
   description?: string;
   provider?: string;
+  provider_label?: string;
+  pricing_text?: string;
+  vendor?: string;
+  family?: string;
+  tier?: string;
   category?: string;
   capabilities?: Array<'text' | 'image' | 'video' | 'audio' | '3d'>;
   type?: 'text' | 'image' | 'video';
-  media_type?: 'text' | 'image' | 'video' | 'audio';
+  media_type?: 'text' | 'image' | 'video' | 'audio' | 'json' | '3d';
   workflow_type?: string;
   ui_group?: 'generation' | 'advanced';
 }
@@ -89,8 +95,10 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
         type="button"
       >
         <span className="flex items-center gap-2 min-w-0">
-          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-zinc-700 text-[10px] text-white">
-            {selectedModel?.icon ?? selectedModel?.name?.[0] ?? '?'}
+          <span className="flex h-5 w-5 shrink-0 overflow-hidden rounded-full bg-zinc-700 text-[10px] text-white">
+            {selectedModel ? (
+              <img src={getModelThumbnail(selectedModel as any)} alt="" aria-hidden="true" className="h-full w-full object-cover" />
+            ) : null}
           </span>
           <span className="truncate">{selectedModel?.name || 'Select Model'}</span>
         </span>
@@ -156,8 +164,8 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
                   }}
                 >
                   {isSelected && <span className="absolute left-0 top-2 h-[calc(100%-16px)] w-1 rounded-full bg-blue-500" />}
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-sm text-white">
-                    {model.icon ?? model.name[0]}
+                  <div className="flex h-9 w-9 shrink-0 overflow-hidden rounded-lg bg-zinc-800 text-sm text-white">
+                    <img src={getModelThumbnail(model as any)} alt="" aria-hidden="true" className="h-full w-full object-cover" />
                   </div>
                   <div className="min-w-0 flex-1 space-y-1">
                     <div className="flex items-center gap-2">
@@ -168,6 +176,8 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
                     </div>
                     <div className="truncate text-[11px] text-zinc-500">{model.description}</div>
                     <div className="flex items-center gap-2 text-[10px] text-zinc-500">
+                      {model.provider_label || model.provider ? <span>{model.provider_label ?? model.provider}</span> : null}
+                      {model.family ? <span>{model.family}</span> : null}
                       {model.time && <span>{model.time}</span>}
                       {model.credits ? <span>{model.credits} credits</span> : null}
                       {model.workflow_type ? <span>{model.workflow_type}</span> : null}

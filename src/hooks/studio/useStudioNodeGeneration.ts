@@ -46,6 +46,27 @@ function resolveTargetPortId(
   return byType?.id ?? targetNode.inputs[0]?.id ?? null;
 }
 
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(',')}]`;
+  }
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`)
+    .join(',')}}`;
+}
+
+function paramsEqual(
+  left: Record<string, unknown> | undefined,
+  right: Record<string, unknown> | undefined
+): boolean {
+  return stableStringify(left ?? {}) === stableStringify(right ?? {});
+}
+
 export function useStudioNodeGeneration(projectId?: string) {
   const {
     nodeDefinitions,
@@ -69,10 +90,13 @@ export function useStudioNodeGeneration(projectId?: string) {
         return;
       }
 
-      updateNode(nodeId, {
-        params: applyNodeModelSelection(node.params, node.kind, selection),
-      });
-      scheduleSave();
+      const nextParams = applyNodeModelSelection(node.params, node.kind, selection);
+      if (!paramsEqual(node.params, nextParams)) {
+        updateNode(nodeId, {
+          params: nextParams,
+        });
+        scheduleSave();
+      }
     },
     [nodeDefinitionsById, scheduleSave, updateNode]
   );
@@ -88,12 +112,15 @@ export function useStudioNodeGeneration(projectId?: string) {
         ? selection.selectedModelIds
         : [getDefaultModelForNodeKind(sourceNode.kind)];
 
-      updateNode(nodeId, {
-        params: applyNodeModelSelection(sourceNode.params, sourceNode.kind, {
-          ...selection,
-          selectedModelIds,
-        }),
+      const nextSourceParams = applyNodeModelSelection(sourceNode.params, sourceNode.kind, {
+        ...selection,
+        selectedModelIds,
       });
+      if (!paramsEqual(sourceNode.params, nextSourceParams)) {
+        updateNode(nodeId, {
+          params: nextSourceParams,
+        });
+      }
 
       if (
         sourceNode.kind !== 'Text' &&
@@ -123,13 +150,16 @@ export function useStudioNodeGeneration(projectId?: string) {
         );
 
         if (existingVariant) {
-          updateNode(existingVariant.id, {
-            params: applyNodeModelSelection(existingVariant.params, existingVariant.kind, {
-              auto: false,
-              selectedModelIds: [modelId],
-              useMultipleModels: false,
-            }),
+          const nextVariantParams = applyNodeModelSelection(existingVariant.params, existingVariant.kind, {
+            auto: false,
+            selectedModelIds: [modelId],
+            useMultipleModels: false,
           });
+          if (!paramsEqual(existingVariant.params, nextVariantParams)) {
+            updateNode(existingVariant.id, {
+              params: nextVariantParams,
+            });
+          }
           targets.push(existingVariant);
           return;
         }

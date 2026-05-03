@@ -34,6 +34,7 @@ import {
   getMediaActionById,
   type MediaActionDefinition,
 } from '@/lib/studio/mediaActionRegistry';
+import { markLocalSave, withClientWriteId } from '@/lib/studio/clientWriteId';
 
 // UUID validation regex
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -406,6 +407,51 @@ interface ComputeFlowState {
 // Abort controller for cancellation
 let executionAbortController: AbortController | null = null;
 
+const pendingSseNodeUpdates = new Map<string, Partial<NodeDefinition>>();
+let pendingSseNodeFlushScheduled = false;
+
+function shouldApplyNodeUpdates(
+  node: NodeDefinition | undefined,
+  updates: Partial<NodeDefinition>
+): boolean {
+  if (!node) return false;
+  return Object.entries(updates).some(([key, value]) => {
+    return !Object.is(node[key as keyof NodeDefinition], value);
+  });
+}
+
+function flushQueuedSseNodeUpdates(get: () => ComputeFlowState): void {
+  pendingSseNodeFlushScheduled = false;
+  if (pendingSseNodeUpdates.size === 0) {
+    return;
+  }
+
+  const updates = new Map(pendingSseNodeUpdates);
+  pendingSseNodeUpdates.clear();
+  get().updateNodesSilent(updates);
+}
+
+function queueSseNodeUpdate(
+  get: () => ComputeFlowState,
+  nodeId: string,
+  updates: Partial<NodeDefinition>
+): void {
+  const existing = pendingSseNodeUpdates.get(nodeId) ?? {};
+  pendingSseNodeUpdates.set(nodeId, { ...existing, ...updates });
+
+  if (pendingSseNodeFlushScheduled) {
+    return;
+  }
+
+  pendingSseNodeFlushScheduled = true;
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(() => flushQueuedSseNodeUpdates(get));
+    return;
+  }
+
+  setTimeout(() => flushQueuedSseNodeUpdates(get), 50);
+}
+
 export const useComputeFlowStore = create<ComputeFlowState>((set, get) => ({
   schemaVersion: '1',
   graphMetadata: {},
@@ -647,6 +693,13 @@ export const useComputeFlowStore = create<ComputeFlowState>((set, get) => ({
         edgeDefinitions = normalizedEdges;
       }
 
+      markLocalSave(projectId);
+      const graphMetadataForSave = withClientWriteId(graphMetadata);
+      const dbNodes = nodeDefinitions.map((node) => ({
+        ...node,
+        metadata: withClientWriteId(node.metadata),
+      }));
+
       // Map edge definitions to flat DB columns expected by RPC
       const dbEdges = edgeDefinitions.map(e => ({
         id: e.id,
@@ -667,30 +720,21 @@ export const useComputeFlowStore = create<ComputeFlowState>((set, get) => ({
         dataType: e.dataType,
         data_type: e.dataType,
         status: e.status,
-        metadata: e.metadata ?? null,
+        metadata: withClientWriteId(e.metadata),
       }));
 
       const { data, error } = await (supabase.rpc('save_compute_graph' as any, {
         p_project_id: projectId,
         p_expected_revision: revision,
         p_schema_version: schemaVersion,
-        p_graph_metadata: graphMetadata,
+        p_graph_metadata: graphMetadataForSave,
         p_view_state: viewState,
-        p_nodes: nodeDefinitions,
+        p_nodes: dbNodes,
         p_edges: dbEdges,
       }) as any);
 
       if (error) throw error;
       console.log('💾 Compute graph saved');
-      // PR-8 (lightweight): mark this projectId as having had a recent local
-      // save so `useComputeFlowRealtime` can suppress the echo payloads that
-      // would otherwise re-enter the store and cause node flicker.
-      try {
-        const { markLocalSave } = await import('@/lib/studio/clientWriteId');
-        markLocalSave(projectId);
-      } catch {
-        // non-fatal — echo guard is a UX optimization, not correctness
-      }
       const saveResult = Array.isArray(data) ? data[0] : data;
       set({
         revision: typeof saveResult?.revision === 'number' ? saveResult.revision : revision + 1,
@@ -816,20 +860,35 @@ export const useComputeFlowStore = create<ComputeFlowState>((set, get) => ({
   },
 
   updateNodeSilent: (nodeId, updates) => {
-    set(state => ({
-      nodeDefinitions: state.nodeDefinitions.map(n =>
-        n.id === nodeId ? { ...n, ...updates } : n
-      ),
-    }));
+    set(state => {
+      let changed = false;
+      const nodeDefinitions = state.nodeDefinitions.map(n => {
+        if (n.id !== nodeId || !shouldApplyNodeUpdates(n, updates)) {
+          return n;
+        }
+        changed = true;
+        return { ...n, ...updates };
+      });
+      return changed ? { nodeDefinitions } : state;
+    });
   },
 
   updateNodesSilent: (updates) => {
-    set(state => ({
-      nodeDefinitions: state.nodeDefinitions.map(n => {
+    if (updates.size === 0) {
+      return;
+    }
+    set(state => {
+      let changed = false;
+      const nodeDefinitions = state.nodeDefinitions.map(n => {
         const nodeUpdates = updates.get(n.id);
-        return nodeUpdates ? { ...n, ...nodeUpdates } : n;
-      }),
-    }));
+        if (!nodeUpdates || !shouldApplyNodeUpdates(n, nodeUpdates)) {
+          return n;
+        }
+        changed = true;
+        return { ...n, ...nodeUpdates };
+      });
+      return changed ? { nodeDefinitions } : state;
+    });
   },
 
   removeNode: (nodeId) => {
@@ -1305,6 +1364,7 @@ export const useComputeFlowStore = create<ComputeFlowState>((set, get) => ({
       }
 
     } catch (error: any) {
+      flushQueuedSseNodeUpdates(get);
       console.error('Execution error:', error);
       
       const errorMessage = error.name === 'AbortError' ? 'Cancelled' : error.message;
@@ -1338,6 +1398,8 @@ export const useComputeFlowStore = create<ComputeFlowState>((set, get) => ({
       executionAbortController.abort();
       executionAbortController = null;
     }
+
+    flushQueuedSseNodeUpdates(get);
 
     set(state => ({
       execution: {
@@ -1573,7 +1635,7 @@ function handleSSEEvent(
       const isCompleted = ['succeeded', 'failed', 'skipped'].includes(mappedStatus);
       const statusProgress = isCompleted ? 100 : mappedStatus === 'running' ? 50 : 0;
       const existingNode = get().nodeDefinitions.find(n => n.id === node_id);
-      get().updateNodeSilent(node_id, {
+      queueSseNodeUpdate(get, node_id, {
         status: mappedStatus,
         progress: statusProgress,
         preview: output ?? existingNode?.preview,
@@ -1596,13 +1658,14 @@ function handleSSEEvent(
     case 'node_progress': {
       const { node_id: progressNodeId, progress: nodeProgress } = data;
       const existingProgressNode = get().nodeDefinitions.find(n => n.id === progressNodeId);
-      get().updateNodeSilent(progressNodeId, {
+      queueSseNodeUpdate(get, progressNodeId, {
         progress: nodeProgress ?? existingProgressNode?.progress,
       });
       break;
     }
 
     case 'complete':
+      flushQueuedSseNodeUpdates(get);
       set((state: ComputeFlowState) => ({
         execution: {
           ...state.execution,
@@ -1614,6 +1677,7 @@ function handleSSEEvent(
       break;
 
     case 'error':
+      flushQueuedSseNodeUpdates(get);
       set((state: ComputeFlowState) => ({
         error: data.error,
         execution: {

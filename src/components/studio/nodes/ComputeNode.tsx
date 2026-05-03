@@ -108,6 +108,7 @@ export const ComputeNode = memo(({ id, data, selected }: NodeProps) => {
   const helperText = action?.description ?? HELPER_TEXT[nodeData.kind] ?? '';
   const models = modelOptions;
   const actionControls = nodeData.controls ?? action?.controls ?? [];
+  const progressValue = Math.max(0, Math.min(100, Number(nodeData.progress ?? 0)));
   const previewUrl =
     nodeData.preview?.url ??
     nodeData.preview?.data?.url ??
@@ -210,10 +211,7 @@ export const ComputeNode = memo(({ id, data, selected }: NodeProps) => {
   const [isNodeHovered, setIsNodeHovered] = useState(false);
 
   return (
-    <motion.div
-      initial={{ scale: 0.95, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      transition={{ duration: 0.2, ease: 'easeOut' }}
+    <div
       onMouseEnter={() => setIsNodeHovered(true)}
       onMouseLeave={() => setIsNodeHovered(false)}
       onContextMenu={(event) => {
@@ -235,7 +233,7 @@ export const ComputeNode = memo(({ id, data, selected }: NodeProps) => {
           : isNodeHovered 
             ? `0 0 24px ${primaryColor}15, 0 12px 40px rgba(0, 0, 0, 0.5)`
             : '0 8px 32px rgba(0, 0, 0, 0.4)',
-        transform: isNodeHovered && !selected ? 'translateY(-2px)' : undefined,
+        contain: 'layout paint',
       }}
     >
       <NodeHoverMenu
@@ -301,42 +299,45 @@ export const ComputeNode = memo(({ id, data, selected }: NodeProps) => {
             <div className="px-3 pb-3 space-y-3">
               {/* Preview Area */}
               {nodeData.preview ? (
-                <div className="rounded-xl overflow-hidden border border-[rgba(249,115,22,0.06)] bg-zinc-950/50">
+                <div className="h-36 min-h-36 overflow-hidden rounded-xl border border-[rgba(249,115,22,0.06)] bg-zinc-950/50">
                   {nodeData.preview.type === 'image' && previewUrl && (
                     <img 
                       src={previewUrl}
                       alt="Preview" 
-                      className="w-full h-36 object-cover"
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                      decoding="async"
+                      draggable={false}
                     />
                   )}
                   {nodeData.preview.type === 'video' && previewUrl && (
-                    <video src={previewUrl} className="w-full h-36 object-cover" controls muted />
+                    <video src={previewUrl} className="h-full w-full object-cover" controls muted preload="metadata" />
                   )}
                   {nodeData.preview.type === 'audio' && previewUrl && (
-                    <div className="p-3">
+                    <div className="flex h-full items-center p-3">
                       <audio src={previewUrl} className="w-full" controls />
                     </div>
                   )}
                   {nodeData.preview.type === '3d' && (
-                    <div className="flex h-28 items-center justify-center gap-2 text-xs text-cyan-300">
+                    <div className="flex h-full items-center justify-center gap-2 text-xs text-cyan-300">
                       <Box className="h-5 w-5" />
                       <span>3D asset ready</span>
                     </div>
                   )}
                   {nodeData.preview.type === 'text' && (
-                    <div className="nowheel p-2.5 text-xs text-zinc-400 max-h-24 overflow-y-auto">
+                    <div className="nowheel h-full overflow-y-auto p-2.5 text-xs text-zinc-400">
                       {String(previewText ?? '')}
                     </div>
                   )}
                   {nodeData.preview.type === 'json' && (
-                    <pre className="nowheel max-h-24 overflow-auto p-2.5 text-[10px] text-zinc-500">
+                    <pre className="nowheel h-full overflow-auto p-2.5 text-[10px] text-zinc-500">
                       {JSON.stringify(nodeData.preview.data ?? {}, null, 2)}
                     </pre>
                   )}
                 </div>
               ) : (
                 /* Empty preview placeholder */
-                <div className="h-32 rounded-xl border border-dashed border-[rgba(249,115,22,0.06)] bg-zinc-950/30 flex items-center justify-center">
+                <div className="flex h-36 min-h-36 items-center justify-center rounded-xl border border-dashed border-[rgba(249,115,22,0.06)] bg-zinc-950/30">
                   <div className="text-center">
                     <Icon className="w-8 h-8 text-zinc-700 mx-auto mb-1" />
                     <span className="text-xs text-zinc-600">No preview</span>
@@ -360,12 +361,12 @@ export const ComputeNode = memo(({ id, data, selected }: NodeProps) => {
               {/* Progress bar for running state */}
               {nodeData.status === 'running' && nodeData.progress !== undefined && (
                 <div className="h-1 bg-zinc-800 rounded-full overflow-hidden">
-                  <motion.div 
-                    className="h-full rounded-full"
-                    style={{ backgroundColor: primaryColor }}
-                    initial={{ width: 0 }}
-                    animate={{ width: `${nodeData.progress}%` }}
-                    transition={{ duration: 0.3 }}
+                  <div
+                    className="h-full origin-left rounded-full transition-transform duration-200 ease-out"
+                    style={{
+                      backgroundColor: primaryColor,
+                      transform: `scaleX(${progressValue / 100})`,
+                    }}
                   />
                 </div>
               )}
@@ -600,7 +601,7 @@ export const ComputeNode = memo(({ id, data, selected }: NodeProps) => {
           </button>
         </div>
       ) : null}
-    </motion.div>
+    </div>
   );
 });
 

@@ -101,7 +101,7 @@ describe('computeFlowStore persistence contract', () => {
         p_project_id: 'project-1',
         p_expected_revision: 4,
         p_schema_version: '2',
-        p_graph_metadata: { source: 'unit-test' },
+        p_graph_metadata: expect.objectContaining({ source: 'unit-test' }),
         p_view_state: { zoom: 1.5, center: [32, 64] },
         p_nodes: expect.any(Array),
         p_edges: expect.any(Array),

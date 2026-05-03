@@ -70,6 +70,11 @@ import { getNodeImagePreviewUrl } from '@/lib/imageEdit';
 import { resolveIncomingForUI } from '@/lib/compute/applyBinding';
 import { buildFloraSeedGraph, FLORA_EXAMPLE_COPY, isFloraSeedNode } from '@/lib/studio/floraSeed';
 import { getMediaActionById } from '@/lib/studio/mediaActionRegistry';
+import {
+  reconcileReactFlowEdges,
+  reconcileReactFlowNodes,
+  stableStringify,
+} from '@/lib/studio/reactFlowReconciliation';
 import { supabase } from '@/integrations/supabase/client';
 
 interface StudioCanvasProps {
@@ -166,6 +171,14 @@ function cloneValue<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
 }
 
+function useLatestRef<T>(value: T) {
+  const ref = useRef(value);
+  useEffect(() => {
+    ref.current = value;
+  }, [value]);
+  return ref;
+}
+
 const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
   projectId,
   selectedNodeId,
@@ -185,20 +198,18 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
     toggleMode,
     cancelClickConnection,
   } = useConnectionMode();
-  const {
-    nodeDefinitions,
-    edgeDefinitions,
-    loadGraph,
-    saveGraph,
-    addNodesAndEdgesAtomic,
-    addNode,
-    executeGraphStreaming,
-    cancelExecution,
-    execution,
-    isSaving,
-    removeNode,
-    removeEdge,
-  } = useComputeFlowStore();
+  const nodeDefinitions = useComputeFlowStore((state) => state.nodeDefinitions);
+  const edgeDefinitions = useComputeFlowStore((state) => state.edgeDefinitions);
+  const loadGraph = useComputeFlowStore((state) => state.loadGraph);
+  const saveGraph = useComputeFlowStore((state) => state.saveGraph);
+  const addNodesAndEdgesAtomic = useComputeFlowStore((state) => state.addNodesAndEdgesAtomic);
+  const addNode = useComputeFlowStore((state) => state.addNode);
+  const executeGraphStreaming = useComputeFlowStore((state) => state.executeGraphStreaming);
+  const cancelExecution = useComputeFlowStore((state) => state.cancelExecution);
+  const execution = useComputeFlowStore((state) => state.execution);
+  const isSaving = useComputeFlowStore((state) => state.isSaving);
+  const removeNode = useComputeFlowStore((state) => state.removeNode);
+  const removeEdge = useComputeFlowStore((state) => state.removeEdge);
   const {
     buildNode,
     addNodeOfType,
@@ -221,6 +232,14 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
   const nodeDefinitionsById = useMemo(
     () => new Map(nodeDefinitions.map((node) => [node.id, node])),
     [nodeDefinitions]
+  );
+  const nodeIdsSignature = useMemo(
+    () => nodeDefinitions.map((node) => node.id).sort().join('|'),
+    [nodeDefinitions]
+  );
+  const nodeIds = useMemo(
+    () => new Set(nodeIdsSignature ? nodeIdsSignature.split('|') : []),
+    [nodeIdsSignature]
   );
   const incomingEdgesByTargetNode = useMemo(() => {
     const next = new Map<string, typeof edgeDefinitions>();
@@ -404,6 +423,15 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
     [screenToFlowPosition]
   );
 
+  const generateNodeRef = useLatestRef(generateNode);
+  const handleDuplicateNodeRef = useLatestRef(handleDuplicateNode);
+  const removeNodeRef = useLatestRef(removeNode);
+  const scheduleSaveRef = useLatestRef(scheduleSave);
+  const onSelectNodeRef = useLatestRef(onSelectNode);
+  const selectedNodeIdRef = useLatestRef(selectedNodeId);
+  const updateNodeModelSelectionRef = useLatestRef(updateNodeModelSelection);
+  const openConnectionMenuFromPortRef = useLatestRef(openConnectionMenuFromPort);
+
   useEffect(() => {
     const computeNodes: Node[] = nodeDefinitions.map((nodeDef) => {
       const incomingEdges = incomingEdgesByTargetNode.get(nodeDef.id) || [];
@@ -451,78 +479,89 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
         }
       }
 
+      const dataSignature = stableStringify({
+        node: nodeDef,
+        chips,
+        byHandle,
+        incomingPrompt,
+        inputValue,
+        inputType,
+      });
+      const nodeData = {
+        __signature: dataSignature,
+        nodeDefinition: nodeDef,
+        label: nodeDef.label,
+        kind: nodeDef.kind,
+        actionId: nodeDef.actionId ?? (typeof nodeDef.params?.actionId === 'string' ? nodeDef.params.actionId : undefined),
+        mediaType: nodeDef.mediaType,
+        workflowType: nodeDef.workflowType,
+        controls: nodeDef.controls,
+        batch: nodeDef.batch,
+        variants: nodeDef.variants,
+        inputs: nodeDef.inputs,
+        outputs: nodeDef.outputs,
+        params: nodeDef.params,
+        status: nodeDef.status || 'idle',
+        progress: nodeDef.progress || 0,
+        preview: nodeDef.preview,
+        error: nodeDef.error,
+        modelSelection: {
+          auto: Boolean(nodeDef.params?.modelAuto),
+          selectedModelIds: Array.isArray(nodeDef.params?.selectedModels)
+            ? (nodeDef.params?.selectedModels as string[])
+            : [String(nodeDef.params?.model || nodeDef.metadata?.model || '')].filter(Boolean),
+          useMultipleModels: Boolean(nodeDef.params?.useMultipleModels),
+        },
+        initialData: nodeDef.params,
+        blockPosition: nodeDef.position,
+        incomingImageSources,
+        incomingReferenceSources,
+        incomingPrompt,
+        inputValue,
+        inputType,
+        popoverBoundary: canvasContainerRef.current,
+        popoverContainer: canvasContainerRef.current,
+        onExecute: () => generateNodeRef.current(nodeDef.id),
+        onGenerate: () => generateNodeRef.current(nodeDef.id),
+        onDuplicate: () => handleDuplicateNodeRef.current(nodeDef),
+        onDelete: () => {
+          removeNodeRef.current(nodeDef.id);
+          scheduleSaveRef.current();
+          if (selectedNodeIdRef.current === nodeDef.id) {
+            onSelectNodeRef.current(null);
+          }
+        },
+        onModelSelectionChange: (selection: { auto: boolean; selectedModelIds: string[]; useMultipleModels: boolean }) =>
+          updateNodeModelSelectionRef.current(nodeDef.id, selection),
+        onUpdateNode: (nodeUpdates: Partial<NodeDefinition>) => {
+          useComputeFlowStore.getState().updateNode(nodeDef.id, nodeUpdates);
+          scheduleSaveRef.current();
+        },
+        onUpdateParams: (paramUpdates: Record<string, unknown>) => {
+          // PR-6: open a coalesced edit session so streaming keystrokes
+          // produce a single undo entry. The session auto-closes after
+          // 400ms of idle (or via onBlur from text inputs).
+          const store = useComputeFlowStore.getState();
+          store.beginEditSession(nodeDef.id);
+          store.updateNode(nodeDef.id, {
+            params: {
+              ...nodeDef.params,
+              ...paramUpdates,
+            },
+          });
+          scheduleSaveRef.current();
+        },
+        onOpenConnectionMenu: (sourcePortId: string, rect?: DOMRect | null) =>
+          openConnectionMenuFromPortRef.current(nodeDef.id, sourcePortId, rect),
+        onSelectNode: onSelectNodeRef.current,
+      };
+
       return {
         id: nodeDef.id,
         type: getNodeTypeFromKind(nodeDef.kind),
         position: nodeDef.position,
         selected: selectedNodeId === nodeDef.id,
-        data: {
-          nodeDefinition: nodeDef,
-          label: nodeDef.label,
-          kind: nodeDef.kind,
-          actionId: nodeDef.actionId ?? (typeof nodeDef.params?.actionId === 'string' ? nodeDef.params.actionId : undefined),
-          mediaType: nodeDef.mediaType,
-          workflowType: nodeDef.workflowType,
-          controls: nodeDef.controls,
-          batch: nodeDef.batch,
-          variants: nodeDef.variants,
-          inputs: nodeDef.inputs,
-          outputs: nodeDef.outputs,
-          params: nodeDef.params,
-          status: nodeDef.status || 'idle',
-          progress: nodeDef.progress || 0,
-          preview: nodeDef.preview,
-          error: nodeDef.error,
-          modelSelection: {
-            auto: Boolean(nodeDef.params?.modelAuto),
-            selectedModelIds: Array.isArray(nodeDef.params?.selectedModels)
-              ? (nodeDef.params?.selectedModels as string[])
-              : [String(nodeDef.params?.model || nodeDef.metadata?.model || '')].filter(Boolean),
-            useMultipleModels: Boolean(nodeDef.params?.useMultipleModels),
-          },
-          initialData: nodeDef.params,
-          blockPosition: nodeDef.position,
-          incomingImageSources,
-          incomingReferenceSources,
-          incomingPrompt,
-          inputValue,
-          inputType,
-          popoverBoundary: canvasContainerRef.current,
-          popoverContainer: canvasContainerRef.current,
-          onExecute: () => generateNode(nodeDef.id),
-          onGenerate: () => generateNode(nodeDef.id),
-          onDuplicate: () => handleDuplicateNode(nodeDef),
-          onDelete: () => {
-            removeNode(nodeDef.id);
-            scheduleSave();
-            if (selectedNodeId === nodeDef.id) {
-              onSelectNode(null);
-            }
-          },
-          onModelSelectionChange: (selection: { auto: boolean; selectedModelIds: string[]; useMultipleModels: boolean }) =>
-            updateNodeModelSelection(nodeDef.id, selection),
-          onUpdateNode: (nodeUpdates: Partial<NodeDefinition>) => {
-            useComputeFlowStore.getState().updateNode(nodeDef.id, nodeUpdates);
-            scheduleSave();
-          },
-          onUpdateParams: (paramUpdates: Record<string, unknown>) => {
-            // PR-6: open a coalesced edit session so streaming keystrokes
-            // produce a single undo entry. The session auto-closes after
-            // 400ms of idle (or via onBlur from text inputs).
-            const store = useComputeFlowStore.getState();
-            store.beginEditSession(nodeDef.id);
-            store.updateNode(nodeDef.id, {
-              params: {
-                ...nodeDef.params,
-                ...paramUpdates,
-              },
-            });
-            scheduleSave();
-          },
-          onOpenConnectionMenu: (sourcePortId: string, rect?: DOMRect | null) =>
-            openConnectionMenuFromPort(nodeDef.id, sourcePortId, rect),
-          onSelectNode,
-        },
+        data: nodeData,
         draggable: true,
         selectable: true,
         connectable: true,
@@ -533,57 +572,14 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
     // their object identity. This prevents XYFlow from remounting/measuring
     // the entire graph on every store tick (which is what was producing the
     // visible canvas jitter when generating a node).
-    setNodes((previousNodes) => {
-      const previousById = new Map(previousNodes.map((node) => [node.id, node]));
-      let changed = previousNodes.length !== computeNodes.length;
-
-      const reconciled = computeNodes.map((next) => {
-        const prev = previousById.get(next.id);
-        if (
-          prev &&
-          prev.type === next.type &&
-          prev.selected === next.selected &&
-          prev.position.x === next.position.x &&
-          prev.position.y === next.position.y &&
-          prev.data === next.data
-        ) {
-          // No structural change — reuse the previous node object.
-          return prev;
-        }
-
-        if (
-          prev &&
-          prev.type === next.type &&
-          prev.selected === next.selected &&
-          prev.position.x === next.position.x &&
-          prev.position.y === next.position.y
-        ) {
-          // Same shell, only `data` differs — keep the outer object stable but
-          // update data. This avoids a full XYFlow remount of the node.
-          changed = true;
-          return { ...prev, data: next.data };
-        }
-
-        changed = true;
-        return next;
-      });
-
-      return changed ? reconciled : previousNodes;
-    });
+    setNodes((previousNodes) => reconcileReactFlowNodes(previousNodes, computeNodes));
   }, [
-    generateNode,
     getNodeTypeFromKind,
-    handleDuplicateNode,
     incomingEdgesByTargetNode,
     nodeDefinitions,
     nodeDefinitionsById,
-    openConnectionMenuFromPort,
-    onSelectNode,
-    removeNode,
-    scheduleSave,
     selectedNodeId,
     setNodes,
-    updateNodeModelSelection,
   ]);
 
   const openActionMenuForEdge = useCallback(
@@ -599,11 +595,20 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
 
   useEffect(() => {
     const computeEdges: Edge[] = edgeDefinitions.flatMap((edgeDef) => {
-      const sourceNode = nodeDefinitionsById.get(edgeDef.source.nodeId);
-      const targetNode = nodeDefinitionsById.get(edgeDef.target.nodeId);
-      if (!sourceNode || !targetNode) {
+      if (!nodeIds.has(edgeDef.source.nodeId) || !nodeIds.has(edgeDef.target.nodeId)) {
         return [];
       }
+
+      const color = HANDLE_COLORS[edgeDef.dataType as DataType] || HANDLE_COLORS.any;
+      const label = edgeDef.metadata?.label ?? edgeDef.target.handle ?? edgeDef.target.portId;
+      const edgeSignature = stableStringify({
+        source: edgeDef.source,
+        target: edgeDef.target,
+        dataType: edgeDef.dataType,
+        status: edgeDef.status,
+        label,
+        color,
+      });
 
       return [
         {
@@ -614,22 +619,23 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
           targetHandle: edgeDef.target.portId,
           type: 'compute',
           data: {
+            __signature: edgeSignature,
             edgeId: edgeDef.id,
             dataType: edgeDef.dataType,
             status: edgeDef.status,
-            label: edgeDef.metadata?.label ?? edgeDef.target.handle ?? edgeDef.target.portId,
+            label,
             onInsertAction: openActionMenuForEdge,
           },
           style: {
-            stroke: HANDLE_COLORS[edgeDef.dataType as DataType] || HANDLE_COLORS.any,
+            stroke: color,
             strokeWidth: 2,
           },
         },
       ];
     });
 
-    setEdges(computeEdges);
-  }, [edgeDefinitions, nodeDefinitionsById, openActionMenuForEdge, setEdges]);
+    setEdges((previousEdges) => reconcileReactFlowEdges(previousEdges, computeEdges));
+  }, [edgeDefinitions, nodeIds, openActionMenuForEdge, setEdges]);
 
   useEffect(() => {
     if (projectId) {

@@ -13,6 +13,23 @@ export function getClientWriteId(): string {
   return CLIENT_WRITE_ID;
 }
 
+export function withClientWriteId<T extends Record<string, unknown> | undefined | null>(
+  metadata: T
+): Record<string, unknown> {
+  return {
+    ...(metadata && typeof metadata === 'object' ? metadata : {}),
+    clientWriteId: CLIENT_WRITE_ID,
+  };
+}
+
+export function isOwnClientWriteId(metadata: unknown): boolean {
+  return (
+    Boolean(metadata) &&
+    typeof metadata === 'object' &&
+    (metadata as Record<string, unknown>).clientWriteId === CLIENT_WRITE_ID
+  );
+}
+
 // Track the timestamp of the most recent local save per project so the
 // realtime hook can ignore echo payloads that arrive within the echo window.
 const lastLocalSaveAt = new Map<string, number>();
