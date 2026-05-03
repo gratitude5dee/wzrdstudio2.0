@@ -2167,16 +2167,12 @@ const mergeCatalogModels = (primary: StudioModel[], secondary: StudioModel[]): S
 };
 
 export const IMAGE_MODELS: StudioModel[] = mergeCatalogModels(
-  gmiImageGenerationModels,
-  [...imageGenerationModels, ...imageAdvancedModels].filter(
-    (model) => !gmiImageModelIds.has(model.id)
-  )
+  [...imageGenerationModels, ...imageAdvancedModels],
+  gmiImageGenerationModels
 );
 export const VIDEO_MODELS: StudioModel[] = mergeCatalogModels(
-  gmiVideoGenerationModels,
-  [...videoGenerationModels, ...videoAdvancedModels].filter(
-    (model) => !gmiVideoModelIds.has(model.id)
-  )
+  [...videoGenerationModels, ...videoAdvancedModels],
+  gmiVideoGenerationModels
 );
 
 const baseAudioModels: StudioModel[] = [
@@ -3032,16 +3028,22 @@ const gmiAudioModels: StudioModel[] = [
 const gmiAudioModelIds = new Set(gmiAudioModels.map((model) => model.id));
 
 export const AUDIO_MODELS: StudioModel[] = mergeCatalogModels(
-  gmiAudioModels,
-  baseAudioModels.filter((model) => !gmiAudioModelIds.has(model.id))
+  baseAudioModels,
+  gmiAudioModels
 );
 
 export const getDefaultImageModel = () =>
-  'gmi/seedream-5.0-lite';
+  'fal-ai/nano-banana-2';
+export const getDefaultImageEditModel = () =>
+  'fal-ai/nano-banana-2/edit';
 export const getDefaultVideoModel = () =>
-  'gmi/kling-v3-omni';
+  'fal-ai/kling-video/o3/standard/text-to-video';
+export const getDefaultImageToVideoModel = () =>
+  'fal-ai/kling-video/o3/standard/image-to-video';
+export const getDefaultVideoReferenceModel = () =>
+  'fal-ai/kling-video/o3/pro/video-to-video/reference';
 export const getDefaultAudioModel = () =>
-  'gmi/minime-talks-workflow';
+  'fal-ai/elevenlabs/tts/turbo-v2.5';
 export const getDefaultTextModel = () =>
   'gmi/deepseek-r1';
 

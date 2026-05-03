@@ -28,6 +28,12 @@ import {
   normalizeNodeKind,
   normalizeNodeStatus,
 } from '@/lib/compute/contract';
+import {
+  getActionDefaults,
+  getDefaultMediaActionForKind,
+  getMediaActionById,
+  type MediaActionDefinition,
+} from '@/lib/studio/mediaActionRegistry';
 
 // UUID validation regex
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -170,18 +176,81 @@ function normalizeGraphIds(
   return { nodes: normalizedNodes, edges: normalizedEdges, changed };
 }
 
+function toPortDefinition(
+  port: MediaActionDefinition['inputs'][number],
+  fallbackPosition: Port['position']
+): Port {
+  return {
+    id: port.id,
+    name: port.name,
+    datatype: normalizeDataType(port.datatype) as DataType,
+    cardinality: port.cardinality,
+    optional: port.optional,
+    position: port.position ?? fallbackPosition,
+  };
+}
+
+function buildPortsFromAction(action: MediaActionDefinition): { inputs: Port[]; outputs: Port[] } {
+  return {
+    inputs: action.inputs.map((port) => toPortDefinition(port, 'left')),
+    outputs: action.outputs.map((port) => toPortDefinition(port, 'right')),
+  };
+}
+
+function getNodeActionId(node: Partial<NodeDefinition>): string | undefined {
+  const params = node.params as Record<string, unknown> | undefined;
+  const metadata = node.metadata as Record<string, unknown> | undefined;
+  return (
+    (typeof node.actionId === 'string' && node.actionId) ||
+    (typeof params?.actionId === 'string' && params.actionId) ||
+    (typeof metadata?.actionId === 'string' && metadata.actionId) ||
+    undefined
+  );
+}
+
 function normalizeNodeDefinition(node: Partial<NodeDefinition> & { id: string }): NodeDefinition {
+  const kind = normalizeNodeKind(String(node.kind ?? 'Transform')) ?? 'Transform';
+  const action = getMediaActionById(getNodeActionId(node));
+  const actionPorts = action ? buildPortsFromAction(action) : null;
+  const params = {
+    ...(action ? getActionDefaults(action) : {}),
+    ...(node.params ?? {}),
+  };
+  const metadata = {
+    ...(node.metadata ?? {}),
+    ...(action
+      ? {
+          actionId: action.actionId,
+          mediaActionLabel: action.label,
+          mediaType: action.mediaType,
+          workflowType: action.workflowType,
+          batchPolicy: action.batchPolicy,
+        }
+      : {}),
+  };
+
   return {
     id: node.id,
-    kind: normalizeNodeKind(String(node.kind ?? 'Transform')) ?? 'Transform',
+    kind,
+    actionId: action?.actionId ?? getNodeActionId(node),
+    mediaType: action?.mediaType ?? node.mediaType,
+    workflowType: action?.workflowType ?? node.workflowType,
+    executor: action?.executor ?? node.executor,
+    controls: action?.controls ?? node.controls,
+    batch: node.batch ?? (action ? { policy: action.batchPolicy } : undefined),
+    variants: node.variants,
+    assetRefs: node.assetRefs,
     version: typeof node.version === 'string' ? node.version : '1.0.0',
-    label: typeof node.label === 'string' && node.label.trim().length > 0 ? node.label : 'Untitled Node',
+    label:
+      typeof node.label === 'string' && node.label.trim().length > 0
+        ? node.label
+        : action?.label ?? 'Untitled Node',
     position: node.position ?? { x: 0, y: 0 },
     size: node.size,
-    inputs: Array.isArray(node.inputs) ? node.inputs : [],
-    outputs: Array.isArray(node.outputs) ? node.outputs : [],
-    params: node.params ?? {},
-    metadata: node.metadata,
+    inputs: Array.isArray(node.inputs) && node.inputs.length > 0 ? node.inputs : actionPorts?.inputs ?? [],
+    outputs: Array.isArray(node.outputs) && node.outputs.length > 0 ? node.outputs : actionPorts?.outputs ?? [],
+    params,
+    metadata,
     preview: node.preview,
     status: normalizeNodeStatus(node.status),
     progress: typeof node.progress === 'number' ? node.progress : 0,
@@ -213,6 +282,7 @@ interface ExecutionProgress {
   isRunning: boolean;
   completed: number;
   total: number;
+  completedNodeIds: Set<string>;
   startedAt: Date | null;
   error: string | null;
 }
@@ -362,6 +432,7 @@ export const useComputeFlowStore = create<ComputeFlowState>((set, get) => ({
     isRunning: false,
     completed: 0,
     total: 0,
+    completedNodeIds: new Set(),
     startedAt: null,
     error: null,
   },
@@ -579,10 +650,21 @@ export const useComputeFlowStore = create<ComputeFlowState>((set, get) => ({
       // Map edge definitions to flat DB columns expected by RPC
       const dbEdges = edgeDefinitions.map(e => ({
         id: e.id,
+        source: e.source,
+        target: e.target,
+        sourceNodeId: e.source.nodeId,
         source_node_id: e.source.nodeId,
+        sourcePortId: e.source.portId,
         source_port_id: e.source.portId,
+        sourceHandle: e.source.handle ?? null,
+        source_handle: e.source.handle ?? null,
+        targetNodeId: e.target.nodeId,
         target_node_id: e.target.nodeId,
+        targetPortId: e.target.portId,
         target_port_id: e.target.portId,
+        targetHandle: e.target.handle ?? null,
+        target_handle: e.target.handle ?? null,
+        dataType: e.dataType,
         data_type: e.dataType,
         status: e.status,
         metadata: e.metadata ?? null,
@@ -630,30 +712,52 @@ export const useComputeFlowStore = create<ComputeFlowState>((set, get) => ({
   },
 
   createNode: (kind: NodeDefinition['kind'], position: { x: number; y: number }) => {
-    const config = NODE_TYPE_CONFIGS[kind];
+    const action = getDefaultMediaActionForKind(kind);
+    const config = action ? buildPortsFromAction(action) : NODE_TYPE_CONFIGS[kind];
     const nodeId = uuidv4();
     
     // Generate port IDs
-    const inputs: Port[] = (config?.inputs || []).map((input, i) => ({
-      ...input,
-      id: `${nodeId}-input-${i}`,
-    }));
+    const inputs: Port[] = (config?.inputs || []).map((input, i) => {
+      const semanticId = (input as Partial<Port>).id;
+      return {
+        ...input,
+        id: typeof semanticId === 'string' && semanticId.length > 0 ? semanticId : `${nodeId}-input-${i}`,
+      };
+    });
     
-    const outputs: Port[] = (config?.outputs || []).map((output, i) => ({
-      ...output,
-      id: `${nodeId}-output-${i}`,
-    }));
+    const outputs: Port[] = (config?.outputs || []).map((output, i) => {
+      const semanticId = (output as Partial<Port>).id;
+      return {
+        ...output,
+        id: typeof semanticId === 'string' && semanticId.length > 0 ? semanticId : `${nodeId}-output-${i}`,
+      };
+    });
 
     const node: NodeDefinition = {
       id: nodeId,
       kind,
+      actionId: action?.actionId,
+      mediaType: action?.mediaType,
+      workflowType: action?.workflowType,
+      executor: action?.executor,
+      controls: action?.controls,
+      batch: action ? { policy: action.batchPolicy } : undefined,
       version: '1.0.0',
-      label: `${kind} Node`,
+      label: action?.label ?? `${kind} Node`,
       position,
       size: { w: 420, h: 300 },
       inputs,
       outputs,
-      params: {},
+      params: action ? getActionDefaults(action) : {},
+      metadata: action
+        ? {
+            actionId: action.actionId,
+            mediaActionLabel: action.label,
+            mediaType: action.mediaType,
+            workflowType: action.workflowType,
+            batchPolicy: action.batchPolicy,
+          }
+        : undefined,
       status: 'idle',
       progress: 0,
     };
@@ -893,6 +997,7 @@ export const useComputeFlowStore = create<ComputeFlowState>((set, get) => ({
         isRunning: false,
         completed: 0,
         total: 0,
+        completedNodeIds: new Set(),
         startedAt: null,
         error: null,
       },
@@ -1100,6 +1205,7 @@ export const useComputeFlowStore = create<ComputeFlowState>((set, get) => ({
           isRunning: true,
           completed: 0,
           total: requestedNodeIds.size > 0 ? requestedNodeIds.size : nodeDefinitions.length,
+          completedNodeIds: new Set(),
           startedAt: new Date(),
           error: null,
         },
@@ -1290,6 +1396,7 @@ export const useComputeFlowStore = create<ComputeFlowState>((set, get) => ({
         isRunning: false,
         completed: 0,
         total: 0,
+        completedNodeIds: new Set(),
         startedAt: null,
         error: null,
       },
@@ -1475,9 +1582,12 @@ function handleSSEEvent(
       set((state: ComputeFlowState) => ({
         execution: {
           ...state.execution,
-          completed: isCompleted
+          completed: isCompleted && !state.execution.completedNodeIds.has(node_id)
             ? state.execution.completed + 1
             : state.execution.completed,
+          completedNodeIds: isCompleted
+            ? new Set([...state.execution.completedNodeIds, node_id])
+            : state.execution.completedNodeIds,
         },
       }));
       break;

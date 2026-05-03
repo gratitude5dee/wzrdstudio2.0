@@ -47,6 +47,7 @@ export const CANONICAL_DATA_TYPES = [
   'tensor',
   'json',
   'audio',
+  '3d',
   'string',
   'number',
   'boolean',
@@ -121,14 +122,15 @@ const RUN_STATUS_ALIASES: Record<string, CanonicalRunStatus> = {
 export const EDGE_TYPE_COMPATIBILITY: Record<string, string[]> = {
   image: ['image', 'any'],
   video: ['video', 'any'],
-  text: ['text', 'string', 'any', 'image', 'video', 'audio', 'json', 'tensor'],
+  text: ['text', 'string', 'any', 'image', 'video', 'audio', 'json', 'tensor', '3d'],
   string: ['text', 'string', 'any'],
   number: ['number', 'any'],
   boolean: ['boolean', 'any'],
   audio: ['audio', 'any'],
   json: ['json', 'any'],
-  tensor: ['tensor', 'any'],
-  any: ['any', 'image', 'text', 'video', 'audio', 'json', 'tensor', 'string', 'number', 'boolean'],
+  tensor: ['tensor', '3d', 'any'],
+  '3d': ['3d', 'tensor', 'any'],
+  any: ['any', 'image', 'text', 'video', 'audio', 'json', 'tensor', '3d', 'string', 'number', 'boolean'],
 };
 
 export function normalizeNodeKind(value: string | null | undefined): CanonicalNodeKind | null {

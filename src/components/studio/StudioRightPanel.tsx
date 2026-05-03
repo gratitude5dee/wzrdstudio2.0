@@ -37,6 +37,10 @@ import {
   getNodeTextPreviewValue,
   getStudioNodeMediaType,
 } from '@/lib/studio/nodeUtils';
+import {
+  getMediaActionById,
+  type MediaActionControl,
+} from '@/lib/studio/mediaActionRegistry';
 import { useStudioNodeGeneration } from '@/hooks/studio/useStudioNodeGeneration';
 import { StudioNodePalette } from './StudioNodePalette';
 import { WorkflowGeneratorTab } from './WorkflowGeneratorTab';
@@ -177,6 +181,8 @@ function NodeInspector({
   const { models: catalogModels } = useCatalogModels({ autoFetch: true });
 
   const params = (node.params ?? {}) as Record<string, unknown>;
+  const registryAction = getMediaActionById(node.actionId ?? (typeof params.actionId === 'string' ? params.actionId : undefined));
+  const registryControls = registryAction?.controls ?? [];
   const mediaType = getStudioNodeMediaType(node.kind);
   const modelSelection = getNodeModelSelection(node);
   const previewUrl = node.kind === 'Image' ? getNodeImagePreviewUrl(node) : node.preview?.url;
@@ -227,6 +233,123 @@ function NodeInspector({
     },
     [node.id, params, scheduleSave, updateNode]
   );
+
+  const renderRegistryControl = (control: MediaActionControl) => {
+    const value = params[control.id] ?? control.defaultValue ?? '';
+    const labelClass = 'space-y-1.5 text-[11px] uppercase tracking-[0.18em] text-zinc-500';
+    const controlClass = 'h-12 w-full rounded-[18px] border border-[rgba(249,115,22,0.12)] bg-[#131313] px-3 text-sm text-white outline-none';
+
+    if (control.type === 'select') {
+      return (
+        <label key={control.id} className={labelClass}>
+          <span>{control.label}</span>
+          <select
+            value={String(value)}
+            onChange={(event) => updateParams({ [control.id]: event.target.value })}
+            className={controlClass}
+          >
+            {(control.options ?? []).map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      );
+    }
+
+    if (control.type === 'slider') {
+      const numericValue = typeof value === 'number' ? value : Number(value || control.defaultValue || 0);
+      return (
+        <label key={control.id} className={labelClass}>
+          <span className="flex items-center justify-between">
+            <span>{control.label}</span>
+            <span className="font-mono text-zinc-300">{numericValue}</span>
+          </span>
+          <input
+            type="range"
+            value={numericValue}
+            min={control.min}
+            max={control.max}
+            step={control.step ?? 1}
+            onChange={(event) => updateParams({ [control.id]: Number(event.target.value) })}
+            className="w-full accent-orange-500"
+          />
+        </label>
+      );
+    }
+
+    if (control.type === 'switch') {
+      return (
+        <div key={control.id} className="flex items-center justify-between rounded-[18px] border border-[rgba(249,115,22,0.12)] bg-[#131313] px-4 py-3">
+          <span className="text-sm text-zinc-200">{control.label}</span>
+          <Switch
+            checked={Boolean(value)}
+            onCheckedChange={(checked) => updateParams({ [control.id]: checked })}
+          />
+        </div>
+      );
+    }
+
+    if (control.type === 'color') {
+      return (
+        <label key={control.id} className={labelClass}>
+          <span>{control.label}</span>
+          <input
+            type="color"
+            value={String(value)}
+            onChange={(event) => updateParams({ [control.id]: event.target.value })}
+            className="h-12 w-full rounded-[18px] border border-[rgba(249,115,22,0.12)] bg-[#131313] p-2"
+          />
+        </label>
+      );
+    }
+
+    if (control.type === 'textarea') {
+      return (
+        <label key={control.id} className={labelClass}>
+          <span>{control.label}</span>
+          <Textarea
+            value={String(value)}
+            onChange={(event) => updateParams({ [control.id]: event.target.value })}
+            className="min-h-28 rounded-[18px] border-[rgba(249,115,22,0.12)] bg-[#131313] text-white"
+          />
+        </label>
+      );
+    }
+
+    if (control.type === 'file') {
+      return (
+        <label key={control.id} className={labelClass}>
+          <span>{control.label}</span>
+          <Input
+            type="file"
+            onChange={(event) => updateParams({ [`${control.id}Name`]: event.target.files?.[0]?.name ?? '' })}
+            className="h-12 rounded-[18px] border-[rgba(249,115,22,0.12)] bg-[#131313] text-white"
+          />
+        </label>
+      );
+    }
+
+    return (
+      <label key={control.id} className={labelClass}>
+        <span>{control.label}</span>
+        <Input
+          type={control.type === 'number' ? 'number' : 'text'}
+          value={String(value)}
+          min={control.min}
+          max={control.max}
+          step={control.step}
+          onChange={(event) =>
+            updateParams({
+              [control.id]: control.type === 'number' ? Number(event.target.value) : event.target.value,
+            })
+          }
+          className="h-12 rounded-[18px] border-[rgba(249,115,22,0.12)] bg-[#131313] text-white"
+        />
+      </label>
+    );
+  };
 
   return (
     <div className="flex h-full flex-col bg-transparent">
@@ -320,10 +443,11 @@ function NodeInspector({
           </div>
         </section>
 
-        {mediaType ? (
+        {mediaType || registryAction ? (
           <section className="space-y-3 rounded-[22px] border border-[rgba(249,115,22,0.12)] bg-[#111111]/98 p-4">
-            <div className="text-[11px] uppercase tracking-[0.24em] text-zinc-500">Generate</div>
+            <div className="text-[11px] uppercase tracking-[0.24em] text-zinc-500">{mediaType ? 'Generate' : 'Action'}</div>
 
+            {mediaType ? (
             <div className="space-y-2">
               <div className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">Model</div>
               <FloraModelMarketplace
@@ -333,8 +457,22 @@ function NodeInspector({
                 className="h-12 w-full justify-between rounded-[18px]"
               />
             </div>
+            ) : null}
 
-            {(node.kind === 'Image' || node.kind === 'Video') ? (
+            {registryAction ? (
+              <div className="rounded-[18px] border border-[rgba(249,115,22,0.12)] bg-[#131313] px-4 py-3">
+                <div className="text-sm text-white">{registryAction.label}</div>
+                <div className="mt-1 text-xs leading-5 text-zinc-500">{registryAction.workflowType}</div>
+              </div>
+            ) : null}
+
+            {registryControls.length > 0 ? (
+              <div className="grid grid-cols-1 gap-3">
+                {registryControls.map(renderRegistryControl)}
+              </div>
+            ) : null}
+
+            {registryControls.length === 0 && (node.kind === 'Image' || node.kind === 'Video') ? (
               <div className="grid grid-cols-2 gap-3">
                 <label className="space-y-1.5 text-[11px] uppercase tracking-[0.18em] text-zinc-500">
                   <span>Aspect Ratio</span>
@@ -365,7 +503,7 @@ function NodeInspector({
               </div>
             ) : null}
 
-            {node.kind === 'Text' ? (
+            {registryControls.length === 0 && node.kind === 'Text' ? (
               <div className="flex items-center justify-between rounded-[22px] border border-[rgba(249,115,22,0.12)] bg-[#131313] px-4 py-3">
                 <div>
                   <div className="text-sm text-white">Web Search</div>
@@ -376,7 +514,7 @@ function NodeInspector({
                   onCheckedChange={(checked) => updateParams({ webSearch: checked })}
                 />
               </div>
-            ) : (
+            ) : registryControls.length === 0 ? (
               <label className="space-y-1.5 text-[11px] uppercase tracking-[0.18em] text-zinc-500">
                 <span>Seed</span>
                 <Input
@@ -386,7 +524,7 @@ function NodeInspector({
                   className="h-12 rounded-[18px] border-[rgba(249,115,22,0.12)] bg-[#131313] font-mono text-white"
                 />
               </label>
-            )}
+            ) : null}
 
             <label className="space-y-1.5 text-[11px] uppercase tracking-[0.18em] text-zinc-500">
               <span>Prompt</span>

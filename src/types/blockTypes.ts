@@ -12,7 +12,7 @@ export interface Connection {
   targetBlockId: string;
   sourcePoint: 'top' | 'right' | 'bottom' | 'left';
   targetPoint: 'top' | 'right' | 'bottom' | 'left';
-  dataType: 'image' | 'text' | 'video' | 'any' | 'tensor' | 'json' | 'audio' | 'string' | 'number' | 'boolean';
+  dataType: 'image' | 'text' | 'video' | 'any' | 'tensor' | 'json' | 'audio' | '3d' | 'string' | 'number' | 'boolean';
   sourcePointId?: string;
   targetPointId?: string;
   path?: string;

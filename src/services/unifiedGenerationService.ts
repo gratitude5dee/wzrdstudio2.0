@@ -16,6 +16,9 @@
 import { supabase } from '@/integrations/supabase/client';
 import { SUPABASE_URL } from '@/integrations/supabase/config';
 import {
+  getDefaultImageToVideoModel,
+  getDefaultVideoModel,
+  getDefaultVideoReferenceModel,
   getModelById,
   getModelsByTypeAndGroup,
   type StudioModel,
@@ -225,6 +228,59 @@ function determineRoute(model: StudioModel | undefined, modelId: string, input: 
 
   // Default: fal.ai streaming endpoint
   return 'fal-stream';
+}
+
+function resolveFalVideoModelForReferences(
+  modelId: string,
+  model: StudioModel | undefined,
+  input: GenerationInput
+): {
+  modelId: string;
+  model: StudioModel | undefined;
+  fallbackUsed: boolean;
+  fallbackReason?: string;
+} {
+  const mediaType = determineMediaType(model, modelId);
+  const isFal = model?.provider === 'fal-ai' || modelId.startsWith('fal-ai/');
+  if (!isFal || mediaType !== 'video') {
+    return { modelId, model, fallbackUsed: false };
+  }
+
+  const referenceImages = input.referenceAssets?.filter((asset) => asset.type === 'image') ?? [];
+  const referenceVideos = input.referenceAssets?.filter((asset) => asset.type === 'video') ?? [];
+  const hasImageReferences = referenceImages.length > 0;
+  const hasVideoReferences = referenceVideos.length > 0;
+
+  const isCompatible =
+    hasVideoReferences
+      ? ['reference-to-video', 'video-reference', 'video-edit'].includes(model?.workflowType ?? '')
+      : hasImageReferences
+        ? ['image-to-video', 'reference-to-video'].includes(model?.workflowType ?? '')
+        : (model?.workflowType ?? '') === 'text-to-video';
+
+  if (isCompatible) {
+    return { modelId, model, fallbackUsed: false };
+  }
+
+  const fallbackModelId = hasVideoReferences
+    ? getDefaultVideoReferenceModel()
+    : hasImageReferences
+      ? getDefaultImageToVideoModel()
+      : getDefaultVideoModel();
+  const fallbackModel = getModelById(fallbackModelId);
+
+  if (!fallbackModel) {
+    return { modelId, model, fallbackUsed: false };
+  }
+
+  return {
+    modelId: fallbackModelId,
+    model: fallbackModel,
+    fallbackUsed: true,
+    fallbackReason:
+      `${hasImageReferences || hasVideoReferences ? 'incompatible_with_reference_input' : 'incompatible_with_text_only'}:` +
+      `${model?.workflowType ?? `unknown_model:${modelId}`}->default:${fallbackModelId}`,
+  };
 }
 
 function extractImageUrl(result: unknown): string | undefined {
@@ -975,17 +1031,23 @@ export const unifiedGenerationService = {
     onProgress?: OnProgress
   ): Promise<GenerationResult> {
     const generationId = crypto.randomUUID();
-    const normalizedModelId = normalizeFalModelId(input.model);
-    const model = getModelById(normalizedModelId);
-    const mediaType = determineMediaType(model, normalizedModelId);
+    let normalizedModelId = normalizeFalModelId(input.model);
+    let model = getModelById(normalizedModelId);
+    let mediaType = determineMediaType(model, normalizedModelId);
+    const falVideoModel = resolveFalVideoModelForReferences(normalizedModelId, model, input);
+    if (falVideoModel.modelId !== normalizedModelId) {
+      normalizedModelId = falVideoModel.modelId;
+      model = falVideoModel.model;
+      mediaType = determineMediaType(model, normalizedModelId);
+    }
     const route = determineRoute(model, normalizedModelId, input);
 
     const baseMetadata: GenerationResultMetadata = {
       generationId,
       requestedModel: input.model,
       resolvedModel: normalizedModelId,
-      fallbackUsed: input.model !== normalizedModelId,
-      fallbackReason: input.model !== normalizedModelId ? 'model_alias_resolved' : undefined,
+      fallbackUsed: input.model !== normalizedModelId || falVideoModel.fallbackUsed,
+      fallbackReason: falVideoModel.fallbackReason ?? (input.model !== normalizedModelId ? 'model_alias_resolved' : undefined),
       mediaType,
       credits: model?.credits,
     };

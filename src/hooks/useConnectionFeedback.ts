@@ -108,8 +108,15 @@ export function useConnectionFeedback() {
       clearTimeout(clearTimerRef.current);
       clearTimerRef.current = null;
     }
+    const targetNodeId = rejection?.targetNodeId ?? lastRejectionRef.current?.targetNodeId;
+    if (targetNodeId) {
+      const nodeElement = document.querySelector(
+        `[data-id="${targetNodeId}"]`
+      ) as HTMLElement | null;
+      nodeElement?.classList.remove('connection-rejected-flash');
+    }
     setRejection(null);
-  }, []);
+  }, [rejection]);
 
   return {
     rejection,

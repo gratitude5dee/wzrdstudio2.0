@@ -9,14 +9,16 @@ vi.mock('@/hooks/useSmartBlockSuggestions', () => ({
 import { ConnectionNodeSelector } from './ConnectionNodeSelector';
 
 describe('ConnectionNodeSelector', () => {
-  it('offers Layer Editor and keeps Batch disabled', async () => {
+  it('offers legacy node types and registry actions', async () => {
     const user = userEvent.setup();
     const onSelectType = vi.fn();
+    const onSelectAction = vi.fn();
 
     render(
       <ConnectionNodeSelector
         position={{ x: 0, y: 0 }}
         onSelectType={onSelectType}
+        onSelectAction={onSelectAction}
         onNavigate={vi.fn()}
         onCancel={vi.fn()}
       />
@@ -25,7 +27,8 @@ describe('ConnectionNodeSelector', () => {
     await user.click(screen.getByRole('button', { name: /layer editor/i }));
     expect(onSelectType).toHaveBeenCalledWith('imageEdit');
 
-    expect(screen.getByText('Batch')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /batch x batch/i }));
+    expect(onSelectAction).toHaveBeenCalledWith('batch.cartesian');
     expect(onSelectType).toHaveBeenCalledTimes(1);
   });
 });

@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 
 import { useComputeFlowStore } from '@/store/computeFlowStore';
 import type { ArtifactRef, DataType, EdgeDefinition, NodeDefinition, Port } from '@/types/computeFlow';
+import { isTypeCompatible } from '@/types/computeFlow';
 import { validateConnection } from '@/utils/edgeValidation';
 import { cloneImageEditParams } from '@/lib/imageEdit';
 import { DEFAULT_IMAGE_EDIT_PARAMS } from '@/types/imageEdit';
@@ -15,9 +16,13 @@ import { getDefaultModelForNodeKind } from '@/lib/studio/nodeUtils';
 import { getModelById } from '@/lib/studio-model-constants';
 import { normalizeNodeKind, type CanonicalNodeKind } from '@/lib/compute/contract';
 import { applyOnConnect } from '@/lib/compute/applyBinding';
+import {
+  getActionDefaults,
+  getMediaActionById,
+  type MediaActionDefinition,
+} from '@/lib/studio/mediaActionRegistry';
 
 export type StudioNodeType = 'text' | 'image' | 'imageEdit' | 'video' | 'audio';
-export type TurnIntoNodeType = StudioNodeType;
 
 export interface StudioNodeSeedOptions {
   label?: string;
@@ -91,13 +96,27 @@ function getPreferredTargetPort(
     audio: ['audio', 'context', 'input'],
     json: ['context', 'input'],
     tensor: ['context', 'input'],
+    '3d': ['model', 'context', 'input'],
     string: ['input', 'context'],
     number: ['input', 'context'],
     boolean: ['input', 'context'],
     any: ['input', 'context'],
   };
 
-  const candidates = availablePorts.length > 0 ? availablePorts : inputPorts;
+  const compatibleAvailablePorts = availablePorts.filter((port) =>
+    isTypeCompatible(sourceType, port.datatype)
+  );
+  const compatibleInputPorts = inputPorts.filter((port) =>
+    isTypeCompatible(sourceType, port.datatype)
+  );
+  const candidates =
+    compatibleAvailablePorts.length > 0
+      ? compatibleAvailablePorts
+      : compatibleInputPorts.length > 0
+        ? compatibleInputPorts
+        : availablePorts.length > 0
+          ? availablePorts
+          : inputPorts;
   const namePreferences = preferredPortNames[sourceType] ?? preferredPortNames.any;
 
   for (const preferredName of namePreferences) {
@@ -174,6 +193,27 @@ function buildPreviewFromCanonicalKind(
   return undefined;
 }
 
+function toPortDefinition(
+  port: MediaActionDefinition['inputs'][number],
+  fallbackPosition: Port['position']
+): Port {
+  return {
+    id: port.id,
+    name: port.name,
+    datatype: port.datatype as DataType,
+    cardinality: port.cardinality,
+    optional: port.optional,
+    position: port.position ?? fallbackPosition,
+  };
+}
+
+function buildActionPorts(action: MediaActionDefinition): { inputs: Port[]; outputs: Port[] } {
+  return {
+    inputs: action.inputs.map((port) => toPortDefinition(port, 'left')),
+    outputs: action.outputs.map((port) => toPortDefinition(port, 'right')),
+  };
+}
+
 function getWorkflowOrigin(nodes: NodeDefinition[]) {
   if (nodes.length === 0) {
     return { x: 220, y: 160 };
@@ -225,6 +265,7 @@ export function useStudioGraphActions(projectId?: string) {
     addEdge,
     saveGraph,
     updateNode,
+    setGraphAtomic,
   } = useComputeFlowStore();
 
   const nodeDefinitionsById = useMemo(
@@ -328,6 +369,76 @@ export function useStudioGraphActions(projectId?: string) {
       return node;
     },
     [addNode, buildNode, scheduleSave]
+  );
+
+  const buildActionNode = useCallback(
+    (
+      actionId: string,
+      position: { x: number; y: number },
+      options?: StudioNodeSeedOptions
+    ): NodeDefinition | null => {
+      const action = getMediaActionById(actionId);
+      if (!action) {
+        return null;
+      }
+
+      const baseNode = createNode(action.nodeKind as CanonicalNodeKind, position);
+      const ports = buildActionPorts(action);
+      const params = {
+        ...getActionDefaults(action),
+        ...(options?.params ?? {}),
+      };
+      const node: NodeDefinition = {
+        ...baseNode,
+        actionId: action.actionId,
+        mediaType: action.mediaType,
+        workflowType: action.workflowType,
+        executor: action.executor,
+        controls: action.controls,
+        batch: { policy: action.batchPolicy },
+        label: options?.label ?? action.label,
+        inputs: ports.inputs,
+        outputs: ports.outputs,
+        params,
+        metadata: {
+          ...(baseNode.metadata ?? {}),
+          ...(options?.metadata ?? {}),
+          actionId: action.actionId,
+          mediaActionLabel: action.label,
+          mediaType: action.mediaType,
+          workflowType: action.workflowType,
+          batchPolicy: action.batchPolicy,
+          executor: action.executor,
+        },
+        size: options?.size ?? baseNode.size,
+      };
+
+      const preview =
+        options?.preview ?? buildPreviewFromCanonicalKind(action.nodeKind as CanonicalNodeKind, params);
+      if (preview) {
+        node.preview = preview;
+      }
+      return node;
+    },
+    [createNode]
+  );
+
+  const addActionNode = useCallback(
+    (
+      actionId: string,
+      position: { x: number; y: number },
+      options?: StudioNodeSeedOptions
+    ): NodeDefinition | null => {
+      const node = buildActionNode(actionId, position, options);
+      if (!node) {
+        toast.error('Unknown action');
+        return null;
+      }
+      addNode(node);
+      scheduleSave();
+      return node;
+    },
+    [addNode, buildActionNode, scheduleSave]
   );
 
   const materializeWorkflowBlueprint = useCallback(
@@ -541,7 +652,7 @@ export function useStudioGraphActions(projectId?: string) {
     (
       sourceNodeId: string,
       sourcePortId: string,
-      type: TurnIntoNodeType,
+      type: StudioNodeType,
       position: { x: number; y: number },
       options?: StudioNodeSeedOptions
     ) => {
@@ -606,13 +717,188 @@ export function useStudioGraphActions(projectId?: string) {
     [addNodesAndEdgesAtomic, buildNode, edgeDefinitions, nodeDefinitionsById, scheduleSave]
   );
 
+  const createConnectedActionNode = useCallback(
+    (
+      sourceNodeId: string,
+      sourcePortId: string,
+      actionId: string,
+      position: { x: number; y: number },
+      options?: StudioNodeSeedOptions
+    ) => {
+      const sourceNode = nodeDefinitionsById.get(sourceNodeId);
+      const sourcePort = sourceNode?.outputs.find((port) => port.id === sourcePortId);
+
+      if (!sourceNode || !sourcePort) {
+        toast.error('Unable to create connected action');
+        return null;
+      }
+
+      const node = buildActionNode(actionId, position, options);
+      if (!node) {
+        toast.error('Unknown action');
+        return null;
+      }
+
+      const targetPort = getPreferredTargetPort(node, sourcePort.datatype, edgeDefinitions);
+      if (!targetPort) {
+        toast.error('Action has no compatible input port');
+        return null;
+      }
+
+      const validation = validateConnection({
+        sourceNode,
+        sourcePort,
+        targetNode: node,
+        targetPort,
+        existingEdges: edgeDefinitions,
+      });
+
+      if (!validation.valid) {
+        toast.error(validation.error ?? 'Invalid connection');
+        return null;
+      }
+
+      const delta = applyOnConnect({
+        sourceNode,
+        targetNode: node,
+        sourcePort,
+        targetPort,
+        edgeDataType: sourcePort.datatype,
+      });
+      const seededNode =
+        Object.keys(delta).length > 0
+          ? { ...node, params: { ...node.params, ...delta } }
+          : node;
+
+      addNodesAndEdgesAtomic(
+        [seededNode],
+        [
+          {
+            id: uuidv4(),
+            source: { nodeId: sourceNodeId, portId: sourcePort.id, handle: sourcePort.name },
+            target: { nodeId: seededNode.id, portId: targetPort.id, handle: targetPort.name },
+            dataType: sourcePort.datatype,
+            status: 'idle',
+          },
+        ],
+        `Connected ${sourceNode.label} to ${seededNode.label}`
+      );
+      scheduleSave();
+      return seededNode;
+    },
+    [addNodesAndEdgesAtomic, buildActionNode, edgeDefinitions, nodeDefinitionsById, scheduleSave]
+  );
+
+  const insertActionOnEdge = useCallback(
+    (edgeId: string, actionId: string, position: { x: number; y: number }) => {
+      const state = useComputeFlowStore.getState();
+      const edge = state.edgeDefinitions.find((candidate) => candidate.id === edgeId);
+      if (!edge) {
+        toast.error('Edge no longer exists');
+        return null;
+      }
+
+      const sourceNode = state.nodeDefinitions.find((node) => node.id === edge.source.nodeId);
+      const targetNode = state.nodeDefinitions.find((node) => node.id === edge.target.nodeId);
+      const sourcePort = sourceNode?.outputs.find((port) => port.id === edge.source.portId);
+      const targetPort = targetNode?.inputs.find((port) => port.id === edge.target.portId);
+
+      if (!sourceNode || !targetNode || !sourcePort || !targetPort) {
+        toast.error('Unable to insert action on this edge');
+        return null;
+      }
+
+      const actionNode = buildActionNode(actionId, position);
+      if (!actionNode) {
+        toast.error('Unknown action');
+        return null;
+      }
+
+      const actionInput = getPreferredTargetPort(
+        actionNode,
+        sourcePort.datatype,
+        state.edgeDefinitions.filter((candidate) => candidate.id !== edgeId)
+      );
+      const actionOutput =
+        actionNode.outputs.find((port) => isTypeCompatible(port.datatype, targetPort.datatype)) ??
+        actionNode.outputs[0];
+
+      if (!actionInput || !actionOutput) {
+        toast.error('Action cannot be inserted between these port types');
+        return null;
+      }
+
+      const existingWithoutEdge = state.edgeDefinitions.filter((candidate) => candidate.id !== edgeId);
+      const firstValidation = validateConnection({
+        sourceNode,
+        sourcePort,
+        targetNode: actionNode,
+        targetPort: actionInput,
+        existingEdges: existingWithoutEdge,
+      });
+      const secondValidation = validateConnection({
+        sourceNode: actionNode,
+        sourcePort: actionOutput,
+        targetNode,
+        targetPort,
+        existingEdges: existingWithoutEdge,
+      });
+
+      if (!firstValidation.valid || !secondValidation.valid) {
+        toast.error(firstValidation.error ?? secondValidation.error ?? 'Invalid insertion');
+        return null;
+      }
+
+      const firstDelta = applyOnConnect({
+        sourceNode,
+        targetNode: actionNode,
+        sourcePort,
+        targetPort: actionInput,
+        edgeDataType: sourcePort.datatype,
+      });
+      const seededActionNode =
+        Object.keys(firstDelta).length > 0
+          ? { ...actionNode, params: { ...actionNode.params, ...firstDelta } }
+          : actionNode;
+
+      const nextEdges: EdgeDefinition[] = [
+        ...existingWithoutEdge,
+        {
+          id: uuidv4(),
+          source: { nodeId: sourceNode.id, portId: sourcePort.id, handle: sourcePort.name },
+          target: { nodeId: seededActionNode.id, portId: actionInput.id, handle: actionInput.name },
+          dataType: sourcePort.datatype,
+          status: 'idle',
+          metadata: { insertedFromEdgeId: edge.id },
+        },
+        {
+          id: uuidv4(),
+          source: { nodeId: seededActionNode.id, portId: actionOutput.id, handle: actionOutput.name },
+          target: { nodeId: targetNode.id, portId: targetPort.id, handle: targetPort.name },
+          dataType: actionOutput.datatype,
+          status: 'idle',
+          metadata: { insertedFromEdgeId: edge.id },
+        },
+      ];
+
+      setGraphAtomic([...state.nodeDefinitions, seededActionNode], nextEdges);
+      scheduleSave();
+      return seededActionNode;
+    },
+    [buildActionNode, scheduleSave, setGraphAtomic]
+  );
+
   return {
     buildNode,
     buildCanonicalNode,
+    buildActionNode,
     addNodeOfType,
+    addActionNode,
     materializeWorkflowBlueprint,
     connectNodes,
     createConnectedNode,
+    createConnectedActionNode,
+    insertActionOnEdge,
     scheduleSave,
   };
 }

@@ -69,6 +69,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { getNodeImagePreviewUrl } from '@/lib/imageEdit';
 import { resolveIncomingForUI } from '@/lib/compute/applyBinding';
 import { buildFloraSeedGraph, FLORA_EXAMPLE_COPY, isFloraSeedNode } from '@/lib/studio/floraSeed';
+import { getMediaActionById } from '@/lib/studio/mediaActionRegistry';
 import { supabase } from '@/integrations/supabase/client';
 
 interface StudioCanvasProps {
@@ -198,7 +199,16 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
     removeNode,
     removeEdge,
   } = useComputeFlowStore();
-  const { buildNode, addNodeOfType, connectNodes, createConnectedNode, scheduleSave } =
+  const {
+    buildNode,
+    addNodeOfType,
+    addActionNode,
+    connectNodes,
+    createConnectedNode,
+    createConnectedActionNode,
+    insertActionOnEdge,
+    scheduleSave,
+  } =
     useStudioGraphActions(projectId);
   const { generateNode, updateNodeModelSelection } = useStudioNodeGeneration(projectId);
 
@@ -239,6 +249,7 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
     sourceNodeId: string;
     sourcePortId: string;
   } | null>(null);
+  const [activeEdgeInsertion, setActiveEdgeInsertion] = useState<{ edgeId: string } | null>(null);
   const [showGrid, setShowGrid] = useState(true);
   const [promptDraft, setPromptDraft] = useState('');
   const [isPromptSubmitting, setIsPromptSubmitting] = useState(false);
@@ -449,6 +460,12 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
           nodeDefinition: nodeDef,
           label: nodeDef.label,
           kind: nodeDef.kind,
+          actionId: nodeDef.actionId ?? (typeof nodeDef.params?.actionId === 'string' ? nodeDef.params.actionId : undefined),
+          mediaType: nodeDef.mediaType,
+          workflowType: nodeDef.workflowType,
+          controls: nodeDef.controls,
+          batch: nodeDef.batch,
+          variants: nodeDef.variants,
           inputs: nodeDef.inputs,
           outputs: nodeDef.outputs,
           params: nodeDef.params,
@@ -569,6 +586,17 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
     updateNodeModelSelection,
   ]);
 
+  const openActionMenuForEdge = useCallback(
+    (edgeId: string, screenPosition: { x: number; y: number }) => {
+      setNodeSelectorFlowPosition(screenToFlowPosition(screenPosition));
+      setNodeSelectorScreenPosition(screenPosition);
+      setActiveConnection(null);
+      setActiveEdgeInsertion({ edgeId });
+      setShowNodeSelector(true);
+    },
+    [screenToFlowPosition]
+  );
+
   useEffect(() => {
     const computeEdges: Edge[] = edgeDefinitions.flatMap((edgeDef) => {
       const sourceNode = nodeDefinitionsById.get(edgeDef.source.nodeId);
@@ -586,8 +614,11 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
           targetHandle: edgeDef.target.portId,
           type: 'compute',
           data: {
+            edgeId: edgeDef.id,
             dataType: edgeDef.dataType,
             status: edgeDef.status,
+            label: edgeDef.metadata?.label ?? edgeDef.target.handle ?? edgeDef.target.portId,
+            onInsertAction: openActionMenuForEdge,
           },
           style: {
             stroke: HANDLE_COLORS[edgeDef.dataType as DataType] || HANDLE_COLORS.any,
@@ -598,7 +629,7 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
     });
 
     setEdges(computeEdges);
-  }, [edgeDefinitions, nodeDefinitionsById, setEdges]);
+  }, [edgeDefinitions, nodeDefinitionsById, openActionMenuForEdge, setEdges]);
 
   useEffect(() => {
     if (projectId) {
@@ -921,6 +952,24 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
   const handleSelectNodeType = useCallback(
     (type: 'text' | 'image' | 'video' | 'imageEdit', positionOverride?: { x: number; y: number }) => {
       const position = positionOverride ?? nodeSelectorFlowPosition;
+      if (activeEdgeInsertion) {
+        const actionByType = {
+          text: 'text.enter',
+          image: 'image.generate',
+          video: 'video.generate',
+          imageEdit: 'image.edit',
+        } as const;
+        const node = insertActionOnEdge(activeEdgeInsertion.edgeId, actionByType[type], position);
+        if (node) {
+          onSelectNode(node.id);
+        }
+        requestAnimationFrame(() => {
+          setShowNodeSelector(false);
+          setActiveConnection(null);
+          setActiveEdgeInsertion(null);
+        });
+        return;
+      }
       const node = activeConnection
         ? createConnectedNode(activeConnection.sourceNodeId, activeConnection.sourcePortId, type, position)
         : addNodeOfType(type, position);
@@ -932,9 +981,54 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
       requestAnimationFrame(() => {
         setShowNodeSelector(false);
         setActiveConnection(null);
+        setActiveEdgeInsertion(null);
       });
     },
-    [activeConnection, addNodeOfType, createConnectedNode, nodeSelectorFlowPosition, onSelectNode]
+    [
+      activeConnection,
+      activeEdgeInsertion,
+      addNodeOfType,
+      createConnectedNode,
+      insertActionOnEdge,
+      nodeSelectorFlowPosition,
+      onSelectNode,
+    ]
+  );
+
+  const handleSelectAction = useCallback(
+    (actionId: string, positionOverride?: { x: number; y: number }) => {
+      const position = positionOverride ?? nodeSelectorFlowPosition;
+      const action = getMediaActionById(actionId);
+      if (!action) {
+        toast.error('Unknown action');
+        return;
+      }
+
+      const node = activeEdgeInsertion
+        ? insertActionOnEdge(activeEdgeInsertion.edgeId, actionId, position)
+        : activeConnection
+          ? createConnectedActionNode(activeConnection.sourceNodeId, activeConnection.sourcePortId, actionId, position)
+          : addActionNode(actionId, position);
+
+      if (node) {
+        onSelectNode(node.id);
+      }
+
+      requestAnimationFrame(() => {
+        setShowNodeSelector(false);
+        setActiveConnection(null);
+        setActiveEdgeInsertion(null);
+      });
+    },
+    [
+      activeConnection,
+      activeEdgeInsertion,
+      addActionNode,
+      createConnectedActionNode,
+      insertActionOnEdge,
+      nodeSelectorFlowPosition,
+      onSelectNode,
+    ]
   );
 
   const handleCanvasDoubleClick = useCallback(
@@ -953,6 +1047,7 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
       setNodeSelectorScreenPosition({ x: event.clientX, y: event.clientY });
       setShowNodeSelector(true);
       setActiveConnection(null);
+      setActiveEdgeInsertion(null);
     },
     [screenToFlowPosition]
   );
@@ -974,6 +1069,7 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
       if (event.key === 'Escape') {
         setShowNodeSelector(false);
         setActiveConnection(null);
+        setActiveEdgeInsertion(null);
         cancelClickConnection();
       }
 
@@ -1061,13 +1157,16 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
             <ConnectionNodeSelector
               position={nodeSelectorFlowPosition}
               onSelectType={handleSelectNodeType}
+              onSelectAction={handleSelectAction}
               onNavigate={() => {
                 setShowNodeSelector(false);
                 setActiveConnection(null);
+                setActiveEdgeInsertion(null);
               }}
               onCancel={() => {
                 setShowNodeSelector(false);
                 setActiveConnection(null);
+                setActiveEdgeInsertion(null);
               }}
             />
           </div>

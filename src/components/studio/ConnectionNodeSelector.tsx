@@ -1,12 +1,18 @@
 import React from 'react';
-import { Type, Image, Video, BookOpen, Layers, Rows3 } from 'lucide-react';
+import { Type, Image, Video, BookOpen, Layers, Rows3, Wand2, Music, Box, Globe2, Scissors, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useSmartBlockSuggestions } from '@/hooks/useSmartBlockSuggestions';
+import {
+  getActionsForSourceDataType,
+  getPaletteMediaActions,
+  type MediaActionDefinition,
+} from '@/lib/studio/mediaActionRegistry';
 
 interface ConnectionNodeSelectorProps {
   position: { x: number; y: number };
   onSelectType: (type: 'text' | 'image' | 'video' | 'imageEdit') => void;
+  onSelectAction?: (actionId: string) => void;
   onNavigate: () => void;
   onCancel: () => void;
   isTransforming?: boolean;
@@ -22,13 +28,27 @@ const blockTypes = [
   { type: 'imageEdit' as const, label: 'Layer Editor', icon: Layers, shortcut: 'E' },
 ];
 
-const disabledTypes = [
-  { type: 'batch' as const, label: 'Batch', icon: Rows3, shortcut: 'B' },
-];
+const actionIconByMedia: Record<string, React.ElementType> = {
+  text: Type,
+  image: Image,
+  video: Video,
+  audio: Music,
+  '3d': Box,
+  json: Globe2,
+  any: Sparkles,
+};
+
+function getActionIcon(action: MediaActionDefinition) {
+  if (action.executor === 'ffmpeg') return Scissors;
+  if (action.actionId.startsWith('batch.')) return Rows3;
+  if (action.actionId.startsWith('embed.')) return Globe2;
+  return actionIconByMedia[action.mediaType] ?? Wand2;
+}
 
 export const ConnectionNodeSelector: React.FC<ConnectionNodeSelectorProps> = ({
   position: _position,
   onSelectType,
+  onSelectAction,
   onNavigate: _onNavigate,
   onCancel: _onCancel,
   isTransforming = false,
@@ -53,6 +73,9 @@ export const ConnectionNodeSelector: React.FC<ConnectionNodeSelectorProps> = ({
     const confB = getSuggestion(b.type)?.confidence || 0;
     return confB - confA;
   });
+  const actionSuggestions = (
+    sourceBlockType ? getActionsForSourceDataType(sourceBlockType) : getPaletteMediaActions()
+  ).slice(0, 18);
 
   return (
     <motion.div
@@ -75,7 +98,7 @@ export const ConnectionNodeSelector: React.FC<ConnectionNodeSelectorProps> = ({
           </div>
         </div>
 
-        <div className="space-y-1 p-2">
+        <div className="max-h-[560px] space-y-1 overflow-y-auto p-2 nowheel">
           {sortedBlockTypes.map((block) => {
             const suggestion = getSuggestion(block.type);
             const isRecommended = Boolean(sourceBlockType) && Boolean(suggestion) && suggestion.confidence > 0.4;
@@ -116,22 +139,38 @@ export const ConnectionNodeSelector: React.FC<ConnectionNodeSelectorProps> = ({
             );
           })}
 
-          {disabledTypes.map((block) => (
-            <div
-              key={block.type}
-              className="group flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-zinc-500"
-            >
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/6 bg-[#141414] text-zinc-600">
-                <block.icon className="h-4 w-4" />
-              </div>
-              <div className="flex-1">
-                <div className="font-medium">{block.label}</div>
-              </div>
-              <kbd className="rounded-full border border-white/8 bg-[#171717] px-2 py-0.5 text-[10px] font-semibold text-zinc-500">
-                {block.shortcut}
-              </kbd>
-            </div>
-          ))}
+          <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-600">
+            Actions
+          </div>
+
+          {actionSuggestions.map((action) => {
+            const Icon = getActionIcon(action);
+            return (
+              <motion.button
+                key={action.actionId}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onSelectAction?.(action.actionId);
+                }}
+                whileHover={{ x: 2 }}
+                className="group flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm text-zinc-300 transition-all duration-200 hover:bg-[#1a1a1a] hover:text-white"
+              >
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/8 bg-[#171717] text-zinc-400 group-hover:text-zinc-200">
+                  <Icon className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-medium">{action.label}</div>
+                  <div className="truncate text-[10px] text-zinc-600">{action.workflowType}</div>
+                </div>
+                {action.batchPolicy === 'cartesian' ? (
+                  <kbd className="rounded-full border border-white/8 bg-[#171717] px-2 py-0.5 text-[10px] font-semibold text-zinc-400">
+                    Batch
+                  </kbd>
+                ) : null}
+              </motion.button>
+            );
+          })}
         </div>
 
         <div className="border-t border-[rgba(249,115,22,0.12)] bg-gradient-to-t from-zinc-800/30 to-transparent px-4 py-3">

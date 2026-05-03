@@ -6,9 +6,10 @@ import {
   findBindingForHandle,
 } from '@/lib/compute/handleBindings';
 import type { CanonicalNodeKind } from '@/lib/compute/contract';
+import { getActionInputBinding } from '@/lib/studio/mediaActionRegistry';
 import type { DataType, EdgeDefinition, NodeDefinition, Port } from '@/types/computeFlow';
 
-export type UIChipType = 'image' | 'video' | 'audio' | 'text';
+export type UIChipType = 'image' | 'video' | 'audio' | 'text' | '3d';
 
 export interface UIChip {
   sourceNodeId: string;
@@ -56,7 +57,7 @@ function getNodeTextValue(node?: Pick<NodeDefinition, 'preview' | 'params'> | nu
 
 function getMediaUrlForType(
   node: NodeDefinition,
-  type: 'image' | 'video' | 'audio'
+  type: 'image' | 'video' | 'audio' | '3d'
 ): string | undefined {
   if (type === 'image') {
     const url = getNodeImagePreviewUrl(node);
@@ -65,6 +66,17 @@ function getMediaUrlForType(
   if (type === 'video') {
     const url = node.preview?.url;
     return typeof url === 'string' && url.length > 0 ? url : undefined;
+  }
+  if (type === '3d') {
+    const preview = node.preview as { url?: unknown; data?: { modelUrl?: unknown; url?: unknown } } | undefined;
+    const params = node.params as Record<string, unknown> | undefined;
+    const candidate =
+      (typeof preview?.url === 'string' && preview.url) ||
+      (typeof preview?.data?.modelUrl === 'string' && preview.data.modelUrl) ||
+      (typeof preview?.data?.url === 'string' && preview.data.url) ||
+      (typeof params?.modelUrl === 'string' && (params.modelUrl as string)) ||
+      undefined;
+    return candidate || undefined;
   }
   // audio
   const preview = node.preview as { url?: unknown; data?: { audioUrl?: unknown } } | undefined;
@@ -78,7 +90,7 @@ function getMediaUrlForType(
 }
 
 function chipTypeFromDataType(dt: DataType): UIChipType | null {
-  if (dt === 'image' || dt === 'video' || dt === 'audio') return dt;
+  if (dt === 'image' || dt === 'video' || dt === 'audio' || dt === '3d') return dt;
   if (dt === 'text' || dt === 'string') return 'text';
   return null;
 }
@@ -140,7 +152,9 @@ export function applyOnConnect(args: {
 }): Record<string, unknown> {
   const { sourceNode, targetNode, targetPort, edgeDataType } = args;
 
-  const binding = findBindingForHandle(targetNode.kind as CanonicalNodeKind, targetPort.name);
+  const binding =
+    getActionInputBinding(targetNode.actionId ?? String(targetNode.params?.actionId ?? ''), targetPort.name) ??
+    findBindingForHandle(targetNode.kind as CanonicalNodeKind, targetPort.name);
   if (!binding) return {};
 
   const resolved = resolveEdgeValue(sourceNode, edgeDataType, binding);
@@ -187,7 +201,8 @@ export function resolveIncomingForUI(args: {
 
     const dataType = sourcePort?.datatype ?? edge.dataType;
     const binding = targetPort
-      ? findBindingForHandle(targetNode.kind as CanonicalNodeKind, targetPort.name)
+      ? getActionInputBinding(targetNode.actionId ?? String(targetNode.params?.actionId ?? ''), targetPort.name) ??
+        findBindingForHandle(targetNode.kind as CanonicalNodeKind, targetPort.name)
       : undefined;
 
     const resolved = resolveEdgeValue(sourceNode, dataType, binding);

@@ -4,6 +4,10 @@ import {
   unifiedGenerationService,
   type GenerationResult as UnifiedResult,
 } from '@/services/unifiedGenerationService'
+import {
+  getDefaultImageEditModel,
+  getDefaultImageModel,
+} from '@/lib/studio-model-constants'
 
 export interface GenerationParams {
   prompt: string
@@ -36,7 +40,7 @@ class GenerationService {
     params: GenerationParams,
     onProgress?: (progress: number) => void
   ): Promise<GenerationResult> {
-    const modelId = 'fal-ai/flux/dev'
+    const modelId = getDefaultImageModel()
 
     const result = await unifiedGenerationService.generate(
       {
@@ -99,7 +103,7 @@ class GenerationService {
     params: ImageToImageParams,
     onProgress?: (progress: number) => void
   ): Promise<GenerationResult> {
-    const modelId = 'fal-ai/flux/dev/image-to-image'
+    const modelId = getDefaultImageEditModel()
 
     const result = await unifiedGenerationService.generate(
       {

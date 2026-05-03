@@ -1,11 +1,14 @@
 import React, { memo, useState } from 'react';
 import { EdgeLabelRenderer, EdgeProps, getBezierPath } from '@xyflow/react';
+import { Plus } from 'lucide-react';
 import { DataType, EdgeStatus } from '@/types/computeFlow';
 
 export interface ComputeEdgeData {
+  edgeId?: string;
   dataType?: DataType;
   status?: EdgeStatus;
   label?: string;
+  onInsertAction?: (edgeId: string, screenPosition: { x: number; y: number }) => void;
 }
 
 export const ComputeEdge = memo(
@@ -72,16 +75,32 @@ export const ComputeEdge = memo(
         <circle cx={sourceX} cy={sourceY} r={selected ? 2.4 : 2} fill={strokeColor} opacity={0.72} />
         <circle cx={targetX} cy={targetY} r={selected ? 2.4 : 2} fill={strokeColor} opacity={0.72} />
 
-        {edgeData?.label && (isHovered || selected) ? (
+        {(edgeData?.label || edgeData?.onInsertAction) && (isHovered || selected) ? (
           <EdgeLabelRenderer>
             <div
-              className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/8 bg-[#151515]/92 px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-zinc-300 shadow-lg"
+              className="absolute flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full border border-white/8 bg-[#151515]/92 px-1.5 py-1 text-[10px] uppercase tracking-[0.18em] text-zinc-300 shadow-lg"
               style={{
                 left: labelX,
                 top: labelY,
               }}
             >
-              {edgeData.label}
+              {edgeData?.onInsertAction && edgeData.edgeId ? (
+                <button
+                  type="button"
+                  className="nodrag pointer-events-auto flex h-5 w-5 items-center justify-center rounded-full border border-white/10 bg-[#202020] text-zinc-300 transition-colors hover:border-[#f97316]/40 hover:text-white"
+                  aria-label="Insert action"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    edgeData.onInsertAction?.(edgeData.edgeId!, {
+                      x: event.clientX,
+                      y: event.clientY,
+                    });
+                  }}
+                >
+                  <Plus className="h-3 w-3" />
+                </button>
+              ) : null}
+              {edgeData?.label ? <span className="pointer-events-none px-1.5">{edgeData.label}</span> : null}
             </div>
           </EdgeLabelRenderer>
         ) : null}

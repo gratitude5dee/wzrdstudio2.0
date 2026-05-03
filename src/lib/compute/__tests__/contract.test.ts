@@ -53,5 +53,7 @@ describe('shared compute contract', () => {
     expect(isCompatibleDataType('text', 'string')).toBe(true);
     expect(isCompatibleDataType('image', 'json')).toBe(false);
     expect(isCompatibleDataType('any', 'video')).toBe(true);
+    expect(isCompatibleDataType('3d', 'tensor')).toBe(true);
+    expect(isCompatibleDataType('tensor', '3d')).toBe(true);
   });
 });

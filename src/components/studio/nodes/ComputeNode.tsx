@@ -17,12 +17,18 @@ import {
   Send,
   GitBranch,
   Sparkles,
-  ChevronRight
+  ChevronRight,
+  Music,
+  Copy,
+  Download,
+  Star,
+  Trash2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { HANDLE_COLORS, HANDLE_GLOW_COLORS, Port, DataType, isTypeCompatible } from '@/types/computeFlow';
 import { NodeHoverMenu } from './NodeHoverMenu';
 import { useCatalogModels, type CatalogMediaType } from '@/hooks/useCatalogModels';
+import { getMediaActionById, type MediaActionControl } from '@/lib/studio/mediaActionRegistry';
 
 export interface ComputeNodeData {
   kind: string;
@@ -33,6 +39,12 @@ export interface ComputeNodeData {
   status: 'idle' | 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled' | 'dirty';
   progress?: number;
   preview?: { type: string; url?: string; data?: any };
+  actionId?: string;
+  mediaType?: string;
+  workflowType?: string;
+  controls?: MediaActionControl[];
+  batch?: { policy?: string; items?: unknown[] };
+  variants?: Array<{ id: string; type: string; url?: string; data?: any }>;
   collapsed?: boolean;
   color?: string;
   model?: string;
@@ -52,6 +64,7 @@ const NODE_ICONS: Record<string, React.ElementType> = {
   Transform: Workflow,
   Output: Send,
   Gateway: GitBranch,
+  Audio: Music,
 };
 
 const HELPER_TEXT: Record<string, string> = {
@@ -68,10 +81,15 @@ const HELPER_TEXT: Record<string, string> = {
 export const ComputeNode = memo(({ id, data, selected }: NodeProps) => {
   const nodeData = (data as unknown) as ComputeNodeData;
   const { getEdges } = useReactFlow();
+  const action = useMemo(
+    () => getMediaActionById(nodeData.actionId ?? nodeData.params?.actionId),
+    [nodeData.actionId, nodeData.params]
+  );
   const mediaType: CatalogMediaType | undefined =
     nodeData.kind === 'Image' ? 'image' :
     nodeData.kind === 'Text' ? 'text' :
     nodeData.kind === 'Video' ? 'video' :
+    nodeData.kind === 'Audio' ? 'audio' :
     undefined;
   const { models: catalogModels } = useCatalogModels({
     mediaType,
@@ -79,6 +97,7 @@ export const ComputeNode = memo(({ id, data, selected }: NodeProps) => {
   });
   const [collapsed, setCollapsed] = useState(nodeData.collapsed ?? false);
   const [hoveredHandle, setHoveredHandle] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const modelOptions = useMemo(
     () => catalogModels.map((model) => ({ id: model.id, label: model.name })),
     [catalogModels]
@@ -86,8 +105,18 @@ export const ComputeNode = memo(({ id, data, selected }: NodeProps) => {
   const [selectedModel, setSelectedModel] = useState(nodeData.model || modelOptions[0]?.id || '');
 
   const Icon = NODE_ICONS[nodeData.kind] || Box;
-  const helperText = HELPER_TEXT[nodeData.kind] || '';
+  const helperText = action?.description ?? HELPER_TEXT[nodeData.kind] ?? '';
   const models = modelOptions;
+  const actionControls = nodeData.controls ?? action?.controls ?? [];
+  const previewUrl =
+    nodeData.preview?.url ??
+    nodeData.preview?.data?.url ??
+    nodeData.preview?.data?.audioUrl ??
+    nodeData.preview?.data?.modelUrl;
+  const previewText =
+    typeof nodeData.preview?.data === 'string'
+      ? nodeData.preview.data
+      : nodeData.preview?.data?.text ?? nodeData.preview?.data?.prompt ?? nodeData.preview?.data?.content;
 
   useEffect(() => {
     if (nodeData.model && nodeData.model !== selectedModel) {
@@ -159,6 +188,24 @@ export const ComputeNode = memo(({ id, data, selected }: NodeProps) => {
     }
   }, [nodeData]);
 
+  const handleCopyPrompt = useCallback(() => {
+    const text = String(nodeData.params?.prompt ?? nodeData.params?.content ?? previewText ?? previewUrl ?? '');
+    if (text) {
+      void navigator.clipboard?.writeText(text);
+    }
+    setContextMenu(null);
+  }, [nodeData.params, previewText, previewUrl]);
+
+  const handleDownload = useCallback(() => {
+    if (!previewUrl) return;
+    const link = document.createElement('a');
+    link.href = String(previewUrl);
+    link.download = `${nodeData.label || 'studio-output'}`;
+    link.rel = 'noopener noreferrer';
+    link.click();
+    setContextMenu(null);
+  }, [nodeData.label, previewUrl]);
+
   // Hover state for node
   const [isNodeHovered, setIsNodeHovered] = useState(false);
 
@@ -169,6 +216,10 @@ export const ComputeNode = memo(({ id, data, selected }: NodeProps) => {
       transition={{ duration: 0.2, ease: 'easeOut' }}
       onMouseEnter={() => setIsNodeHovered(true)}
       onMouseLeave={() => setIsNodeHovered(false)}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        setContextMenu({ x: event.clientX, y: event.clientY });
+      }}
       className={cn(
         'relative flex flex-col rounded-2xl border backdrop-blur-md',
         'min-w-[280px] max-w-[320px] transition-all duration-200',
@@ -210,7 +261,9 @@ export const ComputeNode = memo(({ id, data, selected }: NodeProps) => {
         </div>
         
         {/* Type Label */}
-        <span className="text-sm font-medium text-zinc-300">{nodeData.kind}</span>
+        <span className="min-w-0 flex-1 truncate text-sm font-medium text-zinc-300">
+          {action?.label ?? nodeData.label ?? nodeData.kind}
+        </span>
         
         {/* Model Selector (if applicable) */}
         {models.length > 0 && (
@@ -229,7 +282,7 @@ export const ComputeNode = memo(({ id, data, selected }: NodeProps) => {
         {/* Collapse toggle */}
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="p-1 hover:bg-zinc-700/50 rounded transition-colors text-zinc-500 hover:text-zinc-300"
+          className="nodrag p-1 hover:bg-zinc-700/50 rounded transition-colors text-zinc-500 hover:text-zinc-300"
         >
           {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
         </button>
@@ -249,17 +302,36 @@ export const ComputeNode = memo(({ id, data, selected }: NodeProps) => {
               {/* Preview Area */}
               {nodeData.preview ? (
                 <div className="rounded-xl overflow-hidden border border-[rgba(249,115,22,0.06)] bg-zinc-950/50">
-                  {nodeData.preview.type === 'image' && nodeData.preview.url && (
+                  {nodeData.preview.type === 'image' && previewUrl && (
                     <img 
-                      src={nodeData.preview.url} 
+                      src={previewUrl}
                       alt="Preview" 
                       className="w-full h-36 object-cover"
                     />
                   )}
-                  {nodeData.preview.type === 'text' && (
-                    <div className="p-2.5 text-xs text-zinc-400 max-h-24 overflow-y-auto">
-                      {nodeData.preview.data}
+                  {nodeData.preview.type === 'video' && previewUrl && (
+                    <video src={previewUrl} className="w-full h-36 object-cover" controls muted />
+                  )}
+                  {nodeData.preview.type === 'audio' && previewUrl && (
+                    <div className="p-3">
+                      <audio src={previewUrl} className="w-full" controls />
                     </div>
+                  )}
+                  {nodeData.preview.type === '3d' && (
+                    <div className="flex h-28 items-center justify-center gap-2 text-xs text-cyan-300">
+                      <Box className="h-5 w-5" />
+                      <span>3D asset ready</span>
+                    </div>
+                  )}
+                  {nodeData.preview.type === 'text' && (
+                    <div className="nowheel p-2.5 text-xs text-zinc-400 max-h-24 overflow-y-auto">
+                      {String(previewText ?? '')}
+                    </div>
+                  )}
+                  {nodeData.preview.type === 'json' && (
+                    <pre className="nowheel max-h-24 overflow-auto p-2.5 text-[10px] text-zinc-500">
+                      {JSON.stringify(nodeData.preview.data ?? {}, null, 2)}
+                    </pre>
                   )}
                 </div>
               ) : (
@@ -271,6 +343,19 @@ export const ComputeNode = memo(({ id, data, selected }: NodeProps) => {
                   </div>
                 </div>
               )}
+
+              {actionControls.length > 0 ? (
+                <div className="nowheel max-h-32 space-y-2 overflow-y-auto rounded-xl border border-white/6 bg-zinc-950/30 p-2">
+                  {actionControls.slice(0, 4).map((control) => (
+                    <div key={control.id} className="flex items-center justify-between gap-2 text-[10px] text-zinc-500">
+                      <span className="truncate">{control.label}</span>
+                      <span className="max-w-[120px] truncate rounded-md bg-zinc-900 px-2 py-1 text-zinc-400">
+                        {String(nodeData.params?.[control.id] ?? control.defaultValue ?? control.type)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
 
               {/* Progress bar for running state */}
               {nodeData.status === 'running' && nodeData.progress !== undefined && (
@@ -289,7 +374,7 @@ export const ComputeNode = memo(({ id, data, selected }: NodeProps) => {
               <button
                 onClick={nodeData.onExecute}
                 className={cn(
-                  'w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-medium',
+                  'nodrag w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-medium',
                   'transition-all duration-200',
                   nodeData.status === 'running' 
                     ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
@@ -486,6 +571,35 @@ export const ComputeNode = memo(({ id, data, selected }: NodeProps) => {
           </React.Fragment>
         );
       })}
+
+      {contextMenu ? (
+        <div
+          className="nodrag fixed z-[1200] w-56 overflow-hidden rounded-xl border border-white/10 bg-[#151515]/98 p-1 text-sm text-zinc-300 shadow-2xl"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-white/6" onClick={handleCopyPrompt}>
+            <Copy className="h-3.5 w-3.5" />
+            Copy prompt
+          </button>
+          <button
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-white/6 disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={handleDownload}
+            disabled={!previewUrl}
+          >
+            <Download className="h-3.5 w-3.5" />
+            Download
+          </button>
+          <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-white/6" onClick={() => setContextMenu(null)}>
+            <Star className="h-3.5 w-3.5" />
+            Set thumbnail
+          </button>
+          <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-red-300 hover:bg-red-500/10" onClick={() => setContextMenu(null)}>
+            <Trash2 className="h-3.5 w-3.5" />
+            Clear contents
+          </button>
+        </div>
+      ) : null}
     </motion.div>
   );
 });

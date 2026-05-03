@@ -5,10 +5,16 @@ import {
   type CanonicalNodeStatus,
   isCompatibleDataType,
 } from '@/lib/compute/contract';
+import type {
+  MediaActionBatchPolicy,
+  MediaActionControl,
+  MediaActionDataType,
+  MediaActionExecutor,
+} from '@/lib/studio/mediaActionRegistry';
 
 // Compute Flow Type Definitions - Based on Functional Requirements
 
-export type DataType = 'image' | 'text' | 'video' | 'tensor' | 'json' | 'audio' | 'string' | 'number' | 'boolean' | 'any';
+export type DataType = 'image' | 'text' | 'video' | 'tensor' | '3d' | 'json' | 'audio' | 'string' | 'number' | 'boolean' | 'any';
 export type Cardinality = '1' | 'n'; // 1 = single connection, n = multiple
 export type NodeStatus = CanonicalNodeStatus;
 export type EdgeStatus = 'idle' | 'running' | 'succeeded' | 'error';
@@ -21,6 +27,7 @@ export const HANDLE_COLORS: Record<DataType, string> = {
   video: '#8B5CF6',      // Violet - video
   audio: '#EC4899',      // Pink - audio
   tensor: '#F59E0B',     // Amber - 3d/tensor
+  '3d': '#06B6D4',       // Cyan - 3d assets
   json: '#6366F1',       // Indigo - json
   string: '#3B82F6',     // Blue - same as text
   number: '#F59E0B',     // Amber - same as tensor
@@ -35,6 +42,7 @@ export const HANDLE_GLOW_COLORS: Record<DataType, string> = {
   video: 'rgba(139, 92, 246, 0.4)',
   audio: 'rgba(236, 72, 153, 0.4)',
   tensor: 'rgba(245, 158, 11, 0.4)',
+  '3d': 'rgba(6, 182, 212, 0.4)',
   json: 'rgba(99, 102, 241, 0.4)',
   string: 'rgba(59, 130, 246, 0.4)',
   number: 'rgba(245, 158, 11, 0.4)',
@@ -61,6 +69,18 @@ export interface Port {
 export interface NodeDefinition {
   id: string;
   kind: CanonicalNodeKind;
+  actionId?: string;
+  mediaType?: MediaActionDataType;
+  workflowType?: string;
+  executor?: MediaActionExecutor;
+  controls?: MediaActionControl[];
+  batch?: {
+    policy: MediaActionBatchPolicy;
+    items?: unknown[];
+    status?: 'idle' | 'running' | 'partial' | 'succeeded' | 'failed';
+  };
+  variants?: ArtifactRef[];
+  assetRefs?: ArtifactRef[];
   version: string;
   label: string;
   position: { x: number; y: number };
@@ -82,7 +102,7 @@ export interface EdgeDefinition {
   target: { nodeId: string; portId: string; handle?: string };
   dataType: DataType;
   status: EdgeStatus;
-  metadata?: { 
+  metadata?: Record<string, unknown> & {
     label?: string;
     validationError?: string;
   };
@@ -90,7 +110,7 @@ export interface EdgeDefinition {
 
 export interface ArtifactRef {
   id: string;
-  type: 'image' | 'video' | 'text' | 'json';
+  type: 'image' | 'video' | 'text' | 'json' | 'audio' | '3d';
   url?: string;
   data?: any;
   metadata?: Record<string, unknown>;
@@ -238,4 +258,3 @@ export const NODE_TYPE_CONFIGS: Record<string, { inputs: Omit<Port, 'id'>[]; out
 
 // (DirtyStateTracker was removed in PR-7; per-node dirty propagation now
 // happens inside the compute store and the upcoming engine module.)
-

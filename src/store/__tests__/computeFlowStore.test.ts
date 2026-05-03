@@ -107,7 +107,7 @@ describe('ComputeFlowStore', () => {
         expect(newNode!.kind).toBe('Text');
       });
 
-      it('generates port IDs based on node ID', () => {
+      it('creates registry-backed semantic ports for new nodes', () => {
         const { result } = renderHook(() => useComputeFlowStore());
         
         let newNode: NodeDefinition;
@@ -115,13 +115,10 @@ describe('ComputeFlowStore', () => {
           newNode = result.current.createNode('Image', { x: 0, y: 0 });
         });
         
-        // Inputs should have node-based IDs
-        expect(newNode!.inputs[0].id).toContain(newNode!.id);
-        expect(newNode!.inputs[0].id).toContain('input');
-        
-        // Outputs should have node-based IDs
-        expect(newNode!.outputs[0].id).toContain(newNode!.id);
-        expect(newNode!.outputs[0].id).toContain('output');
+        expect(newNode!.actionId).toBe('image.generate');
+        expect(newNode!.inputs.map((port) => port.id)).toContain('prompt');
+        expect(newNode!.outputs.map((port) => port.id)).toContain('image');
+        expect(newNode!.params.model).toBe('fal-ai/nano-banana-2');
       });
     });
 
@@ -374,6 +371,7 @@ describe('ComputeFlowStore', () => {
           isRunning: false,
           completed: 0,
           total: 0,
+          completedNodeIds: new Set(),
           startedAt: null,
           error: null,
         });

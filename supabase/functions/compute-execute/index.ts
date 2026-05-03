@@ -374,10 +374,14 @@ serve(async (req) => {
                 console.log(`[ComputeExecute] Node ${node.id} (${node.kind}) inputs:`, 
                   JSON.stringify(normalizedInputs).substring(0, 200));
 
-                // Execute based on node kind
+                // Execute by registry action first, then legacy kind fallback.
                 let result: any;
+                const actionResult = await executeActionNode(node, normalizedInputs, send);
 
-                switch (node.kind) {
+                if (actionResult.handled) {
+                  result = actionResult.result;
+                } else {
+                  switch (node.kind) {
                   case 'Text':
                   case 'Prompt':
                     result = await executeTextNode(node, normalizedInputs, send);
@@ -450,6 +454,7 @@ serve(async (req) => {
 
                   default:
                     throw new Error(`Unsupported canonical node kind: ${node.kind}`);
+                  }
                 }
 
                 const processingTime = Date.now() - startTime;
@@ -702,7 +707,10 @@ function normalizeComputeNodeRow(node: Record<string, any>): ComputeNode {
     inputs: Array.isArray(node.inputs) ? node.inputs : [],
     outputs: Array.isArray(node.outputs) ? node.outputs : [],
     preview: node.preview ?? null,
-    data: node.data ?? {},
+    data: {
+      ...(node.data && typeof node.data === 'object' ? node.data : {}),
+      metadata: node.metadata ?? {},
+    },
     position:
       node.position && typeof node.position === 'object'
         ? { x: Number(node.position.x ?? 0), y: Number(node.position.y ?? 0) }
@@ -734,6 +742,239 @@ function buildExecutionSelection(targetNodeIds: string[], edges: ComputeEdge[]):
   }
 
   return selected;
+}
+
+type ActionExecutor =
+  | 'text'
+  | 'text_utility'
+  | 'image'
+  | 'video'
+  | 'audio'
+  | 'upload'
+  | 'image_edit'
+  | 'transform'
+  | 'combine'
+  | 'batch'
+  | 'embed'
+  | 'output';
+
+const ACTION_EXECUTOR_REGISTRY: Record<string, ActionExecutor> = {
+  'text.enter': 'text_utility',
+  'text.upload': 'upload',
+  'text.split': 'text_utility',
+  'text.concat': 'text_utility',
+  'text.find-replace': 'text_utility',
+  'text.summarize': 'text',
+  'text.analyze': 'text',
+  'text.task-breakdown': 'text',
+  'text.prompt-generation': 'text',
+  'text.scene-storyboarding': 'text',
+  'image.upload': 'upload',
+  'image.generate': 'image',
+  'image.edit': 'image',
+  'image.image-to-image': 'image',
+  'image.style-transfer': 'image',
+  'image.color-key': 'transform',
+  'image.color-grade': 'transform',
+  'image.color-filter': 'transform',
+  'image.color-tint': 'transform',
+  'image.blur': 'transform',
+  'image.rotate': 'transform',
+  'image.flip': 'transform',
+  'image.duplicate': 'transform',
+  'image.depth-map': 'transform',
+  'image.sketch': 'transform',
+  'image.to-world': 'transform',
+  'video.upload': 'upload',
+  'video.generate': 'video',
+  'video.image-to-video': 'video',
+  'video.video-to-video': 'video',
+  'video.edit': 'video',
+  'video.lipsync': 'video',
+  'video.extract-frames': 'transform',
+  'video.frame-grid': 'transform',
+  'video.stitch': 'combine',
+  'video.split': 'transform',
+  'video.reverse': 'transform',
+  'video.boomerang': 'transform',
+  'video.speed': 'transform',
+  'video.watermark': 'transform',
+  'video.long-exposure': 'transform',
+  'audio.upload': 'upload',
+  'audio.tts': 'audio',
+  'audio.separate': 'audio',
+  'audio.to-prompt': 'text',
+  'asset.upload-3d': 'upload',
+  'asset.image-to-3d': 'image',
+  'embed.url': 'embed',
+  'embed.editframe': 'embed',
+  'batch.cartesian': 'batch',
+  'output.materialize': 'output',
+};
+
+function getNodeActionId(node: ComputeNode): string | null {
+  const fromParams = node.params?.actionId;
+  const fromMetadata = node.params?.metadata?.actionId ?? node.data?.metadata?.actionId;
+  const value = typeof fromParams === 'string' ? fromParams : fromMetadata;
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+function inferActionExecutor(actionId: string): ActionExecutor | null {
+  if (ACTION_EXECUTOR_REGISTRY[actionId]) {
+    return ACTION_EXECUTOR_REGISTRY[actionId];
+  }
+  if (actionId.startsWith('text.')) return 'text';
+  if (actionId.startsWith('image.')) return 'image';
+  if (actionId.startsWith('video.')) return 'video';
+  if (actionId.startsWith('audio.')) return 'audio';
+  if (actionId.startsWith('embed.')) return 'embed';
+  if (actionId.startsWith('batch.')) return 'batch';
+  return null;
+}
+
+function firstInputValue(inputs: Record<string, any>): any {
+  const direct = inputs.input ?? inputs.media ?? inputs.text ?? inputs.image ?? inputs.video ?? inputs.audio ?? inputs.asset;
+  if (direct !== undefined) return direct;
+  return Object.values(inputs).find((value) => value !== undefined && value !== null);
+}
+
+function materializeUploadAction(node: ComputeNode, inputs: Record<string, any>, actionId: string): Record<string, any> {
+  const type = actionId.startsWith('image.')
+    ? 'image'
+    : actionId.startsWith('video.')
+      ? 'video'
+      : actionId.startsWith('audio.')
+        ? 'audio'
+        : actionId.startsWith('asset.')
+          ? '3d'
+          : 'text';
+  const url = node.params?.url ?? node.params?.assetUrl ?? node.params?.fileUrl ?? inputs.url ?? inputs.file_url ?? null;
+  const data = type === 'text'
+    ? node.params?.text ?? node.params?.value ?? inputs.text ?? inputs.input ?? ''
+    : node.params;
+  return { type, url, data, action_id: actionId };
+}
+
+function executeTextUtilityAction(node: ComputeNode, inputs: Record<string, any>, actionId: string): Record<string, any> {
+  const inputText = String(inputs.text ?? inputs.input ?? node.params?.text ?? node.params?.prompt ?? '');
+  if (actionId === 'text.split') {
+    const delimiter = String(node.params?.delimiter ?? '\n');
+    return {
+      type: 'json',
+      data: inputText.split(delimiter).map((value) => value.trim()).filter(Boolean),
+      action_id: actionId,
+    };
+  }
+  if (actionId === 'text.concat') {
+    const values = Object.values(inputs)
+      .flat()
+      .filter((value) => typeof value === 'string' && value.trim().length > 0);
+    return { type: 'text', data: values.join(String(node.params?.separator ?? '\n')), action_id: actionId };
+  }
+  if (actionId === 'text.find-replace') {
+    const find = String(node.params?.find ?? '');
+    const replace = String(node.params?.replace ?? '');
+    return {
+      type: 'text',
+      data: find ? inputText.split(find).join(replace) : inputText,
+      action_id: actionId,
+    };
+  }
+  return { type: 'text', data: inputText, action_id: actionId };
+}
+
+function executeBatchCartesianAction(inputs: Record<string, any>, actionId: string): Record<string, any> {
+  const entries = Object.entries(inputs).filter(([key]) => !key.endsWith('_asset') && !key.endsWith('_source_handles'));
+  const arrays = entries.map(([key, value]) => [key, Array.isArray(value) ? value : [value]] as const);
+  const combinations: Record<string, any>[] = [];
+
+  const walk = (index: number, current: Record<string, any>) => {
+    if (index >= arrays.length) {
+      combinations.push({ ...current });
+      return;
+    }
+    const [key, values] = arrays[index];
+    for (const value of values) {
+      current[key] = value;
+      walk(index + 1, current);
+    }
+  };
+
+  walk(0, {});
+  return {
+    type: 'json',
+    data: {
+      policy: 'cartesian',
+      item_count: combinations.length,
+      items: combinations,
+    },
+    action_id: actionId,
+  };
+}
+
+async function executeActionNode(
+  node: ComputeNode,
+  inputs: Record<string, any>,
+  send: (event: string, data: Record<string, unknown>) => void
+): Promise<{ handled: boolean; result?: any }> {
+  const actionId = getNodeActionId(node);
+  if (!actionId) {
+    return { handled: false };
+  }
+
+  const executor = inferActionExecutor(actionId);
+  if (!executor) {
+    return { handled: false };
+  }
+
+  switch (executor) {
+    case 'text':
+      return { handled: true, result: await executeTextNode(node, inputs, send) };
+    case 'text_utility':
+      return { handled: true, result: executeTextUtilityAction(node, inputs, actionId) };
+    case 'image':
+      return { handled: true, result: await executeImageNode(node, inputs, send) };
+    case 'video':
+      return { handled: true, result: await executeVideoNode(node, inputs, send) };
+    case 'audio':
+      return { handled: true, result: await executeAudioNode(node, inputs, send) };
+    case 'upload':
+      return { handled: true, result: materializeUploadAction(node, inputs, actionId) };
+    case 'image_edit':
+      return { handled: true, result: executeImageEditNode(node) };
+    case 'combine':
+      return { handled: true, result: { type: 'json', data: { inputs, action_id: actionId } } };
+    case 'batch':
+      return { handled: true, result: executeBatchCartesianAction(inputs, actionId) };
+    case 'embed':
+      return {
+        handled: true,
+        result: {
+          type: 'json',
+          data: {
+            embed_type: actionId.replace('embed.', ''),
+            url: node.params?.url ?? inputs.url ?? null,
+            project_id: node.params?.projectId ?? inputs.project_id,
+          },
+          action_id: actionId,
+        },
+      };
+    case 'output':
+      return { handled: true, result: firstInputValue(inputs) ?? { type: 'json', data: inputs, action_id: actionId } };
+    case 'transform':
+    default:
+      return {
+        handled: true,
+        result: {
+          type: 'json',
+          data: {
+            action_id: actionId,
+            inputs,
+            params: node.params,
+          },
+        },
+      };
+  }
 }
 
 function getEdgeFunctionName(model: Record<string, any> | null): string | null {
@@ -1434,6 +1675,81 @@ async function executeAudioNode(
       model,
       endpoint_model: functionName,
       prompt: finalPrompt,
+    };
+  }
+
+  if (!runtimeModel || runtimeModel.transportType === 'fal_queue' || runtimeModel.provider === 'fal-ai') {
+    const FAL_KEY = Deno.env.get('FAL_KEY');
+    if (!FAL_KEY) {
+      throw new Error('FAL_KEY is not configured for audio execution');
+    }
+
+    fal.config({ credentials: FAL_KEY });
+
+    const resolvedModel = resolveFalModelOrFallback(model, {
+      mediaTypeHint: 'audio',
+      uiGroup: 'generation',
+    });
+
+    const audioUrl = typeof inputs.audio === 'string' ? inputs.audio : inputs.audio_url;
+    const baseFalInputs: Record<string, any> = {
+      prompt: finalPrompt,
+      text: finalPrompt,
+      voice_id: node.params?.voiceId ?? node.params?.voice_id ?? inputs.voice_id,
+      voiceId: node.params?.voiceId ?? inputs.voiceId,
+      language: node.params?.language ?? inputs.language,
+      speed: node.params?.speed ?? inputs.speed,
+      duration: node.params?.duration ?? inputs.duration,
+      audio_url: audioUrl,
+      settings: node.params?.settings,
+      settings_override: node.params?.settings_override,
+    };
+
+    const merged = mergeFalModelInputs(resolvedModel.model.id, baseFalInputs);
+
+    send('node_progress', {
+      node_id: node.id,
+      progress: 10,
+      message: 'Queuing audio generation...',
+    });
+
+    const result = await fal.subscribe(merged.modelId, {
+      input: merged.inputs,
+      logs: true,
+      onQueueUpdate: (update: any) => {
+        if (update.status === 'IN_PROGRESS') {
+          const logCount = update.logs?.length ?? 0;
+          send('node_progress', {
+            node_id: node.id,
+            progress: Math.min(90, 10 + logCount * 10),
+            message: 'Generating audio...',
+            logs: update.logs?.slice(-3),
+          });
+        }
+      },
+    });
+
+    const resultData = ((result as any).data ?? result) as any;
+    const generatedAudioUrl =
+      resultData?.audio?.url ??
+      resultData?.file?.url ??
+      resultData?.url ??
+      resultData?.audio_url ??
+      resultData?.output ??
+      (Array.isArray(resultData?.audios) ? resultData.audios[0]?.url : undefined) ??
+      (Array.isArray(resultData?.files) ? resultData.files[0]?.url : undefined);
+
+    if (typeof generatedAudioUrl !== 'string' || generatedAudioUrl.length === 0) {
+      throw new Error(`Audio generation returned no audio. Response structure: ${Object.keys(resultData ?? {}).join(', ')}`);
+    }
+
+    return {
+      type: 'audio',
+      url: generatedAudioUrl,
+      model: merged.modelId,
+      prompt: finalPrompt,
+      fallback_used: resolvedModel.fallbackUsed,
+      fallback_reason: resolvedModel.fallbackReason,
     };
   }
 
