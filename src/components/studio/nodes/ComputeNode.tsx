@@ -1,5 +1,5 @@
 import React, { memo, useCallback, useMemo, useState, useEffect } from 'react';
-import { Handle, Position, NodeProps, useReactFlow, Connection } from '@xyflow/react';
+import { Handle, Position, NodeProps, useReactFlow, Connection, useUpdateNodeInternals } from '@xyflow/react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ChevronDown, 
@@ -35,24 +35,27 @@ export interface ComputeNodeData {
   label: string;
   inputs: Port[];
   outputs: Port[];
-  params: Record<string, any>;
+  params: Record<string, unknown>;
   status: 'idle' | 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled' | 'dirty';
   progress?: number;
-  preview?: { type: string; url?: string; data?: any };
+  preview?: { type: string; url?: string; data?: unknown };
   actionId?: string;
   mediaType?: string;
   workflowType?: string;
   controls?: MediaActionControl[];
   batch?: { policy?: string; items?: unknown[] };
-  variants?: Array<{ id: string; type: string; url?: string; data?: any }>;
+  variants?: Array<{ id: string; type: string; url?: string; data?: unknown }>;
   collapsed?: boolean;
   color?: string;
   model?: string;
+  modelSelection?: { auto: boolean; selectedModelIds: string[]; useMultipleModels: boolean };
   onExecute?: () => void;
   onDelete?: () => void;
   onDuplicate?: () => void;
   onModelChange?: (modelId: string) => void;
-  onParamsChange?: (params: Record<string, any>) => void;
+  onModelSelectionChange?: (selection: { auto: boolean; selectedModelIds: string[]; useMultipleModels: boolean }) => void;
+  onUpdateParams?: (params: Record<string, unknown>) => void;
+  onParamsChange?: (params: Record<string, unknown>) => void;
 }
 
 const NODE_ICONS: Record<string, React.ElementType> = {
@@ -81,55 +84,91 @@ const HELPER_TEXT: Record<string, string> = {
 export const ComputeNode = memo(({ id, data, selected }: NodeProps) => {
   const nodeData = (data as unknown) as ComputeNodeData;
   const { getEdges } = useReactFlow();
+  const updateNodeInternals = useUpdateNodeInternals();
+  const paramsActionId = typeof nodeData.params?.actionId === 'string' ? nodeData.params.actionId : undefined;
   const action = useMemo(
-    () => getMediaActionById(nodeData.actionId ?? nodeData.params?.actionId),
-    [nodeData.actionId, nodeData.params]
+    () => getMediaActionById(nodeData.actionId ?? paramsActionId),
+    [nodeData.actionId, paramsActionId]
   );
-  const mediaType: CatalogMediaType | undefined =
-    nodeData.kind === 'Image' ? 'image' :
-    nodeData.kind === 'Text' ? 'text' :
-    nodeData.kind === 'Video' ? 'video' :
-    nodeData.kind === 'Audio' ? 'audio' :
-    undefined;
+  const mediaType: CatalogMediaType | undefined = useMemo(() => {
+    const candidate =
+      action?.modelMediaType ??
+      action?.mediaType ??
+      nodeData.mediaType ??
+      (nodeData.kind === 'Image' || nodeData.kind === 'ImageEdit' ? 'image' :
+        nodeData.kind === 'Text' || nodeData.kind === 'Prompt' ? 'text' :
+        nodeData.kind === 'Video' ? 'video' :
+        nodeData.kind === 'Audio' ? 'audio' :
+        nodeData.kind === 'Model' ? '3d' :
+        undefined);
+    return ['text', 'image', 'video', 'audio', 'json', '3d'].includes(String(candidate))
+      ? (candidate as CatalogMediaType)
+      : undefined;
+  }, [action?.mediaType, action?.modelMediaType, nodeData.kind, nodeData.mediaType]);
+  const modelWorkflowTypes = useMemo(() => {
+    const configured = action?.modelWorkflowTypes ?? [];
+    const current = nodeData.workflowType ?? action?.workflowType;
+    return Array.from(new Set([...configured, current].filter((value): value is string => typeof value === 'string' && value.length > 0)));
+  }, [action?.modelWorkflowTypes, action?.workflowType, nodeData.workflowType]);
+  const preferredProvider =
+    mediaType && mediaType !== 'text' && action?.providerPreference?.includes('fal-ai')
+      ? 'fal-ai'
+      : undefined;
   const { models: catalogModels } = useCatalogModels({
     mediaType,
+    provider: preferredProvider,
+    studioSurface: mediaType ? `studio:${mediaType}` : undefined,
+    includeAdvanced: true,
     autoFetch: Boolean(mediaType),
   });
   const [collapsed, setCollapsed] = useState(nodeData.collapsed ?? false);
   const [hoveredHandle, setHoveredHandle] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
-  const modelOptions = useMemo(
-    () => catalogModels.map((model) => ({ id: model.id, label: model.name })),
-    [catalogModels]
-  );
-  const [selectedModel, setSelectedModel] = useState(nodeData.model || modelOptions[0]?.id || '');
+  const modelOptions = useMemo(() => {
+    const compatible = modelWorkflowTypes.length > 0
+      ? catalogModels.filter((model) => modelWorkflowTypes.includes(model.workflow_type))
+      : catalogModels;
+    const models = compatible.length > 0 ? compatible : catalogModels;
+    return models.map((model) => ({ id: model.id, label: model.name }));
+  }, [catalogModels, modelWorkflowTypes]);
 
   const Icon = NODE_ICONS[nodeData.kind] || Box;
   const helperText = action?.description ?? HELPER_TEXT[nodeData.kind] ?? '';
   const models = modelOptions;
   const actionControls = nodeData.controls ?? action?.controls ?? [];
+  const selectedModel =
+    (typeof nodeData.params?.model === 'string' && nodeData.params.model) ||
+    nodeData.modelSelection?.selectedModelIds?.[0] ||
+    nodeData.model ||
+    action?.defaultModelId ||
+    modelOptions[0]?.id ||
+    '';
   const progressValue = Math.max(0, Math.min(100, Number(nodeData.progress ?? 0)));
+  const previewData =
+    nodeData.preview?.data && typeof nodeData.preview.data === 'object'
+      ? (nodeData.preview.data as Record<string, unknown>)
+      : {};
   const previewUrl =
     nodeData.preview?.url ??
-    nodeData.preview?.data?.url ??
-    nodeData.preview?.data?.audioUrl ??
-    nodeData.preview?.data?.modelUrl;
+    (typeof previewData.url === 'string' ? previewData.url : undefined) ??
+    (typeof previewData.audioUrl === 'string' ? previewData.audioUrl : undefined) ??
+    (typeof previewData.modelUrl === 'string' ? previewData.modelUrl : undefined);
   const previewText =
     typeof nodeData.preview?.data === 'string'
       ? nodeData.preview.data
-      : nodeData.preview?.data?.text ?? nodeData.preview?.data?.prompt ?? nodeData.preview?.data?.content;
+      : previewData.text ?? previewData.prompt ?? previewData.content;
+
+  const handleSignature = useMemo(
+    () => [
+      ...(nodeData.inputs ?? []).map((port) => `in:${port.id}:${port.datatype}:${port.position}`),
+      ...(nodeData.outputs ?? []).map((port) => `out:${port.id}:${port.datatype}:${port.position}`),
+    ].join('|'),
+    [nodeData.inputs, nodeData.outputs]
+  );
 
   useEffect(() => {
-    if (nodeData.model && nodeData.model !== selectedModel) {
-      setSelectedModel(nodeData.model);
-    }
-  }, [nodeData.model, selectedModel]);
-
-  useEffect(() => {
-    if (!nodeData.model && !selectedModel && modelOptions[0]?.id) {
-      setSelectedModel(modelOptions[0].id);
-    }
-  }, [modelOptions, nodeData.model, selectedModel]);
+    updateNodeInternals(id);
+  }, [handleSignature, id, updateNodeInternals]);
 
   // Get primary color based on node type
   const primaryColor = useMemo(() => {
@@ -182,12 +221,155 @@ export const ComputeNode = memo(({ id, data, selected }: NodeProps) => {
   }, [nodeData.inputs, getEdges]);
 
   const handleModelChange = useCallback((modelId: string) => {
-    setSelectedModel(modelId);
     nodeData.onModelChange?.(modelId);
-    if (nodeData.onParamsChange) {
-      nodeData.onParamsChange({ ...nodeData.params, model: modelId });
-    }
+    nodeData.onModelSelectionChange?.({
+      auto: false,
+      selectedModelIds: [modelId],
+      useMultipleModels: false,
+    });
+    nodeData.onUpdateParams?.({
+      model: modelId,
+      selectedModels: [modelId],
+      modelAuto: false,
+      useMultipleModels: false,
+    });
+    nodeData.onParamsChange?.({ ...nodeData.params, model: modelId });
   }, [nodeData]);
+
+  const handleParamChange = useCallback((paramKey: string, value: unknown) => {
+    nodeData.onUpdateParams?.({ [paramKey]: value });
+    nodeData.onParamsChange?.({ ...nodeData.params, [paramKey]: value });
+  }, [nodeData]);
+
+  const renderControl = useCallback((control: MediaActionControl) => {
+    const value = nodeData.params?.[control.id] ?? control.defaultValue ?? '';
+    const label = <span className="min-w-0 truncate text-[10px] text-zinc-500">{control.label}</span>;
+
+    if (control.type === 'select') {
+      return (
+        <label key={control.id} className="grid gap-1 text-[10px]">
+          {label}
+          <select
+            className="nodrag h-7 rounded-md border border-white/10 bg-zinc-900 px-2 text-[11px] text-zinc-300 outline-none"
+            value={String(value)}
+            onChange={(event) => handleParamChange(control.id, event.target.value)}
+          >
+            {(control.options ?? []).map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      );
+    }
+
+    if (control.type === 'switch') {
+      return (
+        <label key={control.id} className="flex items-center justify-between gap-2">
+          {label}
+          <input
+            type="checkbox"
+            className="nodrag h-4 w-4 accent-orange-500"
+            checked={Boolean(value)}
+            onChange={(event) => handleParamChange(control.id, event.target.checked)}
+          />
+        </label>
+      );
+    }
+
+    if (control.type === 'slider') {
+      const numericValue = Number(value ?? control.defaultValue ?? control.min ?? 0);
+      return (
+        <label key={control.id} className="grid gap-1 text-[10px]">
+          <span className="flex items-center justify-between gap-2">
+            {label}
+            <span className="text-zinc-400">{Number.isFinite(numericValue) ? numericValue : 0}</span>
+          </span>
+          <input
+            type="range"
+            className="nodrag w-full accent-orange-500"
+            min={control.min}
+            max={control.max}
+            step={control.step ?? 1}
+            value={Number.isFinite(numericValue) ? numericValue : 0}
+            onChange={(event) => handleParamChange(control.id, Number(event.target.value))}
+          />
+        </label>
+      );
+    }
+
+    if (control.type === 'number') {
+      return (
+        <label key={control.id} className="grid gap-1 text-[10px]">
+          {label}
+          <input
+            type="number"
+            className="nodrag h-7 rounded-md border border-white/10 bg-zinc-900 px-2 text-[11px] text-zinc-300 outline-none"
+            min={control.min}
+            max={control.max}
+            step={control.step ?? 1}
+            value={String(value)}
+            onChange={(event) => handleParamChange(control.id, event.target.value === '' ? '' : Number(event.target.value))}
+          />
+        </label>
+      );
+    }
+
+    if (control.type === 'color') {
+      return (
+        <label key={control.id} className="flex items-center justify-between gap-2">
+          {label}
+          <input
+            type="color"
+            className="nodrag h-7 w-10 rounded border border-white/10 bg-zinc-900"
+            value={String(value || '#ffffff')}
+            onChange={(event) => handleParamChange(control.id, event.target.value)}
+          />
+        </label>
+      );
+    }
+
+    if (control.type === 'textarea') {
+      return (
+        <label key={control.id} className="grid gap-1 text-[10px]">
+          {label}
+          <textarea
+            className="nodrag nowheel min-h-16 resize-none rounded-md border border-white/10 bg-zinc-900 px-2 py-1.5 text-[11px] text-zinc-300 outline-none"
+            value={String(value)}
+            onChange={(event) => handleParamChange(control.id, event.target.value)}
+          />
+        </label>
+      );
+    }
+
+    if (control.type === 'file') {
+      return (
+        <label key={control.id} className="grid gap-1 text-[10px]">
+          {label}
+          <input
+            type="file"
+            className="nodrag text-[10px] text-zinc-500 file:mr-2 file:rounded-md file:border-0 file:bg-zinc-800 file:px-2 file:py-1 file:text-zinc-300"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) handleParamChange(control.id, file.name);
+            }}
+          />
+        </label>
+      );
+    }
+
+    return (
+      <label key={control.id} className="grid gap-1 text-[10px]">
+        {label}
+        <input
+          className="nodrag h-7 rounded-md border border-white/10 bg-zinc-900 px-2 text-[11px] text-zinc-300 outline-none"
+          value={String(value)}
+          onChange={(event) => handleParamChange(control.id, event.target.value)}
+        />
+      </label>
+    );
+  }, [handleParamChange, nodeData.params]);
 
   const handleCopyPrompt = useCallback(() => {
     const text = String(nodeData.params?.prompt ?? nodeData.params?.content ?? previewText ?? previewUrl ?? '');
@@ -346,15 +528,8 @@ export const ComputeNode = memo(({ id, data, selected }: NodeProps) => {
               )}
 
               {actionControls.length > 0 ? (
-                <div className="nowheel max-h-32 space-y-2 overflow-y-auto rounded-xl border border-white/6 bg-zinc-950/30 p-2">
-                  {actionControls.slice(0, 4).map((control) => (
-                    <div key={control.id} className="flex items-center justify-between gap-2 text-[10px] text-zinc-500">
-                      <span className="truncate">{control.label}</span>
-                      <span className="max-w-[120px] truncate rounded-md bg-zinc-900 px-2 py-1 text-zinc-400">
-                        {String(nodeData.params?.[control.id] ?? control.defaultValue ?? control.type)}
-                      </span>
-                    </div>
-                  ))}
+                <div className="nowheel max-h-44 space-y-2 overflow-y-auto rounded-xl border border-white/6 bg-zinc-950/30 p-2">
+                  {actionControls.map(renderControl)}
                 </div>
               ) : null}
 

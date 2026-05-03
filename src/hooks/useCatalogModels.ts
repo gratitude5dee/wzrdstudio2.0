@@ -4,6 +4,13 @@ import { supabase } from '@/integrations/supabase/client';
 
 export type CatalogMediaType = 'text' | 'image' | 'video' | 'audio' | 'json' | '3d';
 export type CatalogUiGroup = 'generation' | 'advanced';
+export type CatalogStudioSurface =
+  | 'studio:text'
+  | 'studio:image'
+  | 'studio:video'
+  | 'studio:audio'
+  | 'studio:json'
+  | 'studio:3d';
 
 export interface CatalogModelSummary {
   id: string;
@@ -49,6 +56,10 @@ interface UseCatalogModelsOptions {
   category?: string;
   mediaType?: CatalogMediaType;
   uiGroup?: CatalogUiGroup;
+  provider?: string;
+  workflowType?: string;
+  studioSurface?: CatalogStudioSurface;
+  includeAdvanced?: boolean;
   autoFetch?: boolean;
 }
 
@@ -60,11 +71,24 @@ function buildCacheKey(options: Partial<UseCatalogModelsOptions>) {
     category: options.category ?? null,
     mediaType: options.mediaType ?? null,
     uiGroup: options.uiGroup ?? null,
+    provider: options.provider ?? null,
+    workflowType: options.workflowType ?? null,
+    studioSurface: options.studioSurface ?? null,
+    includeAdvanced: options.includeAdvanced ?? false,
   });
 }
 
 export const useCatalogModels = (options: UseCatalogModelsOptions = {}) => {
-  const { category, mediaType, uiGroup, autoFetch = true } = options;
+  const {
+    category,
+    mediaType,
+    uiGroup,
+    provider,
+    workflowType,
+    studioSurface,
+    includeAdvanced = false,
+    autoFetch = true,
+  } = options;
   const [models, setModels] = useState<CatalogModelSummary[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -77,10 +101,18 @@ export const useCatalogModels = (options: UseCatalogModelsOptions = {}) => {
     const effectiveCategory = overrides.category || category;
     const effectiveMediaType = overrides.mediaType || mediaType;
     const effectiveUiGroup = overrides.uiGroup || uiGroup;
+    const effectiveProvider = overrides.provider || provider;
+    const effectiveWorkflowType = overrides.workflowType || workflowType;
+    const effectiveStudioSurface = overrides.studioSurface || studioSurface;
+    const effectiveIncludeAdvanced = overrides.includeAdvanced ?? includeAdvanced;
     const cacheKey = buildCacheKey({
       category: effectiveCategory,
       mediaType: effectiveMediaType,
       uiGroup: effectiveUiGroup,
+      provider: effectiveProvider,
+      workflowType: effectiveWorkflowType,
+      studioSurface: effectiveStudioSurface,
+      includeAdvanced: effectiveIncludeAdvanced,
     });
 
     try {
@@ -98,6 +130,10 @@ export const useCatalogModels = (options: UseCatalogModelsOptions = {}) => {
               category: effectiveCategory,
               media_type: effectiveMediaType,
               ui_group: effectiveUiGroup,
+              provider: effectiveProvider,
+              workflow_type: effectiveWorkflowType,
+              studio_surface: effectiveStudioSurface,
+              includeAdvanced: effectiveIncludeAdvanced,
             },
           });
 
@@ -109,36 +145,39 @@ export const useCatalogModels = (options: UseCatalogModelsOptions = {}) => {
             throw new Error('Malformed model payload');
           }
 
-          const transformedModels: CatalogModelSummary[] = data.models.map((model: any) => ({
-            id: model.id,
-            name: model.name,
-            description: model.description,
-            category: model.category || 'uncategorized',
-            media_type: model.media_type,
-            workflow_type: model.workflow_type,
-            ui_group: model.ui_group,
-            supports: Array.isArray(model.supports) ? model.supports : [],
-            defaults: model.defaults && typeof model.defaults === 'object' ? model.defaults : {},
-            controls: Array.isArray(model.controls) ? model.controls : [],
-            aliases: Array.isArray(model.aliases) ? model.aliases : [],
-            icon: model.icon || 'image',
+          const transformedModels: CatalogModelSummary[] = data.models.map((rawModel: unknown) => {
+            const model = rawModel && typeof rawModel === 'object' ? rawModel as Record<string, unknown> : {};
+            return {
+            id: String(model.id ?? ''),
+            name: String(model.name ?? ''),
+            description: String(model.description ?? ''),
+            category: typeof model.category === 'string' ? model.category : 'uncategorized',
+            media_type: model.media_type as CatalogMediaType,
+            workflow_type: String(model.workflow_type ?? ''),
+            ui_group: model.ui_group as CatalogUiGroup,
+            supports: Array.isArray(model.supports) ? model.supports.filter((value): value is string => typeof value === 'string') : [],
+            defaults: model.defaults && typeof model.defaults === 'object' ? model.defaults as Record<string, unknown> : {},
+            controls: Array.isArray(model.controls) ? model.controls as CatalogModelSummary['controls'] : [],
+            aliases: Array.isArray(model.aliases) ? model.aliases.filter((value): value is string => typeof value === 'string') : [],
+            icon: typeof model.icon === 'string' ? model.icon : 'image',
             credits: typeof model.credits === 'number' ? model.credits : 1,
-            time: model.time || '~30s',
-            provider: model.provider,
-            provider_label: model.provider_label,
-            endpoint_id: model.endpoint_id,
-            pricing_text: model.pricing_text,
-            model_url: model.model_url,
-            license: model.license,
-            tags: Array.isArray(model.tags) ? model.tags : [],
-            published_at: model.published_at,
-            model_updated_at: model.model_updated_at,
-            vendor: model.vendor,
-            family: model.family,
-            tier: model.tier,
+            time: typeof model.time === 'string' ? model.time : '~30s',
+            provider: typeof model.provider === 'string' ? model.provider : undefined,
+            provider_label: typeof model.provider_label === 'string' ? model.provider_label : undefined,
+            endpoint_id: typeof model.endpoint_id === 'string' ? model.endpoint_id : undefined,
+            pricing_text: typeof model.pricing_text === 'string' ? model.pricing_text : undefined,
+            model_url: typeof model.model_url === 'string' ? model.model_url : undefined,
+            license: typeof model.license === 'string' ? model.license : undefined,
+            tags: Array.isArray(model.tags) ? model.tags.filter((value): value is string => typeof value === 'string') : [],
+            published_at: typeof model.published_at === 'string' ? model.published_at : undefined,
+            model_updated_at: typeof model.model_updated_at === 'string' ? model.model_updated_at : undefined,
+            vendor: typeof model.vendor === 'string' ? model.vendor : undefined,
+            family: typeof model.family === 'string' ? model.family : undefined,
+            tier: typeof model.tier === 'string' ? model.tier : undefined,
             is_default: model.is_default === true,
             default_rank: typeof model.default_rank === 'number' ? model.default_rank : undefined,
-          }));
+            };
+          });
 
           modelCache.set(cacheKey, transformedModels);
           return transformedModels;
@@ -177,7 +216,7 @@ export const useCatalogModels = (options: UseCatalogModelsOptions = {}) => {
       void fetchModels();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [category, mediaType, uiGroup, autoFetch]);
+  }, [category, mediaType, uiGroup, provider, workflowType, studioSurface, includeAdvanced, autoFetch]);
 
   return {
     models,

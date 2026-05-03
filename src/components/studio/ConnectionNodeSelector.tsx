@@ -75,7 +75,7 @@ export const ConnectionNodeSelector: React.FC<ConnectionNodeSelectorProps> = ({
   });
   const actionSuggestions = (
     sourceBlockType ? getActionsForSourceDataType(sourceBlockType) : getPaletteMediaActions()
-  ).slice(0, 18);
+  ).slice(0, 28);
 
   return (
     <motion.div

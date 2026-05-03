@@ -21,11 +21,13 @@ export interface CatalogQueryFilters {
   uiGroup?: string;
   category?: string;
   provider?: string;
+  workflowType?: string;
   studioSurface?: CatalogSurface;
   kanvasMode?: CatalogKanvasMode;
   search?: string;
   capabilities?: string[];
   enabledOnly?: boolean;
+  includeAdvanced?: boolean;
 }
 
 function createCatalogClient() {
@@ -207,6 +209,9 @@ export async function listCatalogModels(filters: CatalogQueryFilters = {}): Prom
   if (filters.provider) {
     query = query.eq("provider", filters.provider);
   }
+  if (filters.workflowType) {
+    query = query.eq("workflow_type", filters.workflowType);
+  }
   if (filters.studioSurface) {
     query = query.contains("studio_surfaces", [filters.studioSurface]);
   }
@@ -258,6 +263,9 @@ export async function getCatalogModelById(
   if (filters.provider) {
     directQuery = directQuery.eq("provider", filters.provider);
   }
+  if (filters.workflowType) {
+    directQuery = directQuery.eq("workflow_type", filters.workflowType);
+  }
   if (filters.studioSurface) {
     directQuery = directQuery.contains("studio_surfaces", [filters.studioSurface]);
   }
@@ -290,6 +298,9 @@ export async function getCatalogModelById(
   }
   if (filters.provider) {
     aliasQuery = aliasQuery.eq("provider", filters.provider);
+  }
+  if (filters.workflowType) {
+    aliasQuery = aliasQuery.eq("workflow_type", filters.workflowType);
   }
   if (filters.studioSurface) {
     aliasQuery = aliasQuery.contains("studio_surfaces", [filters.studioSurface]);

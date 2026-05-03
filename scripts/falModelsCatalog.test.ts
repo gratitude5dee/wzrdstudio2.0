@@ -51,4 +51,27 @@ describe("fal models.md catalog parser", () => {
     expect(google?.vendor).toBe("Google");
     expect(google?.family).toBe("Nano Banana");
   });
+
+  it("maps every enabled endpoint to a Studio surface", () => {
+    const enabledRows = rows.filter((row) => row.enabled);
+    expect(enabledRows).toHaveLength(1330);
+    for (const row of enabledRows) {
+      expect(row.studioSurfaces).toContain(`studio:${row.mediaType}`);
+    }
+  });
+
+  it("keeps recommended defaults ahead of non-default rows", () => {
+    const sorted = [...rows].sort((left, right) => {
+      if (left.isDefault !== right.isDefault) {
+        return left.isDefault ? -1 : 1;
+      }
+      if (left.defaultRank !== right.defaultRank) {
+        return left.defaultRank - right.defaultRank;
+      }
+      return left.sortRank - right.sortRank;
+    });
+
+    expect(sorted.slice(0, 8).every((row) => row.isDefault)).toBe(true);
+    expect(sorted[0].id).toBe("fal-ai/nano-banana-2");
+  });
 });

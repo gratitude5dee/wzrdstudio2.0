@@ -64,6 +64,7 @@ export interface Port {
   cardinality: Cardinality;
   optional?: boolean;
   position: 'top' | 'right' | 'bottom' | 'left';
+  paramKey?: string;
 }
 
 export interface NodeDefinition {

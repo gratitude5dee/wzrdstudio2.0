@@ -240,9 +240,11 @@ export function FloraModelMarketplace({
   const [search, setSearch] = useState('');
   const [activeProviderKey, setActiveProviderKey] = useState<string | null>(null);
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
+  const [includeAdvanced, setIncludeAdvanced] = useState(false);
   const { models: catalogModels } = useCatalogModels({
     mediaType,
-    uiGroup,
+    uiGroup: includeAdvanced ? undefined : uiGroup,
+    includeAdvanced,
     autoFetch: true,
   });
 
@@ -581,10 +583,25 @@ export function FloraModelMarketplace({
                       updateSelection({
                         useMultipleModels: checked,
                         selectedModelIds: checked ? value.selectedModelIds : value.selectedModelIds.slice(0, 1),
-                      })
-                    }
+                    })
+                  }
                   />
                 </div>
+                {!compact ? (
+                  <>
+                    <div className="h-px bg-[rgba(249,115,22,0.06)]" />
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center gap-1.5 text-[13px] text-zinc-200">
+                          <span>Advanced</span>
+                          <Info className="h-3 w-3 text-zinc-600" />
+                        </div>
+                        <div className="mt-0.5 text-[10px] leading-tight text-zinc-600">Include full Fal catalog</div>
+                      </div>
+                      <Switch checked={includeAdvanced} onCheckedChange={setIncludeAdvanced} />
+                    </div>
+                  </>
+                ) : null}
               </div>
 
               {/* Pinned models */}

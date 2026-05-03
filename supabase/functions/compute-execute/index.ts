@@ -14,10 +14,24 @@ import {
   ComputeEdge
 } from "../_shared/compute-utils.ts";
 import { getCatalogModelById } from "../_shared/ai-model-catalog.ts";
+import type { CatalogMediaType } from "../../../shared/ai-model-catalog.ts";
+import {
+  buildExecutionSelection,
+  buildFalCatalogPayload,
+  createNotImplementedArtifact,
+  expandBatchInputs,
+  isNotImplementedResult,
+  normalizeFalCatalogOutput,
+  type BatchPolicy,
+} from "../_shared/compute-action-helpers.ts";
 import {
   mergeFalModelInputs,
   resolveFalModelOrFallback,
 } from "../_shared/falai-client.ts";
+import {
+  getMediaActionById,
+  type MediaActionDefinition,
+} from "../../../shared/mediaActionRegistry.ts";
 import {
   executeGmiChatCompletion,
   executeGmiQueueModel,
@@ -411,15 +425,16 @@ serve(async (req) => {
                     result = executeImageEditNode(node);
                     break;
 
-                  case 'Transform':
+                  case 'Transform': {
                     const inputData = Object.values(normalizedInputs)[0] || {};
                     result = { 
                       type: 'json', 
                       data: { ...inputData, transformed: true } 
                     };
                     break;
+                  }
 
-                  case 'Combine':
+                  case 'Combine': {
                     // Combine multiple inputs
                     const allValues = Object.values(normalizedInputs);
                     const textValues = allValues.filter(v => typeof v === 'string');
@@ -433,6 +448,7 @@ serve(async (req) => {
                       result = { type: 'json', data: normalizedInputs };
                     }
                     break;
+                  }
 
                   case 'Output':
                     result = { 
@@ -460,7 +476,9 @@ serve(async (req) => {
                 const processingTime = Date.now() - startTime;
                 outputs.set(node.id, result);
                 completedCount++;
-                actualCredits += billableCostsByNode.get(node.id) ?? 0;
+                if (!isNotImplementedResult(result)) {
+                  actualCredits += billableCostsByNode.get(node.id) ?? 0;
+                }
 
                 // Update node status
                 await updateNodeStatus(serviceClient, node.id, 'succeeded', {
@@ -653,6 +671,27 @@ async function updateNodeStatus(
 
 function resolveNodeCreditCost(node: ComputeNode): number {
   const kind = normalizeNodeKind(node.kind);
+  const action = getNodeActionDefinition(node);
+  const actionId = getNodeActionId(node);
+  const model = typeof node.params?.model === 'string' ? node.params.model : undefined;
+
+  if (
+    action?.costEstimate === 0 ||
+    action?.executor === 'passthrough' ||
+    action?.executor === 'embed' ||
+    action?.executor === 'ffmpeg' ||
+    action?.executor === 'output' ||
+    actionId?.startsWith('embed.') ||
+    actionId?.startsWith('fal.ffmpeg') ||
+    model?.includes('/v1/')
+  ) {
+    return 0;
+  }
+
+  if (action?.requiresRealExecutor && action.modelMediaType) {
+    return getCreditCostForModel(model, action.modelMediaType === '3d' || action.modelMediaType === 'json' ? 'image' : action.modelMediaType);
+  }
+
   if (
     kind === 'Transform' ||
     kind === 'Combine' ||
@@ -660,13 +699,10 @@ function resolveNodeCreditCost(node: ComputeNode): number {
     kind === 'Output' ||
     kind === 'Model' ||
     kind === 'Gateway' ||
-    kind === 'ImageEdit' ||
     kind === 'comment'
   ) {
     return 0;
   }
-
-  const model = typeof node.params?.model === 'string' ? node.params.model : undefined;
 
   if (kind === 'Video') {
     return getCreditCostForModel(model, 'video');
@@ -718,38 +754,13 @@ function normalizeComputeNodeRow(node: Record<string, any>): ComputeNode {
   };
 }
 
-function buildExecutionSelection(targetNodeIds: string[], edges: ComputeEdge[]): Set<string> {
-  const selected = new Set(targetNodeIds);
-  const reverse = new Map<string, string[]>();
-
-  for (const edge of edges) {
-    const upstream = reverse.get(edge.target_node_id) ?? [];
-    upstream.push(edge.source_node_id);
-    reverse.set(edge.target_node_id, upstream);
-  }
-
-  const stack = [...targetNodeIds];
-  while (stack.length > 0) {
-    const nodeId = stack.pop()!;
-    const upstream = reverse.get(nodeId) ?? [];
-    for (const dependencyId of upstream) {
-      if (selected.has(dependencyId)) {
-        continue;
-      }
-      selected.add(dependencyId);
-      stack.push(dependencyId);
-    }
-  }
-
-  return selected;
-}
-
 type ActionExecutor =
   | 'text'
   | 'text_utility'
   | 'image'
   | 'video'
   | 'audio'
+  | 'model_3d'
   | 'upload'
   | 'image_edit'
   | 'transform'
@@ -774,6 +785,8 @@ const ACTION_EXECUTOR_REGISTRY: Record<string, ActionExecutor> = {
   'image.edit': 'image',
   'image.image-to-image': 'image',
   'image.style-transfer': 'image',
+  'image.analysis': 'embed',
+  'image.object-detection': 'embed',
   'image.color-key': 'transform',
   'image.color-grade': 'transform',
   'image.color-filter': 'transform',
@@ -784,6 +797,9 @@ const ACTION_EXECUTOR_REGISTRY: Record<string, ActionExecutor> = {
   'image.duplicate': 'transform',
   'image.depth-map': 'transform',
   'image.sketch': 'transform',
+  'image.change-aspect-ratio': 'transform',
+  'image.stereo': 'transform',
+  'image.panorama': 'transform',
   'image.to-world': 'transform',
   'video.upload': 'upload',
   'video.generate': 'video',
@@ -791,6 +807,10 @@ const ACTION_EXECUTOR_REGISTRY: Record<string, ActionExecutor> = {
   'video.video-to-video': 'video',
   'video.edit': 'video',
   'video.lipsync': 'video',
+  'video.analysis': 'embed',
+  'video.reasoning': 'embed',
+  'video.object-detection': 'embed',
+  'video.track-anything': 'embed',
   'video.extract-frames': 'transform',
   'video.frame-grid': 'transform',
   'video.stitch': 'combine',
@@ -798,16 +818,30 @@ const ACTION_EXECUTOR_REGISTRY: Record<string, ActionExecutor> = {
   'video.reverse': 'transform',
   'video.boomerang': 'transform',
   'video.speed': 'transform',
+  'video.slow': 'transform',
   'video.watermark': 'transform',
   'video.long-exposure': 'transform',
+  'video.color-grade': 'transform',
+  'video.color-filter': 'transform',
+  'video.effect': 'transform',
   'audio.upload': 'upload',
+  'audio.analysis': 'embed',
   'audio.tts': 'audio',
-  'audio.separate': 'audio',
+  'audio.music': 'audio',
+  'audio.sfx': 'audio',
+  'audio.separate': 'transform',
   'audio.to-prompt': 'text',
+  'audio.manipulate': 'transform',
+  'fal.ffmpeg': 'transform',
   'asset.upload-3d': 'upload',
-  'asset.image-to-3d': 'image',
+  'asset.image-to-3d': 'model_3d',
+  'asset.text-to-3d': 'model_3d',
+  'asset.preview-convert': 'transform',
   'embed.url': 'embed',
   'embed.editframe': 'embed',
+  'embed.remotion': 'embed',
+  'embed.hyperframes': 'embed',
+  'embed.browser-agent': 'embed',
   'batch.cartesian': 'batch',
   'output.materialize': 'output',
 };
@@ -827,6 +861,8 @@ function inferActionExecutor(actionId: string): ActionExecutor | null {
   if (actionId.startsWith('image.')) return 'image';
   if (actionId.startsWith('video.')) return 'video';
   if (actionId.startsWith('audio.')) return 'audio';
+  if (actionId.startsWith('asset.')) return 'model_3d';
+  if (actionId.startsWith('fal.')) return 'transform';
   if (actionId.startsWith('embed.')) return 'embed';
   if (actionId.startsWith('batch.')) return 'batch';
   return null;
@@ -883,32 +919,196 @@ function executeTextUtilityAction(node: ComputeNode, inputs: Record<string, any>
   return { type: 'text', data: inputText, action_id: actionId };
 }
 
-function executeBatchCartesianAction(inputs: Record<string, any>, actionId: string): Record<string, any> {
-  const entries = Object.entries(inputs).filter(([key]) => !key.endsWith('_asset') && !key.endsWith('_source_handles'));
-  const arrays = entries.map(([key, value]) => [key, Array.isArray(value) ? value : [value]] as const);
-  const combinations: Record<string, any>[] = [];
+function getNodeActionDefinition(node: ComputeNode): MediaActionDefinition | undefined {
+  return getMediaActionById(getNodeActionId(node) ?? undefined);
+}
 
-  const walk = (index: number, current: Record<string, any>) => {
-    if (index >= arrays.length) {
-      combinations.push({ ...current });
-      return;
-    }
-    const [key, values] = arrays[index];
-    for (const value of values) {
-      current[key] = value;
-      walk(index + 1, current);
-    }
-  };
+function getNodeBatchPolicy(node: ComputeNode, action?: MediaActionDefinition): BatchPolicy {
+  const explicit = node.params?.batchPolicy ?? node.params?.batch_policy ?? node.params?.batch?.policy;
+  const value = typeof explicit === 'string' ? explicit : action?.batchPolicy;
+  return value === 'map' || value === 'zip' || value === 'cartesian' || value === 'fanOut'
+    ? value
+    : 'single';
+}
 
-  walk(0, {});
+function executeBatchAction(inputs: Record<string, any>, actionId: string, policy: BatchPolicy): Record<string, any> {
+  const items = expandBatchInputs(inputs, policy);
   return {
     type: 'json',
     data: {
-      policy: 'cartesian',
-      item_count: combinations.length,
-      items: combinations,
+      policy,
+      item_count: items.length,
+      items,
     },
     action_id: actionId,
+  };
+}
+
+function inferNodeMediaType(node: ComputeNode, action?: MediaActionDefinition): CatalogMediaType {
+  const fromAction = action?.modelMediaType ?? action?.mediaType;
+  if (fromAction === 'text' || fromAction === 'image' || fromAction === 'video' || fromAction === 'audio' || fromAction === 'json' || fromAction === '3d') {
+    return fromAction;
+  }
+  const kind = normalizeNodeKind(node.kind);
+  if (kind === 'Video') return 'video';
+  if (kind === 'Audio') return 'audio';
+  if (kind === 'Text' || kind === 'Prompt') return 'text';
+  if (kind === 'Model') return '3d';
+  return 'image';
+}
+
+function defaultFalModelForMedia(mediaType: CatalogMediaType): string {
+  if (mediaType === 'video') return 'fal-ai/kling-video/o3/standard/text-to-video';
+  if (mediaType === 'audio') return 'fal-ai/elevenlabs/tts/turbo-v2.5';
+  if (mediaType === '3d') return 'fal-ai/trellis/multi';
+  return 'fal-ai/nano-banana-2';
+}
+
+function extractBatchItemsFromInputs(inputs: Record<string, any>): Record<string, any>[] | null {
+  const candidates = [
+    inputs.items,
+    inputs.input,
+    inputs.batch,
+    inputs.items_asset,
+    ...Object.values(inputs),
+  ];
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== 'object') {
+      continue;
+    }
+    const record = candidate as Record<string, any>;
+    const items = Array.isArray(record.items)
+      ? record.items
+      : record.data && typeof record.data === 'object' && Array.isArray(record.data.items)
+        ? record.data.items
+        : null;
+    if (items?.length) {
+      return items.map((item) => item && typeof item === 'object' && !Array.isArray(item) ? item as Record<string, any> : { input: item });
+    }
+  }
+  return null;
+}
+
+async function executeFalCatalogNode(
+  node: ComputeNode,
+  inputs: Record<string, any>,
+  send: (event: string, data: Record<string, unknown>) => void,
+  mediaType: CatalogMediaType,
+  options: { prompt?: string; referenceUrls?: string[]; camera?: Record<string, unknown> } = {}
+): Promise<any> {
+  const action = getNodeActionDefinition(node);
+  const rawModel = String(node.params?.model ?? action?.defaultModelId ?? defaultFalModelForMedia(mediaType));
+  const runtimeModel = await getCatalogModelById(rawModel);
+  const actionId = getNodeActionId(node) ?? action?.actionId ?? node.kind;
+
+  if (!runtimeModel) {
+    return createNotImplementedArtifact({
+      actionId,
+      mediaType,
+      reason: `Catalog model not found: ${rawModel}`,
+      inputs,
+      params: node.params,
+    });
+  }
+
+  if (runtimeModel.provider !== 'fal-ai' || runtimeModel.transportType !== 'fal_queue') {
+    return createNotImplementedArtifact({
+      actionId,
+      mediaType,
+      reason: `Unsupported catalog transport: ${runtimeModel.provider}/${runtimeModel.transportType}`,
+      inputs,
+      params: node.params,
+    });
+  }
+
+  if (runtimeModel.mediaType !== mediaType) {
+    return createNotImplementedArtifact({
+      actionId,
+      mediaType,
+      reason: `Model media type ${runtimeModel.mediaType} is not compatible with ${mediaType}`,
+      inputs,
+      params: node.params,
+    });
+  }
+
+  const FAL_KEY = Deno.env.get('FAL_KEY');
+  if (!FAL_KEY) {
+    throw new Error('FAL_KEY is not configured for Fal catalog execution');
+  }
+
+  fal.config({ credentials: FAL_KEY });
+
+  const batchPolicy = getNodeBatchPolicy(node, action);
+  const batchItems = extractBatchItemsFromInputs(inputs);
+  const itemInputs = batchItems ?? (batchPolicy === 'single' ? [inputs] : expandBatchInputs(inputs, batchPolicy));
+  const outputs: Record<string, unknown>[] = [];
+
+  send('node_progress', {
+    node_id: node.id,
+    progress: 10,
+    message: `Queuing ${runtimeModel.name}...`,
+  });
+
+  for (let index = 0; index < itemInputs.length; index += 1) {
+    const itemInput = itemInputs[index];
+    const payload = buildFalCatalogPayload({
+      model: runtimeModel,
+      params: node.params,
+      inputs: itemInput,
+      mediaType,
+      prompt: options.prompt,
+      referenceUrls: options.referenceUrls ?? normalizeReferenceInputs(itemInput),
+      camera: options.camera,
+    });
+
+    const result = await fal.subscribe(runtimeModel.endpointId, {
+      input: payload,
+      logs: true,
+      onQueueUpdate: (update: any) => {
+        if (update.status === 'IN_PROGRESS') {
+          const baseProgress = itemInputs.length > 1 ? 10 + (index / itemInputs.length) * 75 : 10;
+          const logCount = update.logs?.length ?? 0;
+          send('node_progress', {
+            node_id: node.id,
+            progress: Math.min(90, baseProgress + logCount * 5),
+            message: `Generating ${mediaType}...`,
+            logs: update.logs?.slice(-3),
+          });
+        }
+      },
+    });
+
+    outputs.push(normalizeFalCatalogOutput({
+      result,
+      mediaType,
+      requestedModel: rawModel,
+      endpointModel: runtimeModel.endpointId,
+      prompt: options.prompt,
+    }));
+  }
+
+  if (outputs.length === 1) {
+    return outputs[0];
+  }
+
+  const variants = outputs.flatMap((output, index) => {
+    const outputVariants = Array.isArray(output.variants) ? output.variants : [];
+    return outputVariants.length > 0
+      ? outputVariants
+      : [{ id: `${runtimeModel.endpointId}:${index}`, type: mediaType, url: output.url, data: output.data }];
+  });
+
+  return {
+    type: mediaType,
+    url: typeof outputs[0].url === 'string' ? outputs[0].url : undefined,
+    data: {
+      policy: batchPolicy,
+      item_count: outputs.length,
+      items: outputs,
+    },
+    variants,
+    model: rawModel,
+    endpoint_model: runtimeModel.endpointId,
   };
 }
 
@@ -938,6 +1138,8 @@ async function executeActionNode(
       return { handled: true, result: await executeVideoNode(node, inputs, send) };
     case 'audio':
       return { handled: true, result: await executeAudioNode(node, inputs, send) };
+    case 'model_3d':
+      return { handled: true, result: await executeFalCatalogNode(node, inputs, send, '3d') };
     case 'upload':
       return { handled: true, result: materializeUploadAction(node, inputs, actionId) };
     case 'image_edit':
@@ -945,19 +1147,17 @@ async function executeActionNode(
     case 'combine':
       return { handled: true, result: { type: 'json', data: { inputs, action_id: actionId } } };
     case 'batch':
-      return { handled: true, result: executeBatchCartesianAction(inputs, actionId) };
+      return { handled: true, result: executeBatchAction(inputs, actionId, getNodeBatchPolicy(node, getNodeActionDefinition(node))) };
     case 'embed':
       return {
         handled: true,
-        result: {
-          type: 'json',
-          data: {
-            embed_type: actionId.replace('embed.', ''),
-            url: node.params?.url ?? inputs.url ?? null,
-            project_id: node.params?.projectId ?? inputs.project_id,
-          },
-          action_id: actionId,
-        },
+        result: createNotImplementedArtifact({
+          actionId,
+          mediaType: getNodeActionDefinition(node)?.outputPreviewType ?? 'json',
+          reason: 'This embed/render action is registered but its server-side renderer is not implemented in this pass.',
+          inputs,
+          params: node.params,
+        }),
       };
     case 'output':
       return { handled: true, result: firstInputValue(inputs) ?? { type: 'json', data: inputs, action_id: actionId } };
@@ -965,14 +1165,13 @@ async function executeActionNode(
     default:
       return {
         handled: true,
-        result: {
-          type: 'json',
-          data: {
-            action_id: actionId,
-            inputs,
-            params: node.params,
-          },
-        },
+        result: createNotImplementedArtifact({
+          actionId,
+          mediaType: getNodeActionDefinition(node)?.outputPreviewType ?? inferNodeMediaType(node, getNodeActionDefinition(node)),
+          reason: 'This utility action is registered but its deterministic executor is not implemented in this pass.',
+          inputs,
+          params: node.params,
+        }),
       };
   }
 }
@@ -1163,6 +1362,12 @@ async function executeTextNode(
     };
   }
 
+  if (runtimeModel?.provider === 'fal-ai') {
+    return await executeFalCatalogNode(node, inputs, send, runtimeModel.mediaType, {
+      prompt: finalPrompt,
+    });
+  }
+
   const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY');
   if (!GROQ_API_KEY) {
     throw new Error('GROQ_API_KEY is not configured for legacy text execution');
@@ -1240,6 +1445,7 @@ async function executeImageNode(
   // Detect and enhance non-visual prompts (task descriptions)
   const enhancedPrompt = enhancePromptForImageGeneration(prompt);
   const runtimeModel = await getCatalogModelById(rawModel);
+  const cameraPayload = shotToCameraPayload(shot);
 
   if (runtimeModel?.provider === 'gmi-cloud') {
     send('node_progress', {
@@ -1282,6 +1488,14 @@ async function executeImageNode(
       prompt: enhancedPrompt,
       element_id: media.elementId,
     };
+  }
+
+  if (runtimeModel?.provider === 'fal-ai') {
+    return await executeFalCatalogNode(node, inputs, send, 'image', {
+      prompt: enhancedPrompt,
+      referenceUrls,
+      camera: cameraPayload,
+    });
   }
 
   if (runtimeModel && runtimeModel.transportType !== 'fal_queue' && runtimeModel.provider !== 'fal-ai') {
@@ -1333,7 +1547,6 @@ async function executeImageNode(
     }
   }
 
-  const cameraPayload = shotToCameraPayload(shot);
   if (cameraPayload) {
     baseFalInputs.camera = cameraPayload;
   }
@@ -1488,6 +1701,14 @@ async function executeVideoNode(
       prompt: finalPrompt,
       element_id: media.elementId,
     };
+  }
+
+  if (runtimeModel?.provider === 'fal-ai') {
+    return await executeFalCatalogNode(node, inputs, send, 'video', {
+      prompt: finalPrompt,
+      referenceUrls,
+      camera: cameraPayload,
+    });
   }
 
   if (runtimeModel && runtimeModel.transportType !== 'fal_queue' && runtimeModel.provider !== 'fal-ai') {
@@ -1676,6 +1897,12 @@ async function executeAudioNode(
       endpoint_model: functionName,
       prompt: finalPrompt,
     };
+  }
+
+  if (runtimeModel?.provider === 'fal-ai') {
+    return await executeFalCatalogNode(node, inputs, send, 'audio', {
+      prompt: finalPrompt,
+    });
   }
 
   if (!runtimeModel || runtimeModel.transportType === 'fal_queue' || runtimeModel.provider === 'fal-ai') {

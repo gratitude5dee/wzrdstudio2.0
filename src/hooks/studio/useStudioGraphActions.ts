@@ -204,6 +204,7 @@ function toPortDefinition(
     cardinality: port.cardinality,
     optional: port.optional,
     position: port.position ?? fallbackPosition,
+    paramKey: port.paramKey,
   };
 }
 

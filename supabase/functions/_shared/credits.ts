@@ -62,8 +62,8 @@ const MODEL_COST_OVERRIDES: Record<string, number> = {
   'fal-ai/kling-video/o1/edit': 28,
   'fal-ai/kling-video/o3/standard/video-extend': 26,
   // Lip-sync models
-  'fal-ai/kling-video/o3/pro/lip-sync': 30,
-  'fal-ai/kling-video/v2.5-turbo/lip-sync': 22,
+  'fal-ai/kling-video/lipsync/audio-to-video': 14,
+  'fal-ai/kling-video/lipsync/text-to-video': 14,
   'fal-ai/sadtalker': 12,
   'fal-ai/liveportrait': 15,
   'fal-ai/latentsync': 14,
@@ -164,6 +164,28 @@ export class InsufficientCreditsError extends Error {
   }
 }
 
+interface CreditSupabaseError {
+  message?: string;
+}
+
+interface CreditSupabaseClient {
+  rpc(
+    functionName: string,
+    args: Record<string, unknown>,
+  ): Promise<{ data: unknown; error: CreditSupabaseError | null }>;
+  from(table: string): {
+    insert(values: Record<string, unknown>): PromiseLike<{ error?: CreditSupabaseError | null }>;
+    select(columns: string): {
+      eq(column: string, value: string): {
+        single(): Promise<{ data: { used_credits?: number } | null; error: CreditSupabaseError | null }>;
+      };
+    };
+    update(values: Record<string, unknown>): {
+      eq(column: string, value: string): PromiseLike<{ error?: CreditSupabaseError | null }>;
+    };
+  };
+}
+
 export function shouldSkipCreditBilling(headers: Headers): boolean {
   return (headers.get('x-credit-billing') || '').toLowerCase() === 'upstream';
 }
@@ -221,7 +243,7 @@ export function getWorkflowCreditCost(workflow: 'generate-storylines' | 'gen-sho
 }
 
 interface ReserveCreditsInput {
-  supabase: any;
+  supabase: CreditSupabaseClient;
   userId: string;
   resourceType: string;
   requestedAmount: number;
@@ -308,7 +330,7 @@ export async function reserveCredits(input: ReserveCreditsInput): Promise<Credit
 }
 
 interface CreditSettleInput {
-  supabase: any;
+  supabase: CreditSupabaseClient;
   holdId: string | null;
   amount?: number;
   metadata?: Record<string, unknown>;

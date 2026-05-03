@@ -320,6 +320,10 @@ function inferTimeLabel(mediaType: CatalogMediaType, workflowType: string): stri
   return "~10s";
 }
 
+function studioSurfaceForMediaType(mediaType: CatalogMediaType): CatalogSurface {
+  return `studio:${mediaType}` as CatalogSurface;
+}
+
 export function parseFalModelsMarkdown(markdown: string): ParsedFalModel[] {
   const headings = Array.from(markdown.matchAll(MODEL_HEADING_RE));
   return headings.map((heading, index) => {
@@ -359,6 +363,10 @@ export function buildFalCatalogRows(models: ParsedFalModel[]): CatalogModel[] {
     const workflowType = inferWorkflowType(model.category);
     const recommended = RECOMMENDED_FAL_ENDPOINTS.get(model.endpointId);
     const family = inferFamily(model.endpointId, model.modelName);
+    const studioSurfaces = unique([
+      studioSurfaceForMediaType(mediaType),
+      ...(recommended?.surfaces ?? []),
+    ]);
     return {
       id: model.endpointId,
       endpointId: model.endpointId,
@@ -391,7 +399,7 @@ export function buildFalCatalogRows(models: ParsedFalModel[]): CatalogModel[] {
       credits: estimateCredits(model.cost),
       timeLabel: inferTimeLabel(mediaType, workflowType),
       sortRank: recommended ? recommended.defaultRank : 50_000 + model.index,
-      studioSurfaces: recommended?.surfaces ?? [],
+      studioSurfaces,
       kanvasModes: [],
       rawApiExample: model.rawTypeScriptExample,
       rawPayload: {

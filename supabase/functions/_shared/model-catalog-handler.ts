@@ -20,6 +20,17 @@ function parseParams(url: URL, body: Record<string, unknown> | null) {
     url.searchParams.get(key) ??
     params?.get(key) ??
     (typeof body?.[key] === "string" ? String(body[key]) : null);
+  const getBoolean = (key: string): boolean | null => {
+    const raw =
+      url.searchParams.get(key) ??
+      params?.get(key) ??
+      (typeof body?.[key] === "boolean" ? String(body[key]) : null) ??
+      (typeof body?.[key] === "string" ? String(body[key]) : null);
+    if (raw === null) {
+      return null;
+    }
+    return raw === "true" || raw === "1";
+  };
 
   const capabilities =
     url.searchParams.getAll("capabilities").length > 0
@@ -34,11 +45,15 @@ function parseParams(url: URL, body: Record<string, unknown> | null) {
     category: get("category"),
     mediaType: get("media_type"),
     uiGroup: get("ui_group"),
+    provider: get("provider"),
+    workflowType: get("workflow_type"),
+    studioSurface: get("studio_surface") as CatalogSurface | null,
     search: get("search"),
     modelId: get("id"),
     studio: get("studio"),
     kanvasStudio: get("kanvas_studio") as KanvasStudio | null,
     kanvasMode: get("kanvas_mode") as CatalogKanvasMode | null,
+    includeAdvanced: getBoolean("includeAdvanced") ?? getBoolean("include_advanced") ?? false,
     capabilities,
   };
 }
@@ -130,8 +145,12 @@ export async function handleModelCatalogRequest(req: Request): Promise<Response>
       search,
       modelId,
       studio,
+      provider,
+      workflowType,
+      studioSurface,
       kanvasStudio,
       kanvasMode,
+      includeAdvanced,
       capabilities,
     } = parseParams(url, body);
 
@@ -177,17 +196,25 @@ export async function handleModelCatalogRequest(req: Request): Promise<Response>
     }
 
     if (modelId) {
-      const model = await getCatalogModelById(modelId);
+      const model = await getCatalogModelById(modelId, {
+        provider: provider ?? undefined,
+        workflowType: workflowType ?? undefined,
+        studioSurface: studioSurface ?? undefined,
+      });
       if (!model || !hasStudioSurface(model)) {
         return errorResponse("Model not found", 404);
       }
       return successResponse({ model: toStudioCatalogModel(model) });
     }
 
+    const effectiveUiGroup = uiGroup ?? (includeAdvanced ? undefined : "generation");
     const models = (await listCatalogModels({
       category: category ?? undefined,
       mediaType: mediaType ?? undefined,
-      uiGroup: uiGroup ?? undefined,
+      uiGroup: effectiveUiGroup,
+      provider: provider ?? undefined,
+      workflowType: workflowType ?? undefined,
+      studioSurface: studioSurface ?? undefined,
       search: search ?? undefined,
       capabilities,
     }))

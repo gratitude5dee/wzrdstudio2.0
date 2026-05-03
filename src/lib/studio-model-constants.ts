@@ -2724,10 +2724,10 @@ const baseAudioModels: StudioModel[] = [
 
 export const LIPSYNC_MODELS: StudioModel[] = [
   {
-    id: 'fal-ai/kling-video/o3/pro/lip-sync',
-    name: 'Kling O3 Pro Lip Sync',
-    description: 'Premium audio-driven lip sync.',
-    credits: 30,
+    id: 'fal-ai/kling-video/lipsync/audio-to-video',
+    name: 'Kling LipSync Audio-to-Video',
+    description: 'Audio-driven lip sync from a source clip and audio input.',
+    credits: 14,
     time: '~90s',
     icon: 'video',
     badge: 'Premium',
@@ -2740,10 +2740,10 @@ export const LIPSYNC_MODELS: StudioModel[] = [
     defaults: {},
   },
   {
-    id: 'fal-ai/kling-video/v2.5-turbo/lip-sync',
-    name: 'Kling 2.5 Turbo Lip Sync',
-    description: 'Fast turbo lip sync generation.',
-    credits: 22,
+    id: 'fal-ai/kling-video/lipsync/text-to-video',
+    name: 'Kling LipSync Text-to-Video',
+    description: 'Text-driven lip-sync video generation.',
+    credits: 14,
     time: '~55s',
     icon: 'video',
     badge: 'Fast',
@@ -2752,8 +2752,8 @@ export const LIPSYNC_MODELS: StudioModel[] = [
     mediaType: 'video',
     workflowType: 'lip-sync',
     uiGroup: 'generation',
-    supports: ['audio_url', 'image_url'],
-    defaults: {},
+    supports: ['prompt'],
+    defaults: { prompt: '' },
   },
   {
     id: 'fal-ai/sadtalker',
