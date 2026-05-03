@@ -36,7 +36,7 @@ const StudioPage = () => {
 
   const handleWorkflowGenerated = useCallback(
     async (nodes: NodeDefinition[], edges: EdgeDefinition[]) => {
-      addGeneratedWorkflow(nodes, edges);
+      addGeneratedWorkflow(nodes, edges, { fitViewOnFlush: true });
       if (!projectId) return;
       // PR-2: deterministic ordering — let React paint nodes (and StudioCanvas
       // flush pendingEdges via useNodesInitialized) before save + execute.

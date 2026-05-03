@@ -64,6 +64,7 @@ import { usePresence } from '@/hooks/usePresence';
 import { useComputeFlowStore } from '@/store/computeFlowStore';
 import { useStudioGraphActions } from '@/hooks/studio/useStudioGraphActions';
 import { useStudioNodeGeneration } from '@/hooks/studio/useStudioNodeGeneration';
+import { useStudioPopulationTestHarness } from '@/hooks/studio/useStudioPopulationTestHarness';
 import { HANDLE_COLORS, type DataType, type EdgeDefinition, type NodeDefinition } from '@/types/computeFlow';
 import { useAuth } from '@/providers/AuthProvider';
 import { getNodeImagePreviewUrl } from '@/lib/imageEdit';
@@ -223,6 +224,7 @@ const StudioCanvasInner: React.FC<StudioCanvasProps> = ({
   } =
     useStudioGraphActions(projectId);
   const { generateNode, updateNodeModelSelection } = useStudioNodeGeneration(projectId);
+  useStudioPopulationTestHarness(onSelectNode);
 
   useComputeFlowRealtime(projectId);
   const { onlineUsers, updateCursor, clearCursor, updateSelection } = usePresence(projectId ?? null);

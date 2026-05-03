@@ -9,7 +9,7 @@ export default defineConfig({
     video: "retain-on-failure",
   },
   webServer: {
-    command: "npm run dev -- --host 127.0.0.1 --port 8080",
+    command: "VITE_USE_MOCK_ASSETS=true VITE_BYPASS_AUTH_FOR_TESTS=true npm run dev -- --host 127.0.0.1 --port 8080",
     url: "http://127.0.0.1:8080",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

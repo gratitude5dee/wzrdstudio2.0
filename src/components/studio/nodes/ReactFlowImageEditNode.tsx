@@ -288,7 +288,11 @@ export const ReactFlowImageEditNode = memo(({ id, data, selected }: NodeProps) =
           )}
           onDoubleClick={() => openDock()}
         >
-          <div className="aspect-[16/9] w-full" style={checkerboardStyle}>
+          <div
+            className="aspect-[16/9] w-full"
+            style={checkerboardStyle}
+            data-testid={`studio-image-edit-preview-${id}`}
+          >
             {previewUrl ? (
               <img
                 src={previewUrl}

@@ -38,10 +38,11 @@ const portPositionToReactFlow = (position: PortPosition) => {
   }
 };
 
-const VideoPreview = memo(({ previewUrl, title }: { previewUrl?: string; title: string }) => {
+const VideoPreview = memo(({ nodeId, previewUrl, title }: { nodeId: string; previewUrl?: string; title: string }) => {
   if (previewUrl) {
     return (
       <video
+        data-testid={`studio-video-preview-${nodeId}`}
         src={previewUrl}
         className="aspect-[16/9] w-full object-cover"
         muted
@@ -53,7 +54,10 @@ const VideoPreview = memo(({ previewUrl, title }: { previewUrl?: string; title: 
   }
 
   return (
-    <div className="flex aspect-[16/9] items-center justify-center gap-2 text-sm text-zinc-500">
+    <div
+      className="flex aspect-[16/9] items-center justify-center gap-2 text-sm text-zinc-500"
+      data-testid={`studio-video-preview-${nodeId}`}
+    >
       <PlayCircle className="h-4 w-4" />
       <span>{title} preview will appear here</span>
     </div>
@@ -241,7 +245,7 @@ export const ReactFlowVideoNode = memo(({ data, id, selected }: NodeProps) => {
             ) : null}
 
             <div className="overflow-hidden rounded-[18px] border border-[rgba(249,115,22,0.06)] bg-[#111111]">
-              <VideoPreview previewUrl={previewUrl} title="Generated video" />
+              <VideoPreview nodeId={id} previewUrl={previewUrl} title="Generated video" />
             </div>
 
             <div className="rounded-[18px] border border-[rgba(249,115,22,0.06)] bg-[#111111]">

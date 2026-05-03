@@ -106,6 +106,38 @@ describe('reactFlowReconciliation', () => {
     expect(reconciled[0].data).toEqual({ __signature: 'stable', status: 'idle', progress: 0 });
   });
 
+  it('preserves existing node object and data identity when appending new nodes', () => {
+    const previous = [
+      node('existing-image-edit', 'stable-image-edit', {
+        data: { __signature: 'stable-image-edit', preview: 'same' },
+      }),
+      node('existing-video', 'stable-video', {
+        data: { __signature: 'stable-video', preview: 'same' },
+      }),
+    ];
+    const next = [
+      node('existing-image-edit', 'stable-image-edit', {
+        data: { __signature: 'stable-image-edit', preview: 'same' },
+      }),
+      node('existing-video', 'stable-video', {
+        data: { __signature: 'stable-video', preview: 'same' },
+      }),
+      node('new-image-edit', 'new-image-edit'),
+      node('new-video', 'new-video'),
+    ];
+
+    const reconciled = reconcileReactFlowNodes(previous, next);
+
+    expect(reconciled).not.toBe(previous);
+    expect(reconciled).toHaveLength(4);
+    expect(reconciled[0]).toBe(previous[0]);
+    expect(reconciled[0].data).toBe(previous[0].data);
+    expect(reconciled[1]).toBe(previous[1]);
+    expect(reconciled[1].data).toBe(previous[1].data);
+    expect(reconciled[2]).toBe(next[2]);
+    expect(reconciled[3]).toBe(next[3]);
+  });
+
   it('preserves unchanged edge identity and replaces changed edge signatures', () => {
     const previous = [edge('a', 'same'), edge('b', 'old')];
     const next = [edge('a', 'same'), edge('b', 'new')];

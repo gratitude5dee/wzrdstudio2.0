@@ -379,6 +379,23 @@ describe('ComputeFlowStore', () => {
     });
 
     describe('addGeneratedWorkflow', () => {
+      it('preserves existing node object identity when atomically appending populated nodes', () => {
+        const { result } = renderHook(() => useComputeFlowStore());
+        const existingNode = createTestNode({ id: '00000000-0000-4000-8000-000000000001' });
+        const populatedNode = createTestNode({ id: '00000000-0000-4000-8000-000000000002' });
+
+        act(() => {
+          result.current.addNodeSilent(existingNode);
+        });
+        const existingRef = result.current.nodeDefinitions[0];
+
+        act(() => {
+          result.current.addNodesAndEdgesAtomic([populatedNode], [], 'Append populated node');
+        });
+
+        expect(result.current.nodeDefinitions.find((node) => node.id === existingNode.id)).toBe(existingRef);
+      });
+
       it('adds nodes and edges from generated workflow', () => {
         const { result } = renderHook(() => useComputeFlowStore());
         
@@ -401,6 +418,84 @@ describe('ComputeFlowStore', () => {
 
         expect(result.current.nodeDefinitions).toHaveLength(2);
         expect(result.current.edgeDefinitions).toHaveLength(1);
+      });
+
+      it('preserves existing node identity through generated node population and pending edge flush', () => {
+        const { result } = renderHook(() => useComputeFlowStore());
+        const existingNode = createTestNode({ id: '00000000-0000-4000-8000-000000000011' });
+        const generatedImageEdit = createTestNode({
+          id: '00000000-0000-4000-8000-000000000012',
+          kind: 'ImageEdit',
+          label: 'Generated Image Edit',
+        });
+        const generatedVideo = createTestNode({
+          id: '00000000-0000-4000-8000-000000000013',
+          kind: 'Video',
+          label: 'Generated Video',
+        });
+        const edge = createTestEdge(generatedImageEdit.id, generatedVideo.id, {
+          id: '00000000-0000-4000-8000-000000000014',
+        });
+        const fitViewListener = vi.fn();
+        window.addEventListener('fitViewToWorkflow', fitViewListener);
+
+        try {
+          act(() => {
+            result.current.addNodeSilent(existingNode);
+          });
+          const existingRef = result.current.nodeDefinitions[0];
+
+          act(() => {
+            result.current.addGeneratedWorkflow([generatedImageEdit, generatedVideo], [edge]);
+          });
+
+          expect(result.current.nodeDefinitions.find((node) => node.id === existingNode.id)).toBe(existingRef);
+
+          act(() => {
+            result.current.flushPendingEdges();
+          });
+
+          expect(result.current.nodeDefinitions.find((node) => node.id === existingNode.id)).toBe(existingRef);
+          expect(fitViewListener).not.toHaveBeenCalled();
+        } finally {
+          window.removeEventListener('fitViewToWorkflow', fitViewListener);
+        }
+      });
+
+      it('only dispatches fitView for generated workflows that opt in', () => {
+        const { result } = renderHook(() => useComputeFlowStore());
+        const generatedImageEdit = createTestNode({
+          id: '00000000-0000-4000-8000-000000000021',
+          kind: 'ImageEdit',
+          label: 'Generated Image Edit',
+        });
+        const generatedVideo = createTestNode({
+          id: '00000000-0000-4000-8000-000000000022',
+          kind: 'Video',
+          label: 'Generated Video',
+        });
+        const edge = createTestEdge(generatedImageEdit.id, generatedVideo.id, {
+          id: '00000000-0000-4000-8000-000000000023',
+        });
+        const fitViewListener = vi.fn();
+        window.addEventListener('fitViewToWorkflow', fitViewListener);
+
+        try {
+          act(() => {
+            result.current.addGeneratedWorkflow([generatedImageEdit, generatedVideo], [edge], {
+              fitViewOnFlush: true,
+            });
+            result.current.flushPendingEdges();
+          });
+
+          expect(fitViewListener).toHaveBeenCalledTimes(1);
+          expect((fitViewListener.mock.calls[0][0] as CustomEvent).detail).toMatchObject({
+            nodeIds: [generatedImageEdit.id, generatedVideo.id],
+            animate: true,
+          });
+        } finally {
+          window.removeEventListener('fitViewToWorkflow', fitViewListener);
+        }
       });
 
       it('normalizes legacy IDs to UUIDs', () => {

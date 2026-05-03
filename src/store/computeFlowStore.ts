@@ -308,6 +308,16 @@ interface GraphHeaderState {
   revision: number;
 }
 
+interface PendingEdgeMeta {
+  nodeIds: string[];
+  description: string;
+  fitViewOnFlush?: boolean;
+}
+
+interface AddGeneratedWorkflowOptions {
+  fitViewOnFlush?: boolean;
+}
+
 const DEFAULT_GRAPH_VIEW_STATE: GraphViewState = {
   zoom: 1,
   center: [0, 0],
@@ -390,13 +400,17 @@ interface ComputeFlowState {
   };
   
   // AI Workflow Generation
-  addGeneratedWorkflow: (nodes: NodeDefinition[], edges: EdgeDefinition[]) => void;
+  addGeneratedWorkflow: (
+    nodes: NodeDefinition[],
+    edges: EdgeDefinition[],
+    options?: AddGeneratedWorkflowOptions
+  ) => void;
 
   // Pending-edge queue (PR-2): edges queued during workflow import that should
   // be flushed once React Flow reports nodes-initialized.
   pendingEdges: EdgeDefinition[];
-  pendingEdgeMeta: { nodeIds: string[]; description: string } | null;
-  enqueuePendingEdges: (edges: EdgeDefinition[], meta?: { nodeIds: string[]; description: string }) => void;
+  pendingEdgeMeta: PendingEdgeMeta | null;
+  enqueuePendingEdges: (edges: EdgeDefinition[], meta?: PendingEdgeMeta) => void;
   flushPendingEdges: () => void;
 
   // PR-6: edit-session coalescing — typing in a node only produces one undo entry.
@@ -1465,7 +1479,7 @@ export const useComputeFlowStore = create<ComputeFlowState>((set, get) => ({
    * Add AI-generated workflow nodes and edges to the canvas
    * Uses phased approach: add nodes first, then edges after React Flow initializes
    */
-  addGeneratedWorkflow: (nodes: NodeDefinition[], edges: EdgeDefinition[]) => {
+  addGeneratedWorkflow: (nodes: NodeDefinition[], edges: EdgeDefinition[], options) => {
     console.log('🎨 Adding generated workflow:', { nodes: nodes.length, edges: edges.length });
     
     // Log incoming data for debugging
@@ -1536,6 +1550,7 @@ export const useComputeFlowStore = create<ComputeFlowState>((set, get) => ({
       get().enqueuePendingEdges(validatedEdges, {
         nodeIds: normalizedNodes.map(n => n.id),
         description: `Added ${normalizedNodes.length} nodes and ${validatedEdges.length} edges`,
+        fitViewOnFlush: Boolean(options?.fitViewOnFlush),
       });
     } else {
       get().historyManager.pushSnapshot(
@@ -1583,7 +1598,7 @@ export const useComputeFlowStore = create<ComputeFlowState>((set, get) => ({
     const historyState = get().historyManager.getState();
     set({ canUndo: historyState.canUndo, canRedo: historyState.canRedo });
 
-    if (pendingEdgeMeta?.nodeIds?.length) {
+    if (pendingEdgeMeta?.fitViewOnFlush && pendingEdgeMeta.nodeIds.length) {
       window.dispatchEvent(new CustomEvent('fitViewToWorkflow', {
         detail: { nodeIds: pendingEdgeMeta.nodeIds, animate: true },
       }));

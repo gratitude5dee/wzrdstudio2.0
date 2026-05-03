@@ -4,7 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from "react-router-dom";
 import { ThirdwebProvider } from "thirdweb/react";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/providers/AuthProvider";
@@ -75,6 +75,16 @@ const RedirectLegacyStudioProject = () => {
   return projectId ? <Navigate to={appRoutes.projects.studio(projectId)} replace /> : <Navigate to={appRoutes.home} replace />;
 };
 
+const StudioRootRoute = () => {
+  const location = useLocation();
+  const isNodePopulationE2E =
+    import.meta.env.DEV &&
+    import.meta.env.VITE_BYPASS_AUTH_FOR_TESTS === "true" &&
+    new URLSearchParams(location.search).get("e2e") === "node-population";
+
+  return isNodePopulationE2E ? <StudioPage /> : <Navigate to={appRoutes.home} replace />;
+};
+
 const RedirectLegacyTimelineProject = () => {
   const { projectId } = useParams();
   return projectId ? <Navigate to={appRoutes.projects.timeline(projectId)} replace /> : <Navigate to={appRoutes.home} replace />;
@@ -100,15 +110,21 @@ const queryClient = new QueryClient();
 const App = () => {
   const usePerfShell = (import.meta.env.VITE_USE_PERF_SHELL ?? 'true') !== 'false';
   const fallback = usePerfShell ? <PerfShell headline="Preparing studio" /> : null;
-  const [isLoading, setIsLoading] = useState(true);
+  const bypassAuthForTests =
+    import.meta.env.DEV && import.meta.env.VITE_BYPASS_AUTH_FOR_TESTS === 'true';
+  const [isLoading, setIsLoading] = useState(() => !bypassAuthForTests);
 
   useEffect(() => {
+    if (bypassAuthForTests) {
+      return;
+    }
+
     const timer = window.setTimeout(() => {
       setIsLoading(false);
     }, 2000);
 
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [bypassAuthForTests]);
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -119,7 +135,9 @@ const App = () => {
             <AuthProvider>
               <SidebarProvider>
               <CursorLoadingProvider>
-                <LoadingScreen isLoading={isLoading} message="Initializing WZRD Studio..." />
+                {!bypassAuthForTests ? (
+                  <LoadingScreen isLoading={isLoading} message="Initializing WZRD Studio..." />
+                ) : null}
                 <CursorWrapper />
                 <Toaster />
                 <Sonner />
@@ -148,7 +166,7 @@ const App = () => {
                       path={appRoutes.legacy.studioRoot}
                       element={
                         <ProtectedRoute>
-                          <Navigate to={appRoutes.home} replace />
+                          <StudioRootRoute />
                         </ProtectedRoute>
                       }
                     />
