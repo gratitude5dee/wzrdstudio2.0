@@ -110,7 +110,7 @@ export function useProjectAutoGenerate(projectId: string) {
     );
   }, []);
 
-  const generateImage = useCallback(async (shot: ShotData) => {
+  const generateImage = useCallback(async (shot: ShotData, modelId?: string | null) => {
     if (!shot.visual_prompt) {
       const { error: promptError } = await supabase.functions.invoke('generate-visual-prompt', {
         body: { shot_id: shot.id },
@@ -119,7 +119,7 @@ export function useProjectAutoGenerate(projectId: string) {
     }
 
     const { error } = await supabase.functions.invoke('generate-shot-image', {
-      body: { shot_id: shot.id },
+      body: { shot_id: shot.id, image_model: modelId || undefined },
     });
     if (error) {
       const insufficient = await extractInsufficientCreditsError(error);
@@ -135,12 +135,13 @@ export function useProjectAutoGenerate(projectId: string) {
     }
   }, []);
 
-  const generateVideo = useCallback(async (shot: ShotData) => {
+  const generateVideo = useCallback(async (shot: ShotData, modelId?: string | null) => {
     const { error } = await supabase.functions.invoke('generate-video-from-image', {
       body: {
         shot_id: shot.id,
         image_url: shot.image_url,
         prompt: shot.visual_prompt,
+        model_id: modelId || undefined,
         duration: 6,
         resolution: '1920x1080',
         fps: 25,
@@ -177,7 +178,7 @@ export function useProjectAutoGenerate(projectId: string) {
     toast.info('Project-wide generation cancelled');
   }, []);
 
-  const startAutoGenerate = useCallback(async () => {
+  const startAutoGenerate = useCallback(async (options?: { imageModelId?: string | null; videoModelId?: string | null }) => {
     if (isRunningRef.current) {
       toast.info('Generation already in progress');
       return;
@@ -262,9 +263,9 @@ export function useProjectAutoGenerate(projectId: string) {
         }
 
         if (phase === 'images') {
-          await generateImage(shot);
+          await generateImage(shot, options?.imageModelId);
         } else {
-          await generateVideo(shot);
+          await generateVideo(shot, options?.videoModelId);
         }
 
         return shot.id;
@@ -310,10 +311,20 @@ export function useProjectAutoGenerate(projectId: string) {
   }, [determinePhase, fetchAllProjectShots, generateImage, generateVideo, getShotsToProcess]);
 
   const nextPhase = allShots.length > 0 ? determinePhase(allShots) : 'images';
+  const generationCounts = {
+    totalShots: allShots.length,
+    missingImages: allShots.filter((shot) => shot.image_status !== 'completed' || !shot.image_url).length,
+    missingVideos: allShots.filter(
+      (shot) => shot.image_status === 'completed' && !!shot.image_url && shot.video_status !== 'completed'
+    ).length,
+    failedImages: allShots.filter((shot) => shot.image_status === 'failed').length,
+    failedVideos: allShots.filter((shot) => shot.video_status === 'failed').length,
+  };
 
   return {
     state,
     allShots,
+    generationCounts,
     startAutoGenerate,
     cancelAutoGenerate,
     nextPhase,

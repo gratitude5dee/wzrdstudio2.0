@@ -35,6 +35,7 @@ export interface ProcessAssetsResult {
 const FAL_QUEUE_URL = 'https://queue.fal.run';
 const MERGE_MODEL = 'fal-ai/ffmpeg-api/merge-videos';
 const COMPOSE_MODEL = 'fal-ai/ffmpeg-api/compose';
+const MERGE_AUDIO_VIDEO_MODEL = 'fal-ai/ffmpeg-api/merge-audio-video';
 const MAX_POLL = 180;
 const POLL_MS = 3000;
 
@@ -90,6 +91,23 @@ function extractVideoUrl(obj: unknown): string | null {
   return null;
 }
 
+function getNumber(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+async function runFalForVideoUrl(modelId: string, input: Record<string, unknown>, falKey: string): Promise<string> {
+  const sub = await falQueueSubmit(modelId, input, falKey);
+  const status = await falPollUntilDone(sub.request_id, sub.status_url, falKey);
+
+  let videoUrl: string | null = extractVideoUrl(status);
+  if (!videoUrl && sub.response_url) {
+    const result = await falGetResult(sub.response_url, falKey);
+    videoUrl = extractVideoUrl(result);
+  }
+  if (!videoUrl) throw new Error(`${modelId} returned no output video URL`);
+  return videoUrl;
+}
+
 /**
  * Convert an image URL to a short video clip using FAL compose, then return the video URL.
  */
@@ -101,28 +119,66 @@ async function imageToVideoClip(
   const input = {
     tracks: [
       {
-        type: 'video',
-        segments: [
+        id: 'image',
+        type: 'image',
+        keyframes: [
           {
-            type: 'image',
+            timestamp: 0,
+            duration: durationSec * 1000,
             url: imageUrl,
-            duration: durationSec,
           },
         ],
       },
     ],
   };
 
-  const sub = await falQueueSubmit(COMPOSE_MODEL, input, falKey);
-  const status = await falPollUntilDone(sub.request_id, sub.status_url, falKey);
+  return runFalForVideoUrl(COMPOSE_MODEL, input, falKey);
+}
 
-  let videoUrl: string | null = extractVideoUrl(status);
-  if (!videoUrl && sub.response_url) {
-    const result = await falGetResult(sub.response_url, falKey);
-    videoUrl = extractVideoUrl(result);
-  }
-  if (!videoUrl) throw new Error('FAL compose returned no video URL for image clip');
-  return videoUrl;
+async function composeTimeline(
+  visualAssets: ExportAsset[],
+  audioAssets: ExportAsset[],
+  falKey: string
+): Promise<string> {
+  const tracks: Array<{
+    id: string;
+    type: 'video' | 'audio' | 'image';
+    keyframes: Array<{ timestamp: number; duration: number; url: string }>;
+  }> = [];
+  let cursorMs = 0;
+
+  visualAssets.forEach((asset, index) => {
+    const duration = asset.duration_ms ?? getNumber(asset.metadata?.duration_ms, asset.type === 'video' ? 6000 : 5000);
+    const timestamp = getNumber(asset.metadata?.start_ms, cursorMs);
+    tracks.push({
+      id: `visual-${index}`,
+      type: asset.type === 'image' ? 'image' : 'video',
+      keyframes: [
+        {
+          timestamp,
+          duration,
+          url: asset.url,
+        },
+      ],
+    });
+    cursorMs = Math.max(cursorMs, timestamp + duration);
+  });
+
+  audioAssets.forEach((asset, index) => {
+    tracks.push({
+      id: `${asset.subtype ?? 'audio'}-${index}`,
+      type: 'audio',
+      keyframes: [
+        {
+          timestamp: getNumber(asset.metadata?.start_ms, 0),
+          duration: asset.duration_ms ?? getNumber(asset.metadata?.duration_ms, cursorMs || 5000),
+          url: asset.url,
+        },
+      ],
+    });
+  });
+
+  return runFalForVideoUrl(COMPOSE_MODEL, { tracks }, falKey);
 }
 
 /**
@@ -147,11 +203,52 @@ export async function processAssetsRemote(
 
   const sorted = [...assets].sort((a, b) => a.order_index - b.order_index);
   const visuals = sorted.filter((a) => a.type === 'image' || a.type === 'video');
+  const audioAssets = sorted.filter((a) => a.type === 'audio' && settings.includeAudio !== false);
 
   if (visuals.length === 0) throw new Error('No visual assets available for export');
 
   const shotFailures: ShotFailure[] = [];
   const videoUrls: string[] = [];
+
+  if (audioAssets.length > 0) {
+    await supabaseAdmin
+      .from('export_jobs')
+      .update({ progress: 45, provider_payload: { stage: 'provider_processing', renderer: COMPOSE_MODEL, audioTracks: audioAssets.length } })
+      .eq('id', jobId);
+
+    let composedUrl: string;
+    try {
+      composedUrl = await composeTimeline(visuals, audioAssets, falKey);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : 'FAL compose failed';
+      throw new Error(`Audio timeline compose failed: ${reason}`);
+    }
+
+    await supabaseAdmin
+      .from('export_jobs')
+      .update({ progress: 85, provider_payload: { stage: 'downloading_assets', renderer: COMPOSE_MODEL, audioTracks: audioAssets.length } })
+      .eq('id', jobId);
+
+    const videoRes = await fetch(composedUrl);
+    if (!videoRes.ok) throw new Error(`Failed to download composed video: ${videoRes.statusText}`);
+    const bytes = new Uint8Array(await videoRes.arrayBuffer());
+
+    await supabaseAdmin
+      .from('export_jobs')
+      .update({ progress: 90, provider_payload: { stage: 'uploading_final_video', renderer: COMPOSE_MODEL, audioTracks: audioAssets.length } })
+      .eq('id', jobId);
+
+    const outputPath = `${projectId}/${jobId}/final_export_${Date.now()}.mp4`;
+    const { error: uploadError } = await supabaseAdmin.storage
+      .from(exportBucket)
+      .upload(outputPath, bytes, { contentType: 'video/mp4', upsert: true });
+
+    if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
+
+    const { data: { publicUrl } } = supabaseAdmin.storage.from(exportBucket).getPublicUrl(outputPath);
+    await supabaseAdmin.from('export_jobs').update({ progress: 95 }).eq('id', jobId);
+    return { publicUrl, shotFailures };
+  }
 
   // Phase 1: convert all assets to video URLs
   for (let i = 0; i < visuals.length; i++) {
@@ -177,7 +274,10 @@ export async function processAssetsRemote(
     }
 
     const progress = Math.round(((i + 1) / visuals.length) * 60);
-    await supabaseAdmin.from('export_jobs').update({ progress }).eq('id', jobId);
+    await supabaseAdmin
+      .from('export_jobs')
+      .update({ progress, provider_payload: { stage: 'provider_processing', renderer: asset.type === 'image' ? COMPOSE_MODEL : MERGE_MODEL } })
+      .eq('id', jobId);
   }
 
   if (videoUrls.length === 0) {
@@ -191,7 +291,10 @@ export async function processAssetsRemote(
     finalVideoUrl = videoUrls[0];
   } else {
     // Merge all videos via FAL
-    await supabaseAdmin.from('export_jobs').update({ progress: 65 }).eq('id', jobId);
+    await supabaseAdmin
+      .from('export_jobs')
+      .update({ progress: 65, provider_payload: { stage: 'provider_processing', renderer: MERGE_MODEL } })
+      .eq('id', jobId);
 
     const mergeInput: Record<string, unknown> = {
       video_urls: videoUrls,
@@ -214,12 +317,20 @@ export async function processAssetsRemote(
     finalVideoUrl = mergedUrl;
   }
 
-  await supabaseAdmin.from('export_jobs').update({ progress: 85 }).eq('id', jobId);
+  await supabaseAdmin
+    .from('export_jobs')
+    .update({ progress: 85, provider_payload: { stage: 'downloading_assets', renderer: MERGE_MODEL } })
+    .eq('id', jobId);
 
   // Phase 3: Download merged video and upload to Supabase Storage
   const videoRes = await fetch(finalVideoUrl);
   if (!videoRes.ok) throw new Error(`Failed to download merged video: ${videoRes.statusText}`);
   const bytes = new Uint8Array(await videoRes.arrayBuffer());
+
+  await supabaseAdmin
+    .from('export_jobs')
+    .update({ progress: 90, provider_payload: { stage: 'uploading_final_video', renderer: MERGE_MODEL } })
+    .eq('id', jobId);
 
   const outputPath = `${projectId}/${jobId}/final_export_${Date.now()}.mp4`;
   const { error: uploadError } = await supabaseAdmin.storage

@@ -10,6 +10,7 @@ export interface DirectorCutSummary {
   readyVideos: number;
   fallbackImages: number;
   missingShots: number;
+  audioAssets: number;
 }
 
 /**
@@ -182,6 +183,7 @@ export function useDirectorCut(projectId: string | undefined) {
         readyVideos: data?.summary?.readyVideos ?? 0,
         fallbackImages: data?.summary?.fallbackImages ?? 0,
         missingShots: data?.summary?.missingShots ?? 0,
+        audioAssets: data?.summary?.audioAssets ?? 0,
       };
 
       setSummary(nextSummary);

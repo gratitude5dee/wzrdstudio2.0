@@ -53,6 +53,48 @@ describe('useStudioGraphActions', () => {
     expect(materialized.nodes[1].params.model).toBe('fal-ai/nano-banana-pro');
   });
 
+  it('materializes WZRD action nodes with refs, controls, and manual execution policy', () => {
+    const { result } = renderHook(() => useStudioGraphActions());
+
+    const materialized = result.current.materializeWorkflowBlueprint({
+      provider: 'codex',
+      layout: 'horizontal',
+      nodes: [
+        { kind: 'Text', label: 'Prompt', prompt: 'Use the uploaded style reference' },
+        {
+          kind: 'Image',
+          label: 'Generate Keyframe',
+          actionId: 'image.generate',
+          prompt: 'A cinematic product keyframe with the uploaded look',
+          controls: { aspectRatio: '16:9' },
+          params: { numImages: 2 },
+          assetRefs: [
+            {
+              id: 'asset-style-1',
+              type: 'image',
+              url: 'https://cdn.example.com/style.jpg',
+              name: 'style.jpg',
+              role: 'style',
+            },
+          ],
+          executionPolicy: 'manual',
+        },
+      ],
+      edges: [{ from: 0, to: 1, sourceHandle: 'text', targetHandle: 'prompt' }],
+    });
+
+    expect(materialized.nodes).toHaveLength(2);
+    expect(materialized.edges).toHaveLength(1);
+    expect(materialized.nodes[1].actionId).toBe('image.generate');
+    expect(materialized.nodes[1].metadata?.generatedByWzrdAgent).toBe(true);
+    expect(materialized.nodes[1].metadata?.executionPolicy).toBe('manual');
+    expect(materialized.nodes[1].params.prompt).toBe('A cinematic product keyframe with the uploaded look');
+    expect(materialized.nodes[1].params.aspectRatio).toBe('16:9');
+    expect(materialized.nodes[1].params.numImages).toBe(2);
+    expect(materialized.nodes[1].assetRefs?.[0]?.data?.role).toBe('style');
+    expect(materialized.edges[0].target.handle).toBe('prompt');
+  });
+
   it('falls back to generation-safe defaults when the workflow blueprint requests an incompatible model', () => {
     const { result } = renderHook(() => useStudioGraphActions());
 

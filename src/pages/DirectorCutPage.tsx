@@ -148,11 +148,12 @@ const DirectorCutPage = () => {
             </Button>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-5">
+          <div className="grid gap-3 md:grid-cols-6">
             <StatCard label="Shots" value={summary?.totalShots ?? 0} />
             <StatCard label="Synced Assets" value={summary?.syncedAssets ?? 0} />
             <StatCard label="Ready Videos" value={summary?.readyVideos ?? 0} tone="success" />
             <StatCard label="Image Fallbacks" value={summary?.fallbackImages ?? 0} tone="warn" />
+            <StatCard label="Audio" value={summary?.audioAssets ?? 0} />
             <StatCard label="Missing" value={summary?.missingShots ?? 0} tone="warn" />
           </div>
 

@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Send, Loader2, Music, Disc3, Mic2, Megaphone, Film, Wand2, ChevronRight, Sparkles, X } from 'lucide-react';
+import { Send, Loader2, Music, Disc3, Mic2, Megaphone, Film, Wand2, ChevronRight, Sparkles, X, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useWorkflowGeneration } from '@/hooks/studio/useWorkflowGeneration';
@@ -72,7 +72,21 @@ export function WorkflowGeneratorTab({
   const [settings, setSettings] = useState<WorkflowSettings>(DEFAULT_SETTINGS);
   const [showAutocomplete, setShowAutocomplete] = useState(false);
 
-  const { prompt, setPrompt, isGenerating, handleGenerate, handleExampleClick, handleKeyDown } =
+  const {
+    prompt,
+    setPrompt,
+    isGenerating,
+    phase,
+    assistantMessage,
+    questions,
+    answers,
+    setAnswer,
+    handleGenerate,
+    handleMaterialize,
+    handleExampleClick,
+    handleKeyDown,
+    resetAgent,
+  } =
     useWorkflowGeneration({
       projectId,
       selectedNodeId,
@@ -125,6 +139,108 @@ export function WorkflowGeneratorTab({
   );
 
   const isPopup = variant === 'popup';
+  const hasQuestions = questions.length > 0;
+
+  const renderQuestionControl = (question: (typeof questions)[number]) => {
+    const value = answers[question.id] ?? question.defaultValue ?? '';
+    const setQuestionValue = (nextValue: unknown) => setAnswer(question.id, nextValue);
+
+    if (question.controlType === 'segmented' || question.controlType === 'select' || question.controlType === 'image-role') {
+      return (
+        <div className="flex flex-wrap gap-2">
+          {(question.options ?? []).map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => setQuestionValue(option.value)}
+              className={cn(
+                'rounded-full border px-3 py-1.5 text-xs transition-colors',
+                value === option.value
+                  ? 'border-[#f97316]/50 bg-[#2a170e] text-[#fdba74]'
+                  : 'border-white/10 bg-[#171717] text-zinc-300 hover:border-white/20'
+              )}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      );
+    }
+
+    if (question.controlType === 'slider') {
+      const numericValue = typeof value === 'number' ? value : 50;
+      return (
+        <div className="flex items-center gap-3">
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={numericValue}
+            onChange={(event) => setQuestionValue(Number(event.target.value))}
+            className="h-2 flex-1 accent-[#f97316]"
+          />
+          <span className="w-10 text-right text-xs text-zinc-400">{numericValue}</span>
+        </div>
+      );
+    }
+
+    if (question.controlType === 'audio-clip' || question.controlType === 'video-trim') {
+      const rangeValue =
+        value && typeof value === 'object'
+          ? (value as { trimStartMs?: number; trimEndMs?: number; role?: string })
+          : {};
+      const durationMs = question.assetRef?.durationMs ?? rangeValue.trimEndMs ?? 10000;
+      return (
+        <div className="space-y-3">
+          <div className="h-10 rounded-xl border border-white/10 bg-[#0f0f0f] px-3 py-2">
+            <div className="h-full rounded-lg bg-gradient-to-r from-[#f97316]/20 via-[#fdba74]/30 to-[#f97316]/10" />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <input
+              type="number"
+              min={0}
+              max={durationMs}
+              value={rangeValue.trimStartMs ?? 0}
+              onChange={(event) => setQuestionValue({ ...rangeValue, trimStartMs: Number(event.target.value) })}
+              className="rounded-xl border border-white/10 bg-[#171717] px-3 py-2 text-xs text-white outline-none"
+              aria-label="Clip start"
+            />
+            <input
+              type="number"
+              min={0}
+              max={durationMs}
+              value={rangeValue.trimEndMs ?? durationMs}
+              onChange={(event) => setQuestionValue({ ...rangeValue, trimEndMs: Number(event.target.value) })}
+              className="rounded-xl border border-white/10 bg-[#171717] px-3 py-2 text-xs text-white outline-none"
+              aria-label="Clip end"
+            />
+          </div>
+        </div>
+      );
+    }
+
+    if (question.controlType === 'checkbox') {
+      return (
+        <label className="flex items-center gap-2 text-xs text-zinc-300">
+          <input
+            type="checkbox"
+            checked={Boolean(value)}
+            onChange={(event) => setQuestionValue(event.target.checked)}
+            className="accent-[#f97316]"
+          />
+          Enabled
+        </label>
+      );
+    }
+
+    return (
+      <textarea
+        value={typeof value === 'string' ? value : ''}
+        onChange={(event) => setQuestionValue(event.target.value)}
+        className="min-h-[72px] w-full resize-none rounded-xl border border-white/10 bg-[#171717] px-3 py-2 text-xs text-white outline-none placeholder:text-zinc-600"
+      />
+    );
+  };
 
   return (
     <div
@@ -150,9 +266,9 @@ export function WorkflowGeneratorTab({
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h3 className={cn('font-medium text-white', isPopup ? 'text-base' : 'text-sm')}>Workflow Generator</h3>
+                <h3 className={cn('font-medium text-white', isPopup ? 'text-base' : 'text-sm')}>WZRD Agent</h3>
                 <p className="mt-1 text-xs leading-5 text-zinc-500">
-                  Generate a connected graph using your current canvas context.
+                  Chat through a graph plan before nodes are created.
                 </p>
               </div>
               {isPopup && onClose ? (
@@ -244,17 +360,61 @@ export function WorkflowGeneratorTab({
               disabled={isGenerating}
             />
             <button
-              onClick={handleGenerate}
+              onClick={hasQuestions ? handleMaterialize : handleGenerate}
               disabled={!prompt.trim() || isGenerating}
               className="absolute bottom-3 right-3 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white text-black transition-colors hover:bg-zinc-200 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
             >
-              {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : hasQuestions ? <CheckCircle2 className="h-4 w-4" /> : <Send className="h-4 w-4" />}
             </button>
           </div>
+          {assistantMessage ? (
+            <div className="mt-3 rounded-[18px] border border-[rgba(249,115,22,0.12)] bg-[#171717] px-3 py-3 text-xs leading-5 text-zinc-300">
+              {assistantMessage}
+            </div>
+          ) : null}
+          {hasQuestions ? (
+            <div className="mt-3 space-y-3 rounded-[20px] border border-[#f97316]/15 bg-[#151210] p-3">
+              {questions.map((question, index) => (
+                <div key={question.id} className="space-y-2">
+                  <div className="flex items-center gap-2 text-xs text-zinc-300">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#f97316]/15 text-[10px] text-[#fdba74]">
+                      {index + 1}
+                    </span>
+                    <span>{question.label}</span>
+                  </div>
+                  {question.assetRef?.name ? (
+                    <div className="rounded-xl border border-white/10 bg-[#111111] px-3 py-2 text-[11px] text-zinc-500">
+                      {question.assetRef.name}
+                    </div>
+                  ) : null}
+                  {renderQuestionControl(question)}
+                </div>
+              ))}
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={handleMaterialize}
+                  disabled={isGenerating}
+                  className="inline-flex h-9 flex-1 items-center justify-center rounded-full bg-white px-4 text-xs font-medium text-black transition-colors hover:bg-zinc-200 disabled:bg-zinc-700 disabled:text-zinc-400"
+                >
+                  {isGenerating ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                  Generate Nodes
+                </button>
+                <button
+                  type="button"
+                  onClick={resetAgent}
+                  disabled={isGenerating}
+                  className="inline-flex h-9 items-center justify-center rounded-full border border-white/10 px-4 text-xs text-zinc-300 transition-colors hover:border-white/20 hover:text-white"
+                >
+                  Reset
+                </button>
+              </div>
+            </div>
+          ) : null}
           {isPopup ? (
             <div className="mt-3 flex items-center gap-2 text-[11px] text-zinc-500">
               <span className="rounded-full border border-[rgba(249,115,22,0.10)] bg-[#171717] px-2.5 py-1 text-zinc-300">
-                Workflow only
+                {phase === 'ready_to_run' ? 'Ready' : 'Nodes only'}
               </span>
               <span>Uses your current canvas context</span>
             </div>
@@ -279,7 +439,7 @@ export function WorkflowGeneratorTab({
           >
             <div className="flex items-center gap-2 rounded-[18px] border border-[#f97316]/15 bg-[#1c1510] px-3 py-3 text-sm text-[#fdba74]">
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Building a context-aware workflow…</span>
+              <span>{phase === 'materializing' ? 'Creating WZRD nodes…' : 'WZRD is planning the graph…'}</span>
             </div>
           </motion.div>
         ) : null}

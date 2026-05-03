@@ -187,8 +187,8 @@ function matchesSearch(model: CatalogModel, search: string | undefined): boolean
     model.vendor ?? "",
     model.family ?? "",
     model.tier ?? "",
-    ...model.tags,
-    ...model.aliases,
+    ...(model.tags ?? []),
+    ...(model.aliases ?? []),
   ].join(" ").toLowerCase();
   const tokens = needle.split(/\s+/).filter(Boolean);
   return haystack.includes(needle) || tokens.every((token) => haystack.includes(token));

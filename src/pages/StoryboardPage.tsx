@@ -50,12 +50,19 @@ const StoryboardPage = () => {
   // Project-level auto-generate for all shots across all scenes
   const {
     state: projectAutoGenState,
+    generationCounts,
     startAutoGenerate: startProjectAutoGenerate,
     cancelAutoGenerate: cancelProjectAutoGenerate,
     nextPhase: projectNextPhase,
     isProcessing: isProjectAutoGenerating,
     fetchAllProjectShots
   } = useProjectAutoGenerate(projectId || '');
+  const estimatedProjectShotCount = generationCounts.totalShots || projectAutoGenState.progress.total || scenes.length * 3;
+  const pendingProjectGenerationCount = generationCounts.totalShots > 0
+    ? projectNextPhase === 'images'
+      ? generationCounts.missingImages
+      : generationCounts.missingVideos
+    : projectAutoGenState.progress.total || estimatedProjectShotCount;
   
   // Validate that we have a projectId and fetch project settings
   useEffect(() => {
@@ -486,13 +493,13 @@ const StoryboardPage = () => {
                     ) : projectNextPhase === 'images' ? (
                       <>
                         <Sparkles className="h-4 w-4" />
-                        <span className="ml-2 hidden sm:inline">Generate Images ({getShotImageCredits(selectedImageModel) * (projectAutoGenState.progress.total || scenes.length * 3)} credits)</span>
+                        <span className="ml-2 hidden sm:inline">Generate Missing Images ({getShotImageCredits(selectedImageModel) * pendingProjectGenerationCount} credits)</span>
                         <span className="ml-2 sm:hidden">Images</span>
                       </>
                     ) : (
                       <>
                         <Film className="h-4 w-4" />
-                        <span className="ml-2 hidden sm:inline">Generate Videos ({getShotVideoCredits(selectedVideoModel) * (projectAutoGenState.progress.total || scenes.length * 3)} credits)</span>
+                        <span className="ml-2 hidden sm:inline">Generate Missing Videos ({getShotVideoCredits(selectedVideoModel) * pendingProjectGenerationCount} credits)</span>
                         <span className="ml-2 sm:hidden">Videos</span>
                       </>
                     )}
@@ -503,8 +510,8 @@ const StoryboardPage = () => {
                     {isProjectAutoGenerating
                       ? 'Cancel the current project-wide generation queue'
                       : projectNextPhase === 'images'
-                      ? 'Generate images for ALL shots'
-                      : 'Generate videos from ALL images'}
+                      ? `Generate missing images for ${pendingProjectGenerationCount} shot(s)`
+                      : `Generate missing videos for ${pendingProjectGenerationCount} shot(s)`}
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -641,14 +648,14 @@ const StoryboardPage = () => {
         onOpenChange={setShowProjectConfirmGenerate}
         onConfirm={() => {
           setShowProjectConfirmGenerate(false);
-          startProjectAutoGenerate();
+          startProjectAutoGenerate({ imageModelId: selectedImageModel, videoModelId: selectedVideoModel });
         }}
-        title="Confirm Auto-Generate All"
-        description="Are you sure you wish to auto-generate across all scenes?"
+        title={projectNextPhase === 'images' ? 'Generate Missing Images' : 'Generate Missing Videos'}
+        description={`This will process ${pendingProjectGenerationCount} incomplete shot(s) and skip completed outputs.`}
         estimatedCredits={
           projectNextPhase === 'images'
-            ? getShotImageCredits(selectedImageModel) * (projectAutoGenState.progress.total || scenes.length * 3)
-            : getShotVideoCredits(selectedVideoModel) * (projectAutoGenState.progress.total || scenes.length * 3)
+            ? getShotImageCredits(selectedImageModel) * pendingProjectGenerationCount
+            : getShotVideoCredits(selectedVideoModel) * pendingProjectGenerationCount
         }
       />
 

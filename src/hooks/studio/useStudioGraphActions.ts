@@ -454,13 +454,50 @@ export function useStudioGraphActions(projectId?: string) {
             return null;
           }
 
+          const metadata = {
+            generatedByWorkflow: true,
+            generatedByWzrdAgent: Boolean(intent.actionId || blueprint.provider === 'codex'),
+            executionPolicy: intent.executionPolicy ?? 'manual',
+            ...(intent.metadata ?? {}),
+          };
           const model =
             kind === 'Text' || kind === 'Image' || kind === 'Video'
-              ? getCompatibleWorkflowModel(kind, intent.model)
+              ? getCompatibleWorkflowModel(kind, intent.modelId ?? intent.model)
               : getDefaultModelForNodeKind(kind);
           const params: Record<string, unknown> = {
+            ...(intent.controls ?? {}),
             ...(intent.params ?? {}),
           };
+
+          if (intent.actionId) {
+            const actionNode = buildActionNode(intent.actionId, getWorkflowPosition(layout, index, origin), {
+              label: intent.label,
+              params: {
+                ...params,
+                ...(typeof intent.prompt === 'string' ? { prompt: intent.prompt } : {}),
+              },
+              metadata,
+            });
+            if (!actionNode) {
+              return null;
+            }
+            return {
+              ...actionNode,
+              assetRefs: intent.assetRefs?.map((assetRef) => ({
+                id: assetRef.id,
+                type: assetRef.type,
+                url: assetRef.url,
+                data: {
+                  name: assetRef.name,
+                  durationMs: assetRef.durationMs,
+                  trimStartMs: assetRef.trimStartMs,
+                  trimEndMs: assetRef.trimEndMs,
+                  role: assetRef.role,
+                },
+                metadata: assetRef.metadata,
+              })),
+            } satisfies NodeDefinition;
+          }
 
           if (kind !== 'comment') {
             params.model = typeof params.model === 'string' ? params.model : model;
@@ -481,10 +518,7 @@ export function useStudioGraphActions(projectId?: string) {
           return buildCanonicalNode(kind, getWorkflowPosition(layout, index, origin), {
             label: intent.label,
             params,
-            metadata: {
-              generatedByWorkflow: true,
-              ...(intent.metadata ?? {}),
-            },
+            metadata,
           });
         })
         .filter(Boolean) as NodeDefinition[];
@@ -572,7 +606,7 @@ export function useStudioGraphActions(projectId?: string) {
 
       return { nodes, edges };
     },
-    [buildCanonicalNode, nodeDefinitions]
+    [buildActionNode, buildCanonicalNode, nodeDefinitions]
   );
 
   const connectNodes = useCallback(

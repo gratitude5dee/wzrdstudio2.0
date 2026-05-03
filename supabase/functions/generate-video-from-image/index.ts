@@ -209,6 +209,11 @@ serve(async (req) => {
     );
     console.log(`[Shot ${shot_id}] Normalized queue payload:`, JSON.stringify(submission.payload));
 
+    await supabase
+      .from('shots')
+      .update({ video_status: 'generating', failure_reason: null })
+      .eq('id', shot_id);
+
     let videoGenerationJobId: string | null = null;
     try {
       videoGenerationJobId = await createGenerationJob(supabase, {

@@ -11,6 +11,7 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 const EXPORT_BUCKET = 'final-exports';
 const DEFAULT_IMAGE_DURATION_MS = 5000;
+const DEFAULT_VIDEO_DURATION_MS = 6000;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -87,7 +88,7 @@ const syncTimelineAssets = async (supabaseAdmin: any, userId: string, projectId:
   const { data: shots, error: shotsError } = await supabaseAdmin
     .from('shots')
     .select(
-      'id, scene_id, shot_number, image_url, video_url, image_status, video_status, prompt_idea, visual_prompt'
+      'id, scene_id, shot_number, image_url, video_url, audio_url, audio_status, image_status, video_status, prompt_idea, visual_prompt, dialogue, sound_effects'
     )
     .eq('project_id', projectId);
 
@@ -95,12 +96,25 @@ const syncTimelineAssets = async (supabaseAdmin: any, userId: string, projectId:
     throw new Error(`Failed to fetch shots: ${shotsError.message}`);
   }
 
+  const { data: finalAudioAssets, error: finalAudioError } = await supabaseAdmin
+    .from('final_project_assets')
+    .select('id, asset_type, file_url, duration_ms, metadata')
+    .eq('project_id', projectId)
+    .eq('user_id', userId)
+    .eq('asset_type', 'audio');
+
+  if (finalAudioError) {
+    throw new Error(`Failed to fetch final audio assets: ${finalAudioError.message}`);
+  }
+
   await supabaseAdmin.from('timeline_assets').delete().eq('project_id', projectId);
 
   let sequenceIndex = 0;
+  let timelineMs = 0;
   let missingShots = 0;
   let readyVideos = 0;
   let fallbackImages = 0;
+  let audioAssets = 0;
   const rowsToInsert: Record<string, unknown>[] = [];
 
   for (const scene of scenes || []) {
@@ -111,6 +125,7 @@ const syncTimelineAssets = async (supabaseAdmin: any, userId: string, projectId:
     for (const shot of sceneShots) {
       const hasVideo = !!shot.video_url;
       const hasImage = !!shot.image_url;
+      const segmentDurationMs = hasVideo ? DEFAULT_VIDEO_DURATION_MS : DEFAULT_IMAGE_DURATION_MS;
 
       if (!hasVideo && !hasImage) {
         missingShots += 1;
@@ -130,9 +145,12 @@ const syncTimelineAssets = async (supabaseAdmin: any, userId: string, projectId:
         position_order: sequenceIndex,
         asset_type: hasVideo ? 'video' : 'image',
         source_url: hasVideo ? shot.video_url : shot.image_url,
-        duration_ms: hasVideo ? null : DEFAULT_IMAGE_DURATION_MS,
+        duration_ms: segmentDurationMs,
         metadata: {
           asset_role: 'shot_visual',
+          start_ms: timelineMs,
+          duration_ms: segmentDurationMs,
+          track: 'visual',
           thumbnail_url: shot.image_url,
           scene_number: scene.scene_number,
           shot_number: shot.shot_number,
@@ -142,8 +160,54 @@ const syncTimelineAssets = async (supabaseAdmin: any, userId: string, projectId:
         },
         user_id: userId,
       });
+
+      if (shot.audio_url) {
+        rowsToInsert.push({
+          project_id: projectId,
+          scene_id: shot.scene_id,
+          shot_id: shot.id,
+          position_order: sequenceIndex,
+          asset_type: 'audio',
+          source_url: shot.audio_url,
+          duration_ms: null,
+          metadata: {
+            asset_role: 'voiceover',
+            start_ms: timelineMs,
+            track: 'voiceover',
+            scene_number: scene.scene_number,
+            shot_number: shot.shot_number,
+            dialogue: shot.dialogue,
+            sound_effects: shot.sound_effects,
+          },
+          user_id: userId,
+        });
+        audioAssets += 1;
+      }
       sequenceIndex += 1;
+      timelineMs += segmentDurationMs;
     }
+  }
+
+  for (const asset of finalAudioAssets || []) {
+    if (!asset.file_url) continue;
+    rowsToInsert.push({
+      project_id: projectId,
+      scene_id: null,
+      shot_id: null,
+      position_order: 0,
+      asset_type: 'audio',
+      source_url: asset.file_url,
+      duration_ms: asset.duration_ms,
+      metadata: {
+        ...((asset.metadata ?? {}) as Record<string, unknown>),
+        asset_role: 'music',
+        start_ms: 0,
+        track: 'music',
+        final_project_asset_id: asset.id,
+      },
+      user_id: userId,
+    });
+    audioAssets += 1;
   }
 
   if (rowsToInsert.length > 0) {
@@ -162,11 +226,13 @@ const syncTimelineAssets = async (supabaseAdmin: any, userId: string, projectId:
     readyVideos,
     fallbackImages,
     missingShots,
+    audioAssets,
   };
 };
 
 const runDirectorCutJob = async (
   supabaseAdmin: any,
+  userId: string,
   projectId: string,
   jobId: string,
   assets: ExportAsset[],
@@ -179,7 +245,7 @@ const runDirectorCutJob = async (
         provider: 'fal_remote',
         provider_status: 'processing',
         progress: 10,
-        provider_payload: { stage: 'remote_processing' },
+        provider_payload: { stage: 'submitting_to_provider' },
       })
       .eq('id', jobId);
 
@@ -211,6 +277,25 @@ const runDirectorCutJob = async (
         provider_payload: completedPayload,
       })
       .eq('id', jobId);
+
+    const { error: finalAssetError } = await supabaseAdmin
+      .from('final_project_assets')
+      .insert({
+        project_id: projectId,
+        user_id: userId,
+        asset_type: 'video',
+        file_url: publicUrl,
+        storage_bucket: EXPORT_BUCKET,
+        metadata: {
+          export_job_id: jobId,
+          source: 'director_cut',
+          partial_success: shotFailures.length > 0,
+        },
+      });
+
+    if (finalAssetError) {
+      console.warn('Failed to record final Director cut asset:', finalAssetError.message);
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Processing failed';
     console.error('Director cut processing failed:', message);
@@ -348,7 +433,7 @@ serve(async (req) => {
            provider: 'fal_remote',
           provider_status: 'queued',
           fallback_used: false,
-          provider_payload: { stage: 'remote_processing' },
+          provider_payload: { stage: 'syncing_assets' },
         })
         .select()
         .single();
@@ -360,6 +445,7 @@ serve(async (req) => {
       // runDirectorCutJob handles its own error recording
       const runPromise = runDirectorCutJob(
         supabaseAdmin,
+        user.id,
         projectId,
         job.id,
         exportAssets,
