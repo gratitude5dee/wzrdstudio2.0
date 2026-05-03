@@ -20,19 +20,25 @@ export interface DirectorCutSummary {
 export type DirectorCutStage =
   | 'idle'
   | 'syncing_assets'
+  | 'preflighting_assets'
   | 'submitting_to_provider'
   | 'provider_processing'
+  | 'fallback_processing'
   | 'downloading_assets'
   | 'uploading_final_video'
+  | 'failed'
   | 'completed';
 
 export const STAGE_LABELS: Record<DirectorCutStage, string> = {
   idle: 'Idle',
   syncing_assets: 'Syncing timeline assets',
+  preflighting_assets: 'Checking media URLs',
   submitting_to_provider: 'Submitting to provider',
   provider_processing: 'Provider processing',
+  fallback_processing: 'Editframe fallback',
   downloading_assets: 'Downloading assets',
   uploading_final_video: 'Uploading final video',
+  failed: 'Failed',
   completed: 'Completed',
 };
 

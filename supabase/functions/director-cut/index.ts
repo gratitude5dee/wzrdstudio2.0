@@ -3,8 +3,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import {
   ExportAsset,
   ExportSettings,
+  ExportProcessingError,
   processAssetsRemote,
-  type ShotFailure,
 } from '../_shared/export-helpers.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
@@ -249,7 +249,7 @@ const runDirectorCutJob = async (
       })
       .eq('id', jobId);
 
-    const { publicUrl, shotFailures } = await processAssetsRemote(
+    const result = await processAssetsRemote(
       supabaseAdmin,
       projectId,
       assets,
@@ -257,8 +257,12 @@ const runDirectorCutJob = async (
       EXPORT_BUCKET,
       settings
     );
+    const { publicUrl, shotFailures } = result;
 
-    const completedPayload: Record<string, unknown> = { stage: 'completed' };
+    const completedPayload: Record<string, unknown> = {
+      ...(result.providerPayload ?? {}),
+      stage: 'completed',
+    };
     if (shotFailures.length > 0) {
       completedPayload.shotFailures = shotFailures;
       completedPayload.partialSuccess = true;
@@ -271,8 +275,9 @@ const runDirectorCutJob = async (
         status: 'completed',
         progress: 100,
         output_url: publicUrl,
-        provider: 'fal_remote',
+        provider: result.provider,
         provider_status: 'completed',
+        fallback_used: result.fallbackUsed,
         completed_at: new Date().toISOString(),
         provider_payload: completedPayload,
       })
@@ -298,6 +303,14 @@ const runDirectorCutJob = async (
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Processing failed';
+    const providerPayload = error instanceof ExportProcessingError
+      ? {
+          ...error.providerPayload,
+          stage: 'failed',
+          shotFailures: error.shotFailures,
+          failedShotCount: error.shotFailures.length,
+        }
+      : { stage: 'failed', error: message };
     console.error('Director cut processing failed:', message);
     await supabaseAdmin
       .from('export_jobs')
@@ -306,6 +319,7 @@ const runDirectorCutJob = async (
         error_message: message,
         provider_status: 'failed',
         completed_at: new Date().toISOString(),
+        provider_payload: providerPayload,
       })
       .eq('id', jobId);
   }
@@ -430,7 +444,7 @@ serve(async (req) => {
           progress: 5,
           settings: settings ?? {},
           started_at: new Date().toISOString(),
-           provider: 'fal_remote',
+          provider: 'fal_remote',
           provider_status: 'queued',
           fallback_used: false,
           provider_payload: { stage: 'syncing_assets' },

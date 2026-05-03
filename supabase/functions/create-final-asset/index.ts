@@ -6,7 +6,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
-import { ExportAsset, ExportSettings, processAssetsRemote } from '../_shared/export-helpers.ts';
+import { ExportAsset, ExportProcessingError, ExportSettings, processAssetsRemote } from '../_shared/export-helpers.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
@@ -81,6 +81,7 @@ serve(async (req) => {
           provider: job.provider,
           providerStatus: job.provider_status,
           fallbackUsed: job.fallback_used,
+          providerPayload: job.provider_payload,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -127,7 +128,7 @@ serve(async (req) => {
     }
 
     try {
-      const { publicUrl, shotFailures } = await processAssetsRemote(
+      const result = await processAssetsRemote(
         supabaseAdmin,
         projectId,
         assets,
@@ -135,8 +136,12 @@ serve(async (req) => {
         EXPORT_BUCKET,
         settings
       );
+      const { publicUrl, shotFailures } = result;
 
-      const completedPayload: Record<string, unknown> = {};
+      const completedPayload: Record<string, unknown> = {
+        ...(result.providerPayload ?? {}),
+        stage: 'completed',
+      };
       if (shotFailures.length > 0) {
         completedPayload.shotFailures = shotFailures;
         completedPayload.partialSuccess = true;
@@ -149,11 +154,11 @@ serve(async (req) => {
           status: 'completed',
           progress: 100,
           output_url: publicUrl,
+          provider: result.provider,
           provider_status: 'completed',
+          fallback_used: result.fallbackUsed,
           completed_at: new Date().toISOString(),
-          ...(Object.keys(completedPayload).length > 0
-            ? { provider_payload: completedPayload }
-            : {}),
+          provider_payload: completedPayload,
         })
         .eq('id', job.id);
 
@@ -169,6 +174,14 @@ serve(async (req) => {
     } catch (processingError) {
       const message =
         processingError instanceof Error ? processingError.message : 'Unknown processing error';
+      const providerPayload = processingError instanceof ExportProcessingError
+        ? {
+            ...processingError.providerPayload,
+            stage: 'failed',
+            shotFailures: processingError.shotFailures,
+            failedShotCount: processingError.shotFailures.length,
+          }
+        : { stage: 'failed', error: message };
 
       await supabaseAdmin
         .from('export_jobs')
@@ -177,6 +190,7 @@ serve(async (req) => {
           error_message: message,
           provider_status: 'failed',
           completed_at: new Date().toISOString(),
+          provider_payload: providerPayload,
         })
         .eq('id', job.id);
 

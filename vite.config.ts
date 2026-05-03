@@ -1,5 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
+import { vitePluginEditframe } from "@editframe/vite-plugin";
+import { viteSingleFile } from "vite-plugin-singlefile";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 
@@ -11,6 +13,12 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [
     react(),
+    vitePluginEditframe({
+      root: "./src",
+      cacheRoot: "./node_modules/.cache/editframe",
+    }),
+    mode === 'editframe' &&
+    viteSingleFile(),
     mode === 'development' &&
     componentTagger(),
   ].filter(Boolean),

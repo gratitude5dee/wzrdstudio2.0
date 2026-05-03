@@ -26,7 +26,15 @@ export type WzrdAgentPhase =
   | 'planning'
   | 'preview_blueprint'
   | 'materializing'
+  | 'setup_error'
   | 'ready_to_run';
+
+export interface WzrdSetupErrorState {
+  message: string;
+  setupErrors: string[];
+  provider?: string | null;
+  model?: string | null;
+}
 
 interface UseWorkflowGenerationOptions {
   projectId?: string;
@@ -34,6 +42,40 @@ interface UseWorkflowGenerationOptions {
   onWorkflowGenerated: (nodes: NodeDefinition[], edges: EdgeDefinition[]) => void;
   onComplete?: () => void;
   settings?: WorkflowGenerationSettings;
+}
+
+async function readWorkflowFunctionError(error: unknown): Promise<{
+  message: string;
+  setupError?: WzrdSetupErrorState;
+}> {
+  const fallbackMessage = error instanceof Error ? error.message : 'Failed to generate workflow';
+  const context = (error as { context?: Response })?.context;
+  if (!context || typeof context.clone !== 'function') {
+    return { message: fallbackMessage };
+  }
+
+  try {
+    const body = await context.clone().json();
+    const details = body?.details && typeof body.details === 'object' ? body.details : {};
+    const setupErrors = Array.isArray(details.setupErrors)
+      ? details.setupErrors.filter((item: unknown): item is string => typeof item === 'string')
+      : [];
+    const message = typeof body?.error === 'string' ? body.error : fallbackMessage;
+    if (details.code === 'wzrd_codex_setup' || details.code === 'openai_responses_setup_error' || setupErrors.length > 0) {
+      return {
+        message,
+        setupError: {
+          message,
+          setupErrors,
+          provider: typeof details.provider === 'string' ? details.provider : 'codex',
+          model: typeof details.model === 'string' ? details.model : null,
+        },
+      };
+    }
+    return { message };
+  } catch {
+    return { message: fallbackMessage };
+  }
 }
 
 export function useWorkflowGeneration({
@@ -49,6 +91,7 @@ export function useWorkflowGeneration({
   const [assistantMessage, setAssistantMessage] = useState<string | null>(null);
   const [questions, setQuestions] = useState<WzrdGeneratedQuestion[]>([]);
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
+  const [setupError, setSetupError] = useState<WzrdSetupErrorState | null>(null);
   const nodeDefinitions = useComputeFlowStore((state) => state.nodeDefinitions);
   const edgeDefinitions = useComputeFlowStore((state) => state.edgeDefinitions);
   const projectTitle = useAppStore((state) => state.activeProjectName);
@@ -146,6 +189,7 @@ export function useWorkflowGeneration({
 
     setIsGenerating(true);
     setPhase('analyzing_assets');
+    setSetupError(null);
     try {
       const { data, error } = await supabase.functions.invoke('generate-workflow', {
         body: {
@@ -157,7 +201,14 @@ export function useWorkflowGeneration({
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        const parsedError = await readWorkflowFunctionError(error);
+        if (parsedError.setupError) {
+          setSetupError(parsedError.setupError);
+          setPhase('setup_error');
+        }
+        throw new Error(parsedError.message);
+      }
 
       setAssistantMessage(data?.assistantMessage ?? data?.blueprint?.assistantMessage ?? null);
       const nextQuestions = Array.isArray(data?.questions)
@@ -197,7 +248,7 @@ export function useWorkflowGeneration({
     } catch (error: unknown) {
       console.error('Workflow generation failed:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to generate workflow');
-      setPhase('draft');
+      setPhase((current) => current === 'setup_error' ? 'setup_error' : 'draft');
     } finally {
       setIsGenerating(false);
     }
@@ -211,6 +262,7 @@ export function useWorkflowGeneration({
     if (!prompt.trim()) return;
     setIsGenerating(true);
     setPhase('materializing');
+    setSetupError(null);
     try {
       const { data, error } = await supabase.functions.invoke('generate-workflow', {
         body: {
@@ -223,7 +275,14 @@ export function useWorkflowGeneration({
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        const parsedError = await readWorkflowFunctionError(error);
+        if (parsedError.setupError) {
+          setSetupError(parsedError.setupError);
+          setPhase('setup_error');
+        }
+        throw new Error(parsedError.message);
+      }
       const blueprintCandidate = data?.blueprint ?? data;
       if (!isWorkflowBlueprint(blueprintCandidate)) {
         throw new Error('Invalid workflow response');
@@ -248,7 +307,7 @@ export function useWorkflowGeneration({
     } catch (error: unknown) {
       console.error('Workflow materialization failed:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to create WZRD nodes');
-      setPhase('asking_questions');
+      setPhase((current) => current === 'setup_error' ? 'setup_error' : 'asking_questions');
     } finally {
       setIsGenerating(false);
     }
@@ -258,6 +317,7 @@ export function useWorkflowGeneration({
     setQuestions([]);
     setAnswers({});
     setAssistantMessage(null);
+    setSetupError(null);
     setPhase('draft');
   }, []);
 
@@ -287,6 +347,7 @@ export function useWorkflowGeneration({
     assistantMessage,
     questions,
     answers,
+    setupError,
     setAnswer,
     handleGenerate,
     handleMaterialize,

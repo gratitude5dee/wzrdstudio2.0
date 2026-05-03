@@ -1,0 +1,202 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  ExportProcessingError,
+  extractVideoUrl,
+  processAssetsRemote,
+  type ExportAsset,
+} from '../../../../supabase/functions/_shared/export-helpers';
+
+describe('extractVideoUrl', () => {
+  it('reads common fal top-level output shapes', () => {
+    expect(extractVideoUrl({ video_url: 'https://cdn.example.com/direct.mp4' }))
+      .toBe('https://cdn.example.com/direct.mp4');
+    expect(extractVideoUrl({ output_url: 'https://cdn.example.com/output.mp4' }))
+      .toBe('https://cdn.example.com/output.mp4');
+  });
+
+  it('reads nested video and file object output shapes', () => {
+    expect(extractVideoUrl({ video: { url: 'https://cdn.example.com/video.mp4' } }))
+      .toBe('https://cdn.example.com/video.mp4');
+    expect(extractVideoUrl({ data: { file: { url: 'https://cdn.example.com/file.mp4' } } }))
+      .toBe('https://cdn.example.com/file.mp4');
+  });
+
+  it('ignores non-output strings and missing URLs', () => {
+    expect(extractVideoUrl({ response_url: 'https://queue.fal.run/result' })).toBeNull();
+    expect(extractVideoUrl({ data: { video: { url: '/relative/output.mp4' } } })).toBeNull();
+    expect(extractVideoUrl({ data: { logs: ['done'] } })).toBeNull();
+  });
+});
+
+describe('processAssetsRemote', () => {
+  const originalFetch = globalThis.fetch;
+  const updates: Array<Record<string, unknown>> = [];
+
+  const supabaseAdmin = {
+    from: () => ({
+      update: (patch: Record<string, unknown>) => ({
+        eq: async () => {
+          updates.push(patch);
+          return { error: null };
+        },
+      }),
+    }),
+    storage: {
+      from: () => ({
+        upload: vi.fn(async () => ({ error: null })),
+        getPublicUrl: () => ({ data: { publicUrl: 'https://storage.example.com/final.mp4' } }),
+      }),
+    },
+  };
+
+  beforeEach(() => {
+    updates.length = 0;
+    (globalThis as unknown as { Deno: unknown }).Deno = {
+      env: {
+        get: (key: string) => key === 'FAL_KEY' ? 'fal-key' : undefined,
+      },
+    };
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    globalThis.fetch = originalFetch;
+    delete (globalThis as unknown as { Deno?: unknown }).Deno;
+  });
+
+  function responseJson(body: unknown, init: ResponseInit = {}) {
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+      ...init,
+    });
+  }
+
+  function mp4Response() {
+    return new Response(new Uint8Array([1, 2, 3]), {
+      status: 200,
+      headers: { 'Content-Type': 'video/mp4' },
+    });
+  }
+
+  it('uses one fal compose job for image timelines', async () => {
+    const requests: Array<{ url: string; input?: Record<string, unknown> }> = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === 'HEAD') return new Response(null, { status: 200 });
+      if (url.includes('/fal-ai/ffmpeg-api/compose')) {
+        const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
+        requests.push({ url, input: body });
+        return responseJson({
+          request_id: 'compose-request',
+          status_url: 'https://queue.fal.run/compose-status',
+          response_url: 'https://queue.fal.run/compose-result',
+        });
+      }
+      if (url.startsWith('https://queue.fal.run/compose-status')) {
+        return responseJson({ status: 'COMPLETED' });
+      }
+      if (url === 'https://queue.fal.run/compose-result') {
+        return responseJson({ video_url: 'https://cdn.example.com/composed.mp4' });
+      }
+      if (url === 'https://cdn.example.com/composed.mp4') return mp4Response();
+      throw new Error(`Unexpected fetch ${url}`);
+    }) as typeof fetch;
+
+    const assets: ExportAsset[] = Array.from({ length: 14 }, (_, index) => ({
+      id: `image-${index}`,
+      type: 'image',
+      url: `https://cdn.example.com/image-${index}.jpg`,
+      duration_ms: 5000,
+      order_index: index,
+    }));
+
+    const result = await processAssetsRemote(
+      supabaseAdmin,
+      'project-1',
+      assets,
+      'job-1',
+      'final-exports',
+      { includeAudio: false }
+    );
+
+    const composeRequest = requests.find((request) => request.url.includes('compose'));
+    const tracks = (composeRequest?.input?.tracks ?? []) as unknown[];
+    expect(result.provider).toBe('fal_remote');
+    expect(result.publicUrl).toBe('https://storage.example.com/final.mp4');
+    expect(tracks).toHaveLength(14);
+    expect(requests.some((request) => request.url.includes('merge-videos'))).toBe(false);
+  });
+
+  it('uses fal merge-videos for pure sequential video timelines', async () => {
+    const requests: string[] = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === 'HEAD') return new Response(null, { status: 200 });
+      if (url.includes('/fal-ai/ffmpeg-api/merge-videos')) {
+        requests.push(url);
+        return responseJson({
+          request_id: 'merge-request',
+          status_url: 'https://queue.fal.run/merge-status',
+          response_url: 'https://queue.fal.run/merge-result',
+        });
+      }
+      if (url.startsWith('https://queue.fal.run/merge-status')) {
+        return responseJson({ status: 'COMPLETED' });
+      }
+      if (url === 'https://queue.fal.run/merge-result') {
+        return responseJson({ video: { url: 'https://cdn.example.com/merged.mp4' } });
+      }
+      if (url === 'https://cdn.example.com/merged.mp4') return mp4Response();
+      throw new Error(`Unexpected fetch ${url}`);
+    }) as typeof fetch;
+
+    const result = await processAssetsRemote(
+      supabaseAdmin,
+      'project-1',
+      [
+        { id: 'video-1', type: 'video', url: 'https://cdn.example.com/1.mp4', duration_ms: 5000, order_index: 0 },
+        { id: 'video-2', type: 'video', url: 'https://cdn.example.com/2.mp4', duration_ms: 5000, order_index: 1 },
+      ],
+      'job-2',
+      'final-exports',
+      { includeAudio: false }
+    );
+
+    expect(result.providerPayload.renderer).toBe('fal-ai/ffmpeg-api/merge-videos');
+    expect(requests).toHaveLength(1);
+  });
+
+  it('reports fal failure and unavailable Editframe fallback clearly', async () => {
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === 'HEAD') return new Response(null, { status: 200 });
+      if (url.includes('/fal-ai/ffmpeg-api/compose')) {
+        return responseJson({
+          request_id: 'failed-compose',
+          status_url: 'https://queue.fal.run/failed-compose-status',
+        });
+      }
+      if (url.startsWith('https://queue.fal.run/failed-compose-status')) {
+        return responseJson({ status: 'FAILED', logs: [{ message: 'bad source' }] });
+      }
+      throw new Error(`Unexpected fetch ${url}`);
+    }) as typeof fetch;
+
+    await expect(processAssetsRemote(
+      supabaseAdmin,
+      'project-1',
+      [{ id: 'image-1', type: 'image', url: 'https://cdn.example.com/image.jpg', duration_ms: 5000, order_index: 0 }],
+      'job-3',
+      'final-exports',
+      { includeAudio: false }
+    )).rejects.toMatchObject({
+      name: 'ExportProcessingError',
+      providerPayload: {
+        fallbackStatus: 'unavailable',
+        fallbackError: 'EDITFRAME_API_KEY is not configured',
+        falRequestId: 'failed-compose',
+      },
+    } satisfies Partial<ExportProcessingError>);
+  });
+});

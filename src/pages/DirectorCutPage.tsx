@@ -38,8 +38,10 @@ const StatCard = ({
 /** The ordered pipeline stages for the Director's Cut. */
 const PIPELINE_STAGES: DirectorCutStage[] = [
   'syncing_assets',
+  'preflighting_assets',
   'submitting_to_provider',
   'provider_processing',
+  'fallback_processing',
   'downloading_assets',
   'uploading_final_video',
   'completed',

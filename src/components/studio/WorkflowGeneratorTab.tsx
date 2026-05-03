@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Send, Loader2, Music, Disc3, Mic2, Megaphone, Film, Wand2, ChevronRight, Sparkles, X, CheckCircle2 } from 'lucide-react';
+import { Send, Loader2, Music, Disc3, Mic2, Megaphone, Film, Wand2, ChevronRight, Sparkles, X, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useWorkflowGeneration } from '@/hooks/studio/useWorkflowGeneration';
@@ -80,6 +80,7 @@ export function WorkflowGeneratorTab({
     assistantMessage,
     questions,
     answers,
+    setupError,
     setAnswer,
     handleGenerate,
     handleMaterialize,
@@ -370,6 +371,26 @@ export function WorkflowGeneratorTab({
           {assistantMessage ? (
             <div className="mt-3 rounded-[18px] border border-[rgba(249,115,22,0.12)] bg-[#171717] px-3 py-3 text-xs leading-5 text-zinc-300">
               {assistantMessage}
+            </div>
+          ) : null}
+          {setupError ? (
+            <div className="mt-3 rounded-[18px] border border-amber-500/30 bg-amber-500/10 px-3 py-3 text-xs leading-5 text-amber-100">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+                <div className="min-w-0">
+                  <p className="font-medium text-amber-100">{setupError.message}</p>
+                  <p className="mt-1 text-amber-100/70">
+                    Add `OPENAI_API_KEY` and `WZRD_AGENT_MODEL` as Supabase Edge Function secrets, then redeploy the function.
+                  </p>
+                  {setupError.setupErrors.length > 0 ? (
+                    <div className="mt-2 space-y-1 text-amber-100/80">
+                      {setupError.setupErrors.map((item) => (
+                        <p key={item}>{item}</p>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
             </div>
           ) : null}
           {hasQuestions ? (

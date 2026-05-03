@@ -1,10 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { authenticateRequest, AuthError } from '../_shared/auth.ts';
-import { corsHeaders, handleCors, errorResponse } from '../_shared/response.ts';
+import { corsHeaders, handleCors, errorResponse, successResponse } from '../_shared/response.ts';
 import { MEDIA_ACTIONS } from '../../../shared/mediaActionRegistry.ts';
 
-type WorkflowMode = 'legacy' | 'plan' | 'materialize' | 'repair';
+type WorkflowMode = 'legacy' | 'plan' | 'materialize' | 'repair' | 'health';
 
 type AssetRef = {
   id: string;
@@ -106,6 +106,18 @@ type OpenAIFunctionCall = {
   arguments?: string;
 };
 
+class WzrdProviderSetupError extends Error {
+  details: Record<string, unknown>;
+  status: number;
+
+  constructor(message: string, details: Record<string, unknown> = {}, status = 503) {
+    super(message);
+    this.name = 'WzrdProviderSetupError';
+    this.details = details;
+    this.status = status;
+  }
+}
+
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 const ACTION_IDS = new Set(MEDIA_ACTIONS.map((action) => action.actionId));
@@ -122,6 +134,53 @@ const ACTION_CATALOG = MEDIA_ACTIONS.map((action) => ({
   defaultModelId: action.defaultModelId,
   executor: action.executor,
 }));
+
+function getWzrdProviderConfig() {
+  const rawProvider = (Deno.env.get('WZRD_AGENT_PROVIDER') || 'codex').trim().toLowerCase();
+  const provider = rawProvider === 'groq' || rawProvider === 'codex' ? rawProvider : 'codex';
+  const model = Deno.env.get('WZRD_AGENT_MODEL') || '';
+  const fallbackModel = Deno.env.get('WZRD_AGENT_FALLBACK_MODEL') || 'llama-3.3-70b-versatile';
+  const hasOpenAIKey = Boolean(Deno.env.get('OPENAI_API_KEY'));
+  const hasGroqKey = Boolean(Deno.env.get('GROQ_API_KEY'));
+  const setupErrors: string[] = [];
+
+  if (rawProvider !== provider) {
+    setupErrors.push(`WZRD_AGENT_PROVIDER must be "codex" or "groq"; received "${rawProvider}".`);
+  }
+  if (provider === 'codex') {
+    if (!hasOpenAIKey) setupErrors.push('OPENAI_API_KEY is not configured in Supabase Edge Function secrets.');
+    if (!model) setupErrors.push('WZRD_AGENT_MODEL is not configured in Supabase Edge Function secrets.');
+  }
+  if (provider === 'groq' && !hasGroqKey) {
+    setupErrors.push('GROQ_API_KEY is not configured in Supabase Edge Function secrets.');
+  }
+
+  return {
+    provider,
+    rawProvider,
+    model,
+    fallbackModel,
+    hasOpenAIKey,
+    hasGroqKey,
+    ready: setupErrors.length === 0,
+    setupErrors,
+  };
+}
+
+function assertCodexConfigured() {
+  const config = getWzrdProviderConfig();
+  if (config.provider !== 'codex') return config;
+  if (!config.ready) {
+    throw new WzrdProviderSetupError('WZRD Agent is not configured for Codex.', {
+      code: 'wzrd_codex_setup',
+      provider: config.provider,
+      rawProvider: config.rawProvider,
+      model: config.model || null,
+      setupErrors: config.setupErrors,
+    });
+  }
+  return config;
+}
 
 const MODEL_PRESETS: Record<string, Record<string, string>> = {
   fast: { Image: 'flux-schnell', Video: 'kling-2-1', Text: 'llama-3.3-70b-versatile' },
@@ -685,6 +744,14 @@ async function postOpenAIResponse(apiKey: string, body: Record<string, unknown>)
 
   const text = await response.text();
   if (!response.ok) {
+    const isSetupStatus = response.status === 400 || response.status === 401 || response.status === 403 || response.status === 404;
+    if (isSetupStatus) {
+      throw new WzrdProviderSetupError('WZRD Agent Codex request failed.', {
+        code: 'openai_responses_setup_error',
+        status: response.status,
+        response: text.slice(0, 2000),
+      });
+    }
     throw new Error(`OpenAI Responses API error (${response.status}): ${text}`);
   }
   return JSON.parse(text) as Record<string, unknown>;
@@ -698,12 +765,10 @@ async function callCodexAgent(input: {
   enabledModelIds: string[];
   validationErrors?: string[];
 }): Promise<AgentResponse> {
-  const apiKey = Deno.env.get('OPENAI_API_KEY');
-  if (!apiKey) {
-    throw new Error('OPENAI_API_KEY is not configured');
-  }
+  const config = assertCodexConfigured();
+  const apiKey = Deno.env.get('OPENAI_API_KEY')!;
+  const model = config.model;
 
-  const model = Deno.env.get('WZRD_AGENT_MODEL') || 'gpt-5.3-codex';
   const textFormat = {
     format: {
       type: 'json_schema',
@@ -863,6 +928,20 @@ serve(async (req) => {
       validationErrors?: string[];
     };
 
+    if (mode === 'health') {
+      const config = getWzrdProviderConfig();
+      return successResponse({
+        provider: config.provider,
+        rawProvider: config.rawProvider,
+        model: config.model || null,
+        fallbackModel: config.fallbackModel,
+        hasOpenAIKey: config.hasOpenAIKey,
+        hasGroqKey: config.hasGroqKey,
+        ready: config.ready,
+        setupErrors: config.setupErrors,
+      });
+    }
+
     if (!prompt) {
       return errorResponse('Prompt is required', 400);
     }
@@ -880,7 +959,8 @@ serve(async (req) => {
       answers: answers ?? context.answers ?? {},
     };
     const enabledModelIds = await fetchEnabledModelIds(supabaseAdmin);
-    const providerPreference = Deno.env.get('WZRD_AGENT_PROVIDER') || 'codex';
+    const providerConfig = getWzrdProviderConfig();
+    const providerPreference = providerConfig.provider;
 
     if (mode === 'legacy') {
       const blueprint = providerPreference === 'groq'
@@ -914,7 +994,10 @@ serve(async (req) => {
         });
       }
     } catch (error) {
-      console.warn('WZRD Codex provider failed; using fallback planner:', error instanceof Error ? error.message : error);
+      if (providerPreference === 'codex') {
+        throw error;
+      }
+      console.warn('WZRD provider failed; using fallback planner:', error instanceof Error ? error.message : error);
       provider = 'fallback';
       agentResponse = {
         assistantMessage: 'I drafted a safe starter workflow and a few setup choices.',
@@ -1005,6 +1088,10 @@ serve(async (req) => {
   } catch (error: unknown) {
     if (error instanceof AuthError) {
       return errorResponse(error.message, 401);
+    }
+    if (error instanceof WzrdProviderSetupError) {
+      console.warn('WZRD setup error:', error.message, error.details);
+      return errorResponse(error.message, error.status, error.details);
     }
     console.error('Workflow generation error:', error);
     return errorResponse(error instanceof Error ? error.message : 'Internal server error', 500);

@@ -26,10 +26,68 @@ export interface FinalProjectAsset {
   created_at: string;
 }
 
+interface FinalProjectAssetRow {
+  id: string;
+  project_id: string;
+  user_id: string;
+  asset_type: 'image' | 'video' | 'audio' | string;
+  file_url?: string | null;
+  duration_ms?: number | null;
+  metadata?: Record<string, unknown> | null;
+  created_at: string;
+}
+
 export interface SaveTimelineToFinalOptions {
   includeVideo?: boolean;
   includeAudio?: boolean;
   audioTypes?: ('voiceover' | 'sfx' | 'music')[];
+}
+
+function metadataString(metadata: Record<string, unknown>, key: string, fallback = ''): string {
+  const value = metadata[key];
+  return typeof value === 'string' ? value : fallback;
+}
+
+function metadataNumber(metadata: Record<string, unknown>, key: string, fallback = 0): number {
+  const value = metadata[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function metadataOptionalNumber(metadata: Record<string, unknown>, key: string): number | undefined {
+  const value = metadata[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function mapFinalProjectAsset(row: FinalProjectAssetRow): FinalProjectAsset {
+  const metadata = row.metadata && typeof row.metadata === 'object' ? row.metadata : {};
+  const url = row.file_url ?? metadataString(metadata, 'url');
+  const assetType = row.asset_type === 'image' || row.asset_type === 'video' || row.asset_type === 'audio'
+    ? row.asset_type
+    : 'video';
+  const assetSubtype = metadataString(metadata, 'asset_subtype');
+
+  return {
+    id: row.id,
+    project_id: row.project_id,
+    asset_type: assetType,
+    asset_subtype: assetSubtype ? assetSubtype as FinalProjectAsset['asset_subtype'] : undefined,
+    name: metadataString(metadata, 'name', `${assetType} asset`),
+    url,
+    thumbnail_url: metadataString(metadata, 'thumbnail_url') || undefined,
+    duration_ms: row.duration_ms ?? metadataOptionalNumber(metadata, 'duration_ms'),
+    order_index: metadataNumber(metadata, 'order_index', 0),
+    shot_card_id: metadataString(metadata, 'shot_card_id') || undefined,
+    metadata,
+    created_at: row.created_at,
+  };
+}
+
+async function getCurrentUserId() {
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user) {
+    throw new Error('Not authenticated');
+  }
+  return data.user.id;
 }
 
 export function useFinalProjectAssets(projectId: string | undefined) {
@@ -54,11 +112,13 @@ export function useFinalProjectAssets(projectId: string | undefined) {
         .from('final_project_assets')
         .select('*')
         .eq('project_id', projectId)
-        .order('order_index', { ascending: true });
+        .order('created_at', { ascending: true });
 
       if (error) throw error;
 
-      setAssets((data || []) as FinalProjectAsset[]);
+      setAssets(((data || []) as FinalProjectAssetRow[])
+        .map(mapFinalProjectAsset)
+        .sort((a, b) => a.order_index - b.order_index));
     } catch (error) {
       console.error('Error loading final project assets:', error);
       toast.error('Failed to load final project assets');
@@ -78,20 +138,33 @@ export function useFinalProjectAssets(projectId: string | undefined) {
 
     setIsSaving(true);
     try {
+      const userId = await getCurrentUserId();
       const { data, error } = await db
         .from('final_project_assets')
         .insert({
           project_id: projectId,
-          ...asset,
+          user_id: userId,
+          asset_type: asset.asset_type,
+          file_url: asset.url,
+          duration_ms: asset.duration_ms,
+          metadata: {
+            ...(asset.metadata ?? {}),
+            name: asset.name,
+            asset_subtype: asset.asset_subtype,
+            order_index: asset.order_index,
+            thumbnail_url: asset.thumbnail_url,
+            shot_card_id: asset.shot_card_id,
+            url: asset.url,
+          },
         })
         .select()
         .single();
 
       if (error) throw error;
 
-      setAssets(prev => [...prev, data as FinalProjectAsset]);
+      setAssets(prev => [...prev, mapFinalProjectAsset(data as FinalProjectAssetRow)]);
       toast.success(`${asset.name} added to final assets`);
-      return data as FinalProjectAsset;
+      return mapFinalProjectAsset(data as FinalProjectAssetRow);
     } catch (error) {
       console.error('Error saving final project asset:', error);
       toast.error('Failed to save asset to final collection');
@@ -183,24 +256,41 @@ export function useFinalProjectAssets(projectId: string | undefined) {
         return false;
       }
 
+      const userId = await getCurrentUserId();
+
       // Clear existing assets first (optional - could be a merge instead)
       await db
         .from('final_project_assets')
         .delete()
-        .eq('project_id', projectId);
+        .eq('project_id', projectId)
+        .eq('user_id', userId);
 
       // Insert all new assets
       const { data, error } = await db
         .from('final_project_assets')
         .insert(assetsToSave.map(asset => ({
           project_id: projectId,
-          ...asset,
+          user_id: userId,
+          asset_type: asset.asset_type,
+          file_url: asset.url,
+          duration_ms: asset.duration_ms,
+          metadata: {
+            ...(asset.metadata ?? {}),
+            name: asset.name,
+            asset_subtype: asset.asset_subtype,
+            order_index: asset.order_index,
+            thumbnail_url: asset.thumbnail_url,
+            shot_card_id: asset.shot_card_id,
+            url: asset.url,
+          },
         })))
         .select();
 
       if (error) throw error;
 
-      setAssets((data || []) as FinalProjectAsset[]);
+      setAssets(((data || []) as FinalProjectAssetRow[])
+        .map(mapFinalProjectAsset)
+        .sort((a, b) => a.order_index - b.order_index));
       toast.success(`${assetsToSave.length} assets saved to final collection`);
       return true;
     } catch (error) {
@@ -219,25 +309,48 @@ export function useFinalProjectAssets(projectId: string | undefined) {
     if (!projectId) return false;
 
     try {
-      const updates = newOrder.map((id, index) => ({
-        id,
-        project_id: projectId,
-        order_index: index,
+      const assetMap = new Map(assets.map(asset => [asset.id, asset]));
+
+      await Promise.all(newOrder.map(async (id, index) => {
+        const asset = assetMap.get(id);
+        if (!asset) return;
+
+        const { error } = await db
+          .from('final_project_assets')
+          .update({
+            metadata: {
+              ...(asset.metadata ?? {}),
+              name: asset.name,
+              asset_subtype: asset.asset_subtype,
+              thumbnail_url: asset.thumbnail_url,
+              shot_card_id: asset.shot_card_id,
+              url: asset.url,
+              order_index: index,
+            },
+          })
+          .eq('id', id)
+          .eq('project_id', projectId);
+
+        if (error) throw error;
       }));
-
-      const { error } = await db
-        .from('final_project_assets')
-        .upsert(updates, { onConflict: 'id' });
-
-      if (error) throw error;
 
       // Update local state
       setAssets(prev => {
         const assetMap = new Map(prev.map(a => [a.id, a]));
-        return newOrder.map((id, index) => ({
-          ...assetMap.get(id)!,
-          order_index: index,
-        }));
+        return newOrder
+          .map((id, index) => {
+            const asset = assetMap.get(id);
+            if (!asset) return null;
+            return {
+              ...asset,
+              order_index: index,
+              metadata: {
+                ...(asset.metadata ?? {}),
+                order_index: index,
+              },
+            };
+          })
+          .filter((asset): asset is FinalProjectAsset => Boolean(asset));
       });
 
       return true;
@@ -246,7 +359,7 @@ export function useFinalProjectAssets(projectId: string | undefined) {
       toast.error('Failed to reorder assets');
       return false;
     }
-  }, [projectId]);
+  }, [projectId, assets]);
 
   /**
    * Remove an asset from the final collection
@@ -273,7 +386,7 @@ export function useFinalProjectAssets(projectId: string | undefined) {
   /**
    * Trigger the FFMPEG stitching process to create the final video
    */
-  const createFinalAsset = useCallback(async () => {
+  const createFinalAsset = useCallback(async (settings: Record<string, unknown> = {}) => {
     if (!projectId) {
       toast.error('No project selected');
       return null;
@@ -303,6 +416,7 @@ export function useFinalProjectAssets(projectId: string | undefined) {
             order_index: a.order_index,
             metadata: a.metadata,
           })),
+          settings,
         },
       });
 
