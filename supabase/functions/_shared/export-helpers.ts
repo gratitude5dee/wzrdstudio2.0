@@ -6,7 +6,7 @@
 import {
   buildEditframeCompositionHtml,
   type EditframeCompositionAsset,
-} from '../../../shared/editframeComposition.ts';
+} from './editframeComposition.ts';
 import { safeLog } from './safe-logger.ts';
 
 export interface ExportAsset {

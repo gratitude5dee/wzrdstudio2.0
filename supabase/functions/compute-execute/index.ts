@@ -14,7 +14,7 @@ import {
   ComputeEdge
 } from "../_shared/compute-utils.ts";
 import { getCatalogModelById } from "../_shared/ai-model-catalog.ts";
-import type { CatalogMediaType } from "../../../shared/ai-model-catalog.ts";
+import type { CatalogMediaType } from "../_shared/ai-model-catalog.ts";
 import {
   buildExecutionSelection,
   buildFalCatalogPayload,
@@ -31,7 +31,7 @@ import {
 import {
   getMediaActionById,
   type MediaActionDefinition,
-} from "../../../shared/mediaActionRegistry.ts";
+} from "../_shared/mediaActionRegistry.ts";
 import {
   executeGmiChatCompletion,
   executeGmiQueueModel,

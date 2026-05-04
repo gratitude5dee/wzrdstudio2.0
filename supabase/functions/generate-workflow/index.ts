@@ -3,12 +3,12 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { authenticateRequest, AuthError } from '../_shared/auth.ts';
 import { corsHeaders, handleCors, errorResponse, successResponse } from '../_shared/response.ts';
 import { safeLog } from '../_shared/safe-logger.ts';
-import { MEDIA_ACTIONS } from '../../../shared/mediaActionRegistry.ts';
+import { MEDIA_ACTIONS } from '../_shared/mediaActionRegistry.ts';
 import {
   extractWzrdOpenAIText,
   normalizeWzrdProviderConfig,
   validateWzrdBlueprintContract,
-} from '../../../shared/wzrdAgentContract.ts';
+} from '../_shared/wzrdAgentContract.ts';
 
 type WorkflowMode = 'legacy' | 'plan' | 'materialize' | 'repair' | 'health';
 
