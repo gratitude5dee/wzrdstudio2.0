@@ -132,7 +132,7 @@ export async function sha256Hex(input: string | ArrayBuffer | Uint8Array): Promi
     throw new Error('Web Crypto SHA-256 is not available in this runtime.');
   }
 
-  const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes as ArrayBuffer);
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', (bytes as unknown) as ArrayBuffer);
   return Array.from(new Uint8Array(digest))
     .map((byte) => byte.toString(16).padStart(2, '0'))
     .join('');
