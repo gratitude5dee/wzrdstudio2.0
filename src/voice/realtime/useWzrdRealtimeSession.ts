@@ -158,13 +158,21 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
         tracingDisabled: true,
         config: {
           voice,
-          modalities: ['text', 'audio'],
-          inputAudioTranscription: {
-            model: 'gpt-4o-mini-transcribe',
-            language: 'en',
+          outputModalities: ['text', 'audio'],
+          audio: {
+            input: {
+              transcription: {
+                model: 'gpt-4o-mini-transcribe',
+                language: 'en',
+              },
+              // Use semantic_vad but don't auto-create responses so
+              // push-to-talk can send response.create manually.
+              turnDetection: {
+                type: 'semantic_vad',
+                createResponse: false,
+              },
+            },
           },
-          // Let the server use its default turn detection (semantic_vad).
-          // Push-to-talk commit/response events are sent by the caller.
         },
       });
 
