@@ -21,6 +21,7 @@ type RealtimeSessionInstance = {
   close: () => void;
   interrupt: () => void;
   transport: {
+    status: string;
     sendEvent: (event: { type: string }) => void;
   };
   on: (event: string, callback: (...args: unknown[]) => void) => void;
