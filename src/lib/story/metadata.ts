@@ -68,7 +68,7 @@ export function buildStoryMetadata(
   const thumbnailUri = item.thumbnail_url ?? item.media_url ?? mediaUri;
   const description =
     item.description?.trim() ||
-    `WorldStudio ${item.asset_kind} finalized from ${item.source_type.replaceAll('_', ' ')}.`;
+    `WorldStudio ${item.asset_kind} finalized from ${item.source_type.replace(/_/g, ' ')}.`;
   const creators =
     options.creators?.length
       ? options.creators
@@ -132,7 +132,7 @@ export async function sha256Hex(input: string | ArrayBuffer | Uint8Array): Promi
     throw new Error('Web Crypto SHA-256 is not available in this runtime.');
   }
 
-  const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes as ArrayBuffer);
   return Array.from(new Uint8Array(digest))
     .map((byte) => byte.toString(16).padStart(2, '0'))
     .join('');

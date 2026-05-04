@@ -66,7 +66,7 @@ export function useStoryProtocolClient(): StoryWalletState {
       chainId: 'aeneid',
       transport: http(STORY_AENEID_RPC_URL),
       wallet: walletClient as any,
-      account: walletClient.account?.address ?? account.address,
+      account: (walletClient.account?.address ?? account.address) as `0x${string}`,
     };
 
     return StoryClient.newClient(config);

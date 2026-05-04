@@ -345,7 +345,7 @@ export function useFinalProjectAssets(projectId: string | undefined) {
               },
             };
           })
-          .filter((asset): asset is FinalProjectAsset => Boolean(asset)) as FinalProjectAsset[];
+          .filter((asset): asset is NonNullable<typeof asset> => Boolean(asset)) as FinalProjectAsset[];
       });
 
       return true;

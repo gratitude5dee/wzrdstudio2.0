@@ -146,7 +146,7 @@ const normalizeMissingShotDetails = (value: unknown): DirectorCutMissingShotDeta
         videoStatus: asString(record.videoStatus),
       };
     })
-    .filter((detail): detail is DirectorCutMissingShotDetail => Boolean(detail)) as DirectorCutMissingShotDetail[];
+    .filter((detail): detail is NonNullable<typeof detail> => Boolean(detail)) as DirectorCutMissingShotDetail[];
 };
 
 const normalizeDirectorCutSummary = (value: unknown): DirectorCutSummary => {
