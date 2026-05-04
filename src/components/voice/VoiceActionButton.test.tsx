@@ -4,6 +4,8 @@ import { fireEvent, render, screen } from '@testing-library/react';
 
 import { VoiceActionButton } from './VoiceActionButton';
 
+const noop = vi.fn();
+
 describe('VoiceActionButton', () => {
   it('starts and stops push-to-talk on pointer press and release', () => {
     const onPressStart = vi.fn();
@@ -14,6 +16,7 @@ describe('VoiceActionButton', () => {
         status="idle"
         onPressStart={onPressStart}
         onPressEnd={onPressEnd}
+        onDisconnect={noop}
       />,
     );
 
@@ -34,10 +37,11 @@ describe('VoiceActionButton', () => {
         status="listening"
         onPressStart={onPressStart}
         onPressEnd={onPressEnd}
+        onDisconnect={noop}
       />,
     );
 
-    const button = screen.getByRole('button', { name: /hold to speak/i });
+    const button = screen.getByRole('button', { name: /hold to speak|tap to disconnect/i });
     fireEvent.keyDown(button, { key: ' ' });
     fireEvent.keyUp(button, { key: ' ' });
 
@@ -53,6 +57,7 @@ describe('VoiceActionButton', () => {
         errorMessage="Microphone permission denied"
         onPressStart={vi.fn()}
         onPressEnd={vi.fn()}
+        onDisconnect={noop}
       />,
     );
 
@@ -65,6 +70,7 @@ describe('VoiceActionButton', () => {
         status="thinking"
         onPressStart={vi.fn()}
         onPressEnd={vi.fn()}
+        onDisconnect={noop}
       />,
     );
 

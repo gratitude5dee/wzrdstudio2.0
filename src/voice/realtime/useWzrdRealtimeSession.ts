@@ -6,6 +6,7 @@ import { fetchRealtimeClientSecret } from './realtimeClientSecret';
 export type VoiceSessionStatus =
   | 'idle'
   | 'connecting'
+  | 'connected'
   | 'listening'
   | 'thinking'
   | 'speaking'
@@ -47,10 +48,22 @@ function stopStream(stream: MediaStream | null) {
   }
 }
 
+/** Errors we can silently ignore (e.g. committing an empty audio buffer on short press). */
+function isBenignError(raw: unknown): boolean {
+  if (raw && typeof raw === 'object') {
+    const rec = raw as Record<string, unknown>;
+    const inner = rec.error as Record<string, unknown> | undefined;
+    if (inner && typeof inner === 'object') {
+      const nested = inner.error as Record<string, unknown> | undefined;
+      const code = nested?.code ?? inner.code;
+      if (code === 'input_audio_buffer_commit_empty') return true;
+    }
+  }
+  return false;
+}
+
 /**
- * Extract a user-friendly message from the SDK's `error` event payload, which
- * can be an Error, a string, or a nested `{ error: { type, message, details } }`
- * object forwarded from the Realtime API.
+ * Extract a user-friendly message from the SDK's `error` event payload.
  */
 function normalizeVoiceError(raw: unknown): string {
   if (raw instanceof Error) {
@@ -65,10 +78,14 @@ function normalizeVoiceError(raw: unknown): string {
   if (raw && typeof raw === 'object') {
     const rec = raw as Record<string, unknown>;
 
-    // SDK wraps server errors as `{ type: 'error', error: { type, message } }`
     const inner = rec.error;
     if (inner && typeof inner === 'object') {
       const err = inner as Record<string, unknown>;
+      // Handle double-nested { error: { error: { message } } }
+      const nested = err.error as Record<string, unknown> | undefined;
+      if (nested && typeof nested === 'object' && typeof nested.message === 'string') {
+        return nested.message;
+      }
       const errType = typeof err.type === 'string' ? err.type : '';
       const errMsg = typeof err.message === 'string' ? err.message : '';
 
@@ -79,7 +96,6 @@ function normalizeVoiceError(raw: unknown): string {
       if (errType) return errType;
     }
 
-    // Top-level message field
     if (typeof rec.message === 'string') return rec.message;
   }
 
@@ -98,6 +114,8 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
   const [status, setStatus] = useState<VoiceSessionStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const isSessionActive = useCallback(() => sessionRef.current !== null, []);
+
   const loadRuntime = useCallback(() => {
     if (!runtimeRef.current) {
       runtimeRef.current = Promise.all([
@@ -112,6 +130,19 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
     return runtimeRef.current;
   }, [registry]);
 
+  const disconnect = useCallback(() => {
+    try {
+      sessionRef.current?.close();
+    } catch {
+      /* ignore */
+    }
+    sessionRef.current = null;
+    stopStream(micStreamRef.current);
+    micStreamRef.current = null;
+    setStatus('idle');
+    setErrorMessage(null);
+  }, []);
+
   const connect = useCallback(async () => {
     if (sessionRef.current) return sessionRef.current;
     setStatus('connecting');
@@ -125,9 +156,7 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
     let micStream: MediaStream | null = null;
 
     try {
-      // ------------------------------------------------------------------
-      // 1. Acquire microphone — keep the stream so we hand it to WebRTC
-      // ------------------------------------------------------------------
+      // 1. Acquire microphone
       try {
         micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         micStreamRef.current = micStream;
@@ -144,17 +173,13 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
         );
       }
 
-      // ------------------------------------------------------------------
       // 2. Load runtime, fetch ephemeral key
-      // ------------------------------------------------------------------
       const { RealtimeSession, OpenAIRealtimeWebRTC, agent } = await loadRuntime();
       const apiKey = await fetchRealtimeClientSecret();
       const model = import.meta.env.VITE_WZRD_REALTIME_MODEL ?? 'gpt-realtime';
       const voice = import.meta.env.VITE_WZRD_REALTIME_VOICE ?? 'ash';
 
-      // ------------------------------------------------------------------
-      // 3. Create session — pass our mic stream directly to the transport
-      // ------------------------------------------------------------------
+      // 3. Create session — audio-only output (the API rejects ['text', 'audio'])
       const session = new RealtimeSession(agent, {
         transport: new OpenAIRealtimeWebRTC({
           audioElement: audioRef.current,
@@ -164,15 +189,13 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
         tracingDisabled: true,
         config: {
           voice,
-          outputModalities: ['text', 'audio'],
+          outputModalities: ['audio'],
           audio: {
             input: {
               transcription: {
                 model: 'gpt-4o-mini-transcribe',
                 language: 'en',
               },
-              // Use semantic_vad but don't auto-create responses so
-              // push-to-talk can send response.create manually.
               turnDetection: {
                 type: 'semantic_vad',
                 createResponse: false,
@@ -182,15 +205,18 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
         },
       });
 
-      // ------------------------------------------------------------------
       // 4. Wire up event handlers
-      // ------------------------------------------------------------------
       session.on('audio_start', () => setStatus('speaking'));
-      session.on('audio_stopped', () => setStatus('idle'));
+      session.on('audio_stopped', () => setStatus('connected'));
       session.on('agent_tool_start', () => setStatus('thinking'));
-      session.on('agent_tool_end', () => setStatus('idle'));
+      session.on('agent_tool_end', () => setStatus('connected'));
 
       session.on('error', (error: unknown) => {
+        // Silently ignore benign errors like empty audio buffer commits
+        if (isBenignError(error)) {
+          console.debug('[Voice] benign error suppressed:', error);
+          return;
+        }
         const msg = normalizeVoiceError(error);
         console.warn('[Voice] session error:', msg, error);
         setStatus('error');
@@ -202,19 +228,16 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
           setStatus('speaking');
         }
         if (event.type === 'response.done') {
-          setStatus('idle');
+          setStatus('connected');
         }
       });
 
-      // ------------------------------------------------------------------
-      // 5. Connect — this establishes the WebRTC peer connection
-      // ------------------------------------------------------------------
+      // 5. Connect
       await session.connect({ apiKey, model });
       sessionRef.current = session;
-      setStatus('idle');
+      setStatus('connected');
       return session;
     } catch (error) {
-      // Clean up on failure
       stopStream(micStream);
       micStreamRef.current = null;
       setStatus('error');
@@ -222,14 +245,6 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
       throw error;
     }
   }, [loadRuntime]);
-
-  const disconnect = useCallback(() => {
-    sessionRef.current?.close();
-    sessionRef.current = null;
-    stopStream(micStreamRef.current);
-    micStreamRef.current = null;
-    setStatus('idle');
-  }, []);
 
   const pushToTalkStart = useCallback(async () => {
     const session = await connect();
@@ -241,7 +256,6 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
   const pushToTalkStop = useCallback(() => {
     const session = sessionRef.current;
     if (!session) return;
-    // Only send commit/response if the transport is actually connected
     if (session.transport.status !== 'connected') {
       console.warn('[Voice] pushToTalkStop skipped — transport not connected');
       return;
@@ -251,11 +265,22 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
     setStatus('thinking');
   }, []);
 
+  // Clean up on unmount
   useEffect(() => disconnect, [disconnect]);
+
+  // Clean up when user closes/refreshes the tab
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      disconnect();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [disconnect]);
 
   return {
     status,
     errorMessage,
+    isSessionActive,
     connect,
     disconnect,
     pushToTalkStart,

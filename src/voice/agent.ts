@@ -50,7 +50,7 @@ export function createWzrdRealtimeAgent(registry: VoiceActionRegistry) {
         description: 'Execute a typed WorldStudio app action such as navigation, project setup, Kanvas generation, character editing, or Studio graph control.',
         parameters: z.object({
           name: z.enum(VOICE_ACTION_NAMES),
-          input: z.record(z.unknown()).nullable(),
+          input: z.record(z.string(), z.unknown()).nullable(),
           confirmed: z.boolean().nullable(),
         }),
         async execute({ name, input, confirmed }) {
