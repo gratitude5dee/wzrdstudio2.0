@@ -6,14 +6,14 @@ import {
   toKanvasCatalogModel,
   toStudioCatalogModel,
 } from "./ai-model-catalog.ts";
-import { modelMatchesCatalogStudioSurface, normalizeCatalogProviderKey } from "../../../shared/ai-model-catalog.ts";
+import { modelMatchesCatalogStudioSurface, normalizeCatalogProviderKey } from "./ai-model-catalog.ts";
 import { authenticateRequest, AuthError } from "./auth.ts";
 import { errorResponse, handleCors, successResponse } from "./response.ts";
 import type {
   CatalogKanvasMode,
   CatalogModel,
   CatalogSurface,
-} from "../../../shared/ai-model-catalog.ts";
+} from "./ai-model-catalog.ts";
 
 type KanvasStudio = "image" | "video" | "edit" | "cinema" | "lipsync";
 

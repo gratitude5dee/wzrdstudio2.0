@@ -1,4 +1,4 @@
-import type { CatalogMediaType, CatalogModel } from "../../../shared/ai-model-catalog.ts";
+import type { CatalogMediaType, CatalogModel } from "./ai-model-catalog.ts";
 
 type ComputeLikeEdge = {
   source_node_id: string;

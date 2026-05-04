@@ -9,7 +9,7 @@ import {
   buildGmiVideoQueueRequest,
   type GmiVideoQueueRequest,
 } from "../_shared/gmi-video-request.ts";
-import type { CatalogModel } from "../../../shared/ai-model-catalog.ts";
+import type { CatalogModel } from "../_shared/ai-model-catalog.ts";
 import {
   createAssetLineage,
   createGenerationJob,
