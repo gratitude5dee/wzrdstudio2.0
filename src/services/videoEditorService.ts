@@ -39,7 +39,7 @@ const getCurrentUserId = async (): Promise<string> => {
   return data.user.id;
 };
 
-const clipTypeFromRecord = (record: Pick<TimelineClipRow, 'clip_type'> & { media_type?: unknown }): Clip['type'] => {
+const clipTypeFromRecord = (record: Record<string, any>): Clip['type'] => {
   const value = record.clip_type ?? record.media_type;
   if (value === 'image' || value === 'video' || value === 'text' || value === 'element') {
     return value;
@@ -512,12 +512,12 @@ export const videoEditorService = {
     return {
       id: record.id,
       projectId: record.project_id,
-      mediaType: record.media_type ?? 'video',
+      mediaType: (record as any).media_type ?? 'video',
       name: record.name ?? 'Untitled',
-      url: record.url ?? null,
+      url: (record as any).url ?? null,
       durationSeconds: typeof record.duration_seconds === 'number' ? record.duration_seconds : undefined,
-      sourceType: record.source_type ?? undefined,
-      status: record.status ?? undefined,
+      sourceType: (record as any).source_type ?? undefined,
+      status: (record as any).status ?? undefined,
       thumbnailUrl: record.thumbnail_url ?? undefined,
     };
   },
