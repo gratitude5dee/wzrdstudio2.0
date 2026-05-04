@@ -160,7 +160,7 @@ export function createGlobalVoiceActions(options: GlobalVoiceActionOptions): Voi
           return invalid('I need an active project before opening that project view.');
         }
         options.navigate(path);
-        return completed(`Opened ${target.replaceAll('_', ' ')}.`, { path });
+        return completed(`Opened ${target.replace(/_/g, ' ')}.`, { path });
       },
     },
     {
