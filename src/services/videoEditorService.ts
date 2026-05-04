@@ -2,6 +2,10 @@ import { supabase } from '@/integrations/supabase/client';
 import type { AudioTrack, Clip, ClipEffect, CompositionSettings, Keyframe, LibraryMediaItem, TextClipStyle } from '@/store/videoEditorStore';
 import type { Database, Json } from '@/integrations/supabase/types';
 
+// The generated Supabase types are out of date and don't include timeline_clips,
+// timeline_keyframes, or compositions tables. Use untyped client for those tables.
+const db = supabase as any;
+
 type Tables = Database['public']['Tables'];
 type TimelineClipRow = Tables extends { timeline_clips: { Row: infer R } } ? R : Record<string, any>;
 type AudioTrackRow = (Tables extends { audio_tracks: { Row: infer R } } ? R : Record<string, any>) & {
