@@ -3656,6 +3656,125 @@ export type Database = {
           },
         ]
       }
+      ip_vault_items: {
+        Row: {
+          asset_kind: string
+          commercial_rev_share: number | null
+          created_at: string
+          description: string | null
+          id: string
+          ip_id: string | null
+          ip_metadata_hash: string | null
+          ip_metadata_uri: string | null
+          license_profile: string
+          license_terms_ids: string[]
+          media_hash: string | null
+          media_type: string | null
+          media_url: string | null
+          metadata: Json
+          minting_fee_wip: number | null
+          nft_contract: string | null
+          nft_metadata_hash: string | null
+          nft_metadata_uri: string | null
+          parent_ip_ids: string[]
+          project_id: string | null
+          proof_packet: Json
+          registration_status: string
+          relationship_type: string
+          royalty_policy: string | null
+          source_id: string
+          source_type: string
+          story_explorer_url: string | null
+          story_network: string
+          thumbnail_url: string | null
+          title: string
+          token_id: string | null
+          tx_hash: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          asset_kind?: string
+          commercial_rev_share?: number | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          ip_id?: string | null
+          ip_metadata_hash?: string | null
+          ip_metadata_uri?: string | null
+          license_profile?: string
+          license_terms_ids?: string[]
+          media_hash?: string | null
+          media_type?: string | null
+          media_url?: string | null
+          metadata?: Json
+          minting_fee_wip?: number | null
+          nft_contract?: string | null
+          nft_metadata_hash?: string | null
+          nft_metadata_uri?: string | null
+          parent_ip_ids?: string[]
+          project_id?: string | null
+          proof_packet?: Json
+          registration_status?: string
+          relationship_type?: string
+          royalty_policy?: string | null
+          source_id: string
+          source_type: string
+          story_explorer_url?: string | null
+          story_network?: string
+          thumbnail_url?: string | null
+          title: string
+          token_id?: string | null
+          tx_hash?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          asset_kind?: string
+          commercial_rev_share?: number | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          ip_id?: string | null
+          ip_metadata_hash?: string | null
+          ip_metadata_uri?: string | null
+          license_profile?: string
+          license_terms_ids?: string[]
+          media_hash?: string | null
+          media_type?: string | null
+          media_url?: string | null
+          metadata?: Json
+          minting_fee_wip?: number | null
+          nft_contract?: string | null
+          nft_metadata_hash?: string | null
+          nft_metadata_uri?: string | null
+          parent_ip_ids?: string[]
+          project_id?: string | null
+          proof_packet?: Json
+          registration_status?: string
+          relationship_type?: string
+          royalty_policy?: string | null
+          source_id?: string
+          source_type?: string
+          story_explorer_url?: string | null
+          story_network?: string
+          thumbnail_url?: string | null
+          title?: string
+          token_id?: string | null
+          tx_hash?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ip_vault_items_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       job_queue: {
         Row: {
           attempts: number
@@ -9948,9 +10067,14 @@ export type Database = {
       }
       cleanup_expired_idempotency: { Args: never; Returns: undefined }
       cleanup_mrkt_decision_logs: { Args: never; Returns: undefined }
+      credits_get_balance: { Args: never; Returns: Json }
       deduct_credits: {
         Args: { p_amount: number; p_user_id: string }
         Returns: number
+      }
+      ensure_credit_account: {
+        Args: { p_source?: string; p_user_id: string }
+        Returns: Json
       }
       generate_board_slug: { Args: { board_title: string }; Returns: string }
       generate_invoice_number: { Args: never; Returns: string }
