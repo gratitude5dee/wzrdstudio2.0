@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
+  AlertCircle,
   AtSign,
   Boxes,
   Check,
@@ -8,16 +9,19 @@ import {
   Image as ImageIcon,
   Loader2,
   MapPin,
+  Pin,
   Search,
   Sparkles,
   User2,
   Video,
+  Wand2,
+  type LucideIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { MentionDropdown } from '@/components/character-creation/MentionDropdown';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -27,14 +31,16 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { useCharacterMention } from '@/hooks/useCharacterMention';
+import { sortBlueprintsForReference } from '@/lib/characterBlueprintReference';
 import { appRoutes } from '@/lib/routes';
 import { toSlug, useCharacterCreationStore } from '@/lib/stores/character-creation-store';
 import { cn } from '@/lib/utils';
 import { assetService } from '@/services/assetService';
-import { createBlueprint, listBlueprints } from '@/services/characterBlueprintService';
+import { createBlueprint, listBlueprints, toggleBlueprintPinned } from '@/services/characterBlueprintService';
 import type { Project } from '@/components/home/ProjectCard';
 import type { AssetCategory, AssetType, ProjectAsset } from '@/types/assets';
-import type { CharacterBlueprint, CharacterKind } from '@/types/character-creation';
+import type { CharacterBlueprint, CharacterKind, CharacterMention } from '@/types/character-creation';
 
 type StoreKind = Extract<CharacterKind, 'character' | 'location' | 'object'>;
 type TypeFilter = 'all' | Extract<AssetType, 'image' | 'video'>;
@@ -44,21 +50,24 @@ interface AuraAssetStoreProps {
   projects?: Project[];
 }
 
-const KIND_META: Record<StoreKind, { label: string; icon: typeof User2; seed: string }> = {
+const KIND_META: Record<StoreKind, { label: string; icon: LucideIcon; seed: string; accent: string }> = {
   character: {
     label: 'Character',
     icon: User2,
     seed: 'CHARACTER ANCHOR: name, age range, face shape, eyes, hair, body build, signature clothing, style target.',
+    accent: 'text-orange-300 border-orange-400/35 bg-orange-400/10',
   },
   location: {
     label: 'Location',
     icon: MapPin,
     seed: 'LOCATION ANCHOR: place type, geography, architecture, era, lighting, palette, mood, signature landmarks.',
+    accent: 'text-lime-300 border-lime-300/30 bg-lime-300/10',
   },
   object: {
     label: 'Object',
     icon: Boxes,
     seed: 'OBJECT ANCHOR: object type, silhouette, material, color, markings, wear, scale, style target.',
+    accent: 'text-amber-300 border-amber-300/30 bg-amber-300/10',
   },
 };
 
@@ -67,9 +76,25 @@ function getAssetPreviewUrl(asset: ProjectAsset): string | null {
     return asset.thumbnail_url ?? asset.preview_url ?? asset.cdn_url;
   }
   if (asset.asset_type === 'video') {
+    return asset.thumbnail_url ?? asset.preview_url ?? asset.cdn_url;
+  }
+  return null;
+}
+
+function getReferenceImageUrl(asset: ProjectAsset): string | null {
+  if (asset.asset_type === 'image') {
+    return asset.thumbnail_url ?? asset.preview_url ?? asset.cdn_url;
+  }
+  if (asset.asset_type === 'video') {
     return asset.thumbnail_url ?? asset.preview_url;
   }
   return null;
+}
+
+function isUsableReference(asset: ProjectAsset): boolean {
+  return asset.asset_type === 'image'
+    ? Boolean(getAssetPreviewUrl(asset))
+    : asset.asset_type === 'video' && Boolean(getReferenceImageUrl(asset));
 }
 
 function getCommonProjectId(assets: ProjectAsset[]): string | null {
@@ -80,19 +105,66 @@ function getCommonProjectId(assets: ProjectAsset[]): string | null {
 
 function buildKanvasHref(studio: 'image' | 'video' | 'cinema' | 'character-creation', slug?: string) {
   const params = new URLSearchParams({ studio });
-  if (slug) {
-    params.set('prompt', `@${slug} `);
-  }
+  if (slug) params.set('prompt', `@${slug} `);
   return `${appRoutes.kanvas}?${params.toString()}`;
+}
+
+function getAssetProjectLabel(asset: ProjectAsset, projects: Project[]): string {
+  return projects.find((project) => project.id === asset.project_id)?.title ?? 'Workspace';
+}
+
+function getLoadDiagnostic(error: string | null) {
+  if (!error) return null;
+  const lower = error.toLowerCase();
+  if (lower.includes('auth') || lower.includes('session') || lower.includes('jwt')) {
+    return {
+      title: 'Sign in required',
+      body: 'Your session is not available, so workspace assets cannot be loaded yet.',
+    };
+  }
+  if (lower.includes('column') || lower.includes('schema') || lower.includes('does not exist')) {
+    return {
+      title: 'Asset library schema mismatch',
+      body: 'The app could not read the deployed asset table shape. The safe loader will use normalized asset rows after the schema is updated.',
+    };
+  }
+  return {
+    title: 'Asset library unavailable',
+    body: error,
+  };
+}
+
+function BlueprintThumb({ blueprint }: { blueprint: CharacterBlueprint }) {
+  return (
+    <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-white/[0.06] bg-zinc-950">
+      {blueprint.imageUrl ? (
+        <img src={blueprint.imageUrl} alt={blueprint.name} className="h-full w-full object-cover" loading="lazy" />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center">
+          <AtSign className="h-5 w-5 text-zinc-600" />
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function AuraAssetStore({ projects = [] }: AuraAssetStoreProps) {
   const navigate = useNavigate();
+  const anchorRef = useRef<HTMLTextAreaElement | null>(null);
   const addBlueprint = useCharacterCreationStore((state) => state.addBlueprint);
+  const updateBlueprint = useCharacterCreationStore((state) => state.updateBlueprint);
+  const blueprints = useCharacterCreationStore((state) => state.blueprints);
   const setBlueprints = useCharacterCreationStore((state) => state.setBlueprints);
+  const {
+    suggestions,
+    showSuggestions,
+    onPromptChange,
+    onSelectSuggestion,
+    closeSuggestions,
+    toggleMentionPinned,
+  } = useCharacterMention();
 
   const [assets, setAssets] = useState<ProjectAsset[]>([]);
-  const [blueprints, setBlueprintList] = useState<CharacterBlueprint[]>([]);
   const [loadingAssets, setLoadingAssets] = useState(true);
   const [loadingBlueprints, setLoadingBlueprints] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -113,41 +185,43 @@ export function AuraAssetStore({ projects = [] }: AuraAssetStoreProps) {
     [assets, selectedIds],
   );
 
+  const usableAssets = useMemo(() => assets.filter(isUsableReference), [assets]);
+
   const filteredAssets = useMemo(() => {
-    return assets.filter((asset) => {
+    return usableAssets.filter((asset) => {
       if (typeFilter !== 'all' && asset.asset_type !== typeFilter) return false;
       if (categoryFilter !== 'all' && asset.asset_category !== categoryFilter) return false;
       if (projectFilter !== 'all' && asset.project_id !== projectFilter) return false;
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
-        const haystack = `${asset.original_file_name} ${asset.file_name}`.toLowerCase();
+        const haystack = `${asset.original_file_name} ${asset.file_name} ${asset.asset_category}`.toLowerCase();
         if (!haystack.includes(query)) return false;
       }
-      return Boolean(getAssetPreviewUrl(asset));
+      return true;
     });
-  }, [assets, categoryFilter, projectFilter, searchQuery, typeFilter]);
+  }, [categoryFilter, projectFilter, searchQuery, typeFilter, usableAssets]);
 
+  const sortedBlueprints = useMemo(() => sortBlueprintsForReference(blueprints), [blueprints]);
+  const pinnedCount = useMemo(() => blueprints.filter((blueprint) => blueprint.isFavorite).length, [blueprints]);
   const slugPreview = toSlug(name);
+  const diagnostic = getLoadDiagnostic(error);
 
   useEffect(() => {
     let cancelled = false;
     setLoadingAssets(true);
     setError(null);
+
     assetService
       .list({
-        assetType: ['image', 'video'],
-        processingStatus: ['completed'],
         sortBy: 'created_at',
         sortOrder: 'desc',
-        limit: 200,
+        limit: 300,
       })
       .then((rows) => {
-        if (!cancelled) setAssets(rows);
+        if (!cancelled) setAssets(rows.filter((asset) => asset.asset_type === 'image' || asset.asset_type === 'video'));
       })
       .catch((err) => {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Failed to load assets.');
-        }
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load assets.');
       })
       .finally(() => {
         if (!cancelled) setLoadingAssets(false);
@@ -163,10 +237,7 @@ export function AuraAssetStore({ projects = [] }: AuraAssetStoreProps) {
     setLoadingBlueprints(true);
     listBlueprints()
       .then((rows) => {
-        if (!cancelled) {
-          setBlueprintList(rows);
-          setBlueprints(rows);
-        }
+        if (!cancelled) setBlueprints(rows);
       })
       .catch(() => {
         if (!cancelled) toast.error('Failed to load saved blueprints.');
@@ -198,6 +269,37 @@ export function AuraAssetStore({ projects = [] }: AuraAssetStoreProps) {
     }
   };
 
+  const handleAnchorChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
+    const value = event.currentTarget.value;
+    setPromptAnchor(value);
+    onPromptChange(value, event.currentTarget.selectionStart);
+  };
+
+  const handleMentionSelect = (mention: CharacterMention) => {
+    const replaced = onSelectSuggestion(mention, promptAnchor);
+    setPromptAnchor(replaced);
+    window.requestAnimationFrame(() => anchorRef.current?.focus());
+  };
+
+  const handleMentionTogglePin = (mention: CharacterMention) => {
+    void toggleMentionPinned(mention).catch((err) => {
+      toast.error(err instanceof Error ? err.message : 'Failed to update pin.');
+    });
+  };
+
+  const handleToggleBlueprintPin = async (blueprint: CharacterBlueprint) => {
+    const nextPinned = !blueprint.isFavorite;
+    updateBlueprint(blueprint.id, { isFavorite: nextPinned });
+    try {
+      const updated = await toggleBlueprintPinned(blueprint.id, nextPinned);
+      updateBlueprint(updated.id, updated);
+      toast.success(nextPinned ? `Pinned @${blueprint.slug}` : `Unpinned @${blueprint.slug}`);
+    } catch (err) {
+      updateBlueprint(blueprint.id, { isFavorite: blueprint.isFavorite });
+      toast.error(err instanceof Error ? err.message : 'Failed to update pin.');
+    }
+  };
+
   const handleSaveBlueprint = async () => {
     if (!name.trim()) {
       toast.error('Name the blueprint before saving.');
@@ -214,7 +316,7 @@ export function AuraAssetStore({ projects = [] }: AuraAssetStoreProps) {
 
     const referenceImages = selectedAssets
       .map((asset, index) => {
-        const imageUrl = getAssetPreviewUrl(asset);
+        const imageUrl = getReferenceImageUrl(asset);
         if (!imageUrl) return null;
         return {
           assetId: asset.id,
@@ -245,11 +347,11 @@ export function AuraAssetStore({ projects = [] }: AuraAssetStoreProps) {
       });
 
       addBlueprint(blueprint);
-      setBlueprintList((current) => [blueprint, ...current.filter((item) => item.id !== blueprint.id)]);
       setSelectedIds([]);
       setReferenceLabels({});
       setName('');
       setPromptAnchor(KIND_META[kind].seed);
+      closeSuggestions();
       toast.success(`Saved ${KIND_META[kind].label.toLowerCase()} @${blueprint.slug}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save blueprint.');
@@ -259,148 +361,214 @@ export function AuraAssetStore({ projects = [] }: AuraAssetStoreProps) {
   };
 
   return (
-    <div className="space-y-6" data-testid="aura-asset-store">
+    <div className="space-y-5 text-white" data-testid="aura-asset-store">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-orange-400/20 bg-orange-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-300">
+          <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-orange-400/20 bg-orange-400/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-orange-300">
             <Sparkles className="h-3.5 w-3.5" />
-            Aura Asset Store
+            Asset Store
           </div>
-          <h2 className="text-2xl font-semibold text-foreground">Reusable Characters, Locations, and Objects</h2>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Select workspace assets, write the identity anchor, then save a blueprint for @mentions in Kanvas.
+          <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">Blueprint Reference Library</h2>
+          <p className="mt-1 max-w-2xl text-sm text-zinc-500">
+            Curate reusable anchors for Kanvas prompts without starting a generation job.
           </p>
         </div>
         <Button
           type="button"
           variant="outline"
           onClick={() => navigate(buildKanvasHref('character-creation'))}
-          className="gap-2"
+          className="gap-2 border-white/10 bg-white/[0.03] text-zinc-200 hover:bg-white/[0.06]"
         >
-          <AtSign className="h-4 w-4" />
-          Open Character Creation
+          <AtSign className="h-4 w-4 text-orange-300" />
+          Character Creation
         </Button>
       </div>
 
-      {error && (
-        <Card className="border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
-          {error}
-        </Card>
-      )}
-
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_420px]">
-        <Card className="space-y-4 p-4">
-          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_150px_170px_180px]">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search uploaded assets..."
-                className="pl-9"
-              />
+      <div className="grid gap-5 2xl:grid-cols-[minmax(0,1.55fr)_440px]">
+        <section className="overflow-hidden rounded-3xl border border-white/10 bg-[#0c0c0f]/90 shadow-[0_22px_80px_rgba(0,0,0,0.28)]">
+          <div className="border-b border-white/[0.06] p-4">
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_130px_150px_170px]">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                <Input
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search uploaded references..."
+                  className="h-10 rounded-2xl border-white/10 bg-black/40 pl-9 text-sm text-white placeholder:text-zinc-600 focus-visible:ring-orange-400/25"
+                />
+              </div>
+              <Select value={typeFilter} onValueChange={(value) => setTypeFilter(value as TypeFilter)}>
+                <SelectTrigger className="h-10 rounded-2xl border-white/10 bg-black/40 text-white">
+                  <SelectValue placeholder="Type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All media</SelectItem>
+                  <SelectItem value="image">Images</SelectItem>
+                  <SelectItem value="video">Videos</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={categoryFilter} onValueChange={(value) => setCategoryFilter(value as CategoryFilter)}>
+                <SelectTrigger className="h-10 rounded-2xl border-white/10 bg-black/40 text-white">
+                  <SelectValue placeholder="Source" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All sources</SelectItem>
+                  <SelectItem value="upload">Uploaded</SelectItem>
+                  <SelectItem value="generated">Generated</SelectItem>
+                  <SelectItem value="template">Templates</SelectItem>
+                  <SelectItem value="system">System</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={projectFilter} onValueChange={setProjectFilter}>
+                <SelectTrigger className="h-10 rounded-2xl border-white/10 bg-black/40 text-white">
+                  <SelectValue placeholder="Project" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All projects</SelectItem>
+                  {projects.map((project) => (
+                    <SelectItem key={project.id} value={project.id}>
+                      {project.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <Select value={typeFilter} onValueChange={(value) => setTypeFilter(value as TypeFilter)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All media</SelectItem>
-                <SelectItem value="image">Images</SelectItem>
-                <SelectItem value="video">Videos</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={categoryFilter} onValueChange={(value) => setCategoryFilter(value as CategoryFilter)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Source" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All sources</SelectItem>
-                <SelectItem value="upload">Uploaded</SelectItem>
-                <SelectItem value="generated">Generated</SelectItem>
-                <SelectItem value="template">Templates</SelectItem>
-                <SelectItem value="system">System</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={projectFilter} onValueChange={setProjectFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="Project" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All projects</SelectItem>
-                {projects.map((project) => (
-                  <SelectItem key={project.id} value={project.id}>
-                    {project.title}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+              <Badge variant="outline" className="border-white/10 bg-white/[0.03] text-zinc-400">
+                {usableAssets.length} usable refs
+              </Badge>
+              <Badge variant="outline" className="border-white/10 bg-white/[0.03] text-zinc-400">
+                {selectedAssets.length} selected
+              </Badge>
+              <Badge variant="outline" className="border-white/10 bg-white/[0.03] text-zinc-400">
+                {pinnedCount} pinned
+              </Badge>
+            </div>
           </div>
 
-          {loadingAssets ? (
-            <div className="flex min-h-[320px] items-center justify-center">
-              <Loader2 className="h-6 w-6 animate-spin text-orange-400" />
-            </div>
-          ) : filteredAssets.length === 0 ? (
-            <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-border text-center">
-              <ImageIcon className="mb-3 h-10 w-10 text-muted-foreground" />
-              <p className="text-sm font-medium">No usable image or video references found.</p>
-              <p className="mt-1 text-xs text-muted-foreground">Upload assets in Kanvas or Studio, then return here.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
-              {filteredAssets.map((asset) => {
+          {selectedAssets.length > 0 && (
+            <div className="flex gap-2 overflow-x-auto border-b border-white/[0.06] bg-white/[0.02] p-3">
+              {selectedAssets.map((asset, index) => {
                 const previewUrl = getAssetPreviewUrl(asset);
-                const selected = selectedIds.includes(asset.id);
-                const project = projects.find((item) => item.id === asset.project_id);
                 return (
                   <button
                     key={asset.id}
                     type="button"
                     onClick={() => toggleAsset(asset)}
-                    className={cn(
-                      'group overflow-hidden rounded-xl border bg-card text-left transition-all hover:border-orange-400/40',
-                      selected ? 'border-orange-400 ring-2 ring-orange-400/25' : 'border-border',
-                    )}
-                    data-testid="aura-asset-card"
+                    className="group flex min-w-[180px] items-center gap-2 rounded-2xl border border-orange-300/20 bg-orange-300/10 p-2 text-left"
                   >
-                    <div className="relative aspect-square bg-muted">
+                    <div className="h-10 w-10 overflow-hidden rounded-xl bg-black/40">
                       {previewUrl ? (
                         <img src={previewUrl} alt={asset.original_file_name} className="h-full w-full object-cover" loading="lazy" />
                       ) : (
-                        <div className="flex h-full w-full items-center justify-center">
-                          {asset.asset_type === 'video' ? <Video className="h-8 w-8 text-muted-foreground" /> : <ImageIcon className="h-8 w-8 text-muted-foreground" />}
-                        </div>
-                      )}
-                      {selected && (
-                        <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-orange-500 text-black">
-                          <Check className="h-3.5 w-3.5" />
-                        </span>
+                        <ImageIcon className="m-3 h-4 w-4 text-zinc-500" />
                       )}
                     </div>
-                    <div className="space-y-1 p-2">
-                      <p className="truncate text-xs font-medium">{asset.original_file_name}</p>
-                      <div className="flex items-center justify-between gap-2">
-                        <Badge variant="outline" className="text-[10px] capitalize">
-                          {asset.asset_type}
-                        </Badge>
-                        <span className="truncate text-[10px] text-muted-foreground">
-                          {project?.title ?? 'Workspace'}
-                        </span>
-                      </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-semibold text-white">{referenceLabels[asset.id] ?? asset.original_file_name}</p>
+                      <p className="text-[10px] text-orange-200/70">{index === 0 ? 'Primary reference' : `Reference ${index + 1}`}</p>
                     </div>
                   </button>
                 );
               })}
             </div>
           )}
-        </Card>
 
-        <div className="space-y-5">
-          <Card className="space-y-4 p-4">
-            <div>
-              <h3 className="text-lg font-semibold">Create Blueprint</h3>
-              <p className="text-xs text-muted-foreground">Blueprints save references and prompt anchors only. Generation remains explicit in Kanvas.</p>
+          <div className="p-4">
+            {loadingAssets ? (
+              <div className="flex min-h-[360px] items-center justify-center rounded-3xl border border-white/[0.06] bg-black/20">
+                <Loader2 className="h-6 w-6 animate-spin text-orange-300" />
+              </div>
+            ) : diagnostic ? (
+              <div className="flex min-h-[360px] flex-col items-center justify-center rounded-3xl border border-white/[0.08] bg-black/20 p-6 text-center">
+                <AlertCircle className="mb-3 h-9 w-9 text-orange-300" />
+                <p className="text-sm font-semibold text-white">{diagnostic.title}</p>
+                <p className="mt-1 max-w-md text-xs leading-relaxed text-zinc-500">{diagnostic.body}</p>
+              </div>
+            ) : filteredAssets.length === 0 ? (
+              <div className="flex min-h-[360px] flex-col items-center justify-center rounded-3xl border border-dashed border-white/[0.09] bg-black/20 p-6 text-center">
+                <ImageIcon className="mb-3 h-10 w-10 text-zinc-600" />
+                <p className="text-sm font-semibold text-white">
+                  {usableAssets.length === 0 ? 'No usable references yet.' : 'No matching references.'}
+                </p>
+                <p className="mt-1 max-w-sm text-xs text-zinc-500">
+                  {usableAssets.length === 0
+                    ? 'Images and videos with preview frames will appear here after upload.'
+                    : 'Adjust filters or search to broaden the reference set.'}
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                {filteredAssets.map((asset) => {
+                  const previewUrl = getAssetPreviewUrl(asset);
+                  const selected = selectedIds.includes(asset.id);
+                  const canReference = Boolean(getReferenceImageUrl(asset));
+                  return (
+                    <button
+                      key={asset.id}
+                      type="button"
+                      onClick={() => toggleAsset(asset)}
+                      className={cn(
+                        'group overflow-hidden rounded-2xl border bg-[#111114] text-left transition-all',
+                        'hover:border-orange-300/40 hover:bg-[#161619]',
+                        selected ? 'border-orange-300 ring-2 ring-orange-300/20' : 'border-white/[0.06]',
+                      )}
+                      data-testid="aura-asset-card"
+                    >
+                      <div className="relative aspect-square bg-black/50">
+                        {previewUrl ? (
+                          asset.asset_type === 'video' && !asset.thumbnail_url && !asset.preview_url ? (
+                            <video src={previewUrl} className="h-full w-full object-cover opacity-90" muted playsInline preload="metadata" />
+                          ) : (
+                            <img src={previewUrl} alt={asset.original_file_name} className="h-full w-full object-cover" loading="lazy" />
+                          )
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center">
+                            {asset.asset_type === 'video' ? <Video className="h-8 w-8 text-zinc-600" /> : <ImageIcon className="h-8 w-8 text-zinc-600" />}
+                          </div>
+                        )}
+                        <div className="absolute left-2 top-2 flex gap-1">
+                          <span className="rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-semibold capitalize text-zinc-300 backdrop-blur">
+                            {asset.asset_type}
+                          </span>
+                          {!canReference && (
+                            <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200 backdrop-blur">
+                              preview only
+                            </span>
+                          )}
+                        </div>
+                        {selected && (
+                          <span className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-orange-400 text-black shadow-lg">
+                            <Check className="h-4 w-4" />
+                          </span>
+                        )}
+                      </div>
+                      <div className="space-y-1.5 p-3">
+                        <p className="truncate text-xs font-semibold text-white">{asset.original_file_name}</p>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="truncate text-[10px] text-zinc-500">{getAssetProjectLabel(asset, projects)}</span>
+                          <span className="rounded-full bg-white/[0.04] px-2 py-0.5 text-[10px] capitalize text-zinc-500">
+                            {asset.asset_category}
+                          </span>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+
+        <aside className="space-y-5">
+          <section className="rounded-3xl border border-white/10 bg-[#0c0c0f]/90 p-4 shadow-[0_22px_80px_rgba(0,0,0,0.25)]">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500">Create Blueprint</p>
+                <h3 className="mt-1 text-lg font-semibold text-white">Anchor + references</h3>
+              </div>
+              <Wand2 className="h-5 w-5 text-orange-300" />
             </div>
 
             <div className="grid grid-cols-3 gap-2">
@@ -413,8 +581,8 @@ export function AuraAssetStore({ projects = [] }: AuraAssetStoreProps) {
                     type="button"
                     onClick={() => handleKindChange(value)}
                     className={cn(
-                      'rounded-xl border px-3 py-2 text-xs font-semibold transition-colors',
-                      kind === value ? 'border-orange-400 bg-orange-400/10 text-orange-300' : 'border-border hover:bg-muted',
+                      'rounded-2xl border px-3 py-3 text-xs font-semibold transition-colors',
+                      kind === value ? meta.accent : 'border-white/[0.06] bg-white/[0.03] text-zinc-400 hover:bg-white/[0.06]',
                     )}
                   >
                     <Icon className="mx-auto mb-1 h-4 w-4" />
@@ -424,24 +592,39 @@ export function AuraAssetStore({ projects = [] }: AuraAssetStoreProps) {
               })}
             </div>
 
-            <div className="space-y-2">
-              <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Name, e.g. Nova Pilot" />
-              <p className="text-xs text-muted-foreground">
+            <div className="mt-4 space-y-2">
+              <Input
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Name, e.g. Nova Pilot"
+                className="h-10 rounded-2xl border-white/10 bg-black/40 text-white placeholder:text-zinc-600 focus-visible:ring-orange-400/25"
+              />
+              <p className="text-xs text-zinc-500">
                 Mention slug: <span className="font-mono text-orange-300">@{slugPreview || 'name'}</span>
               </p>
             </div>
 
-            <Textarea
-              value={promptAnchor}
-              onChange={(event) => setPromptAnchor(event.target.value)}
-              rows={6}
-              placeholder="Write the reusable identity anchor..."
-              className="resize-none"
-            />
+            <div className="relative mt-4">
+              <MentionDropdown
+                suggestions={suggestions}
+                onSelect={handleMentionSelect}
+                onTogglePin={handleMentionTogglePin}
+                visible={showSuggestions}
+              />
+              <Textarea
+                ref={anchorRef}
+                value={promptAnchor}
+                onChange={handleAnchorChange}
+                onBlur={() => window.setTimeout(closeSuggestions, 150)}
+                rows={6}
+                placeholder="Write the reusable identity anchor..."
+                className="resize-none rounded-2xl border-white/10 bg-black/40 text-sm leading-relaxed text-white placeholder:text-zinc-600 focus-visible:ring-orange-400/25"
+              />
+            </div>
 
             {selectedAssets.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Reference labels</p>
+              <div className="mt-4 space-y-2">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">Reference labels</p>
                 {selectedAssets.map((asset, index) => (
                   <div key={asset.id} className="flex items-center gap-2">
                     <Badge variant={index === 0 ? 'default' : 'outline'} className="w-16 justify-center text-[10px]">
@@ -452,63 +635,86 @@ export function AuraAssetStore({ projects = [] }: AuraAssetStoreProps) {
                       onChange={(event) =>
                         setReferenceLabels((current) => ({ ...current, [asset.id]: event.target.value }))
                       }
-                      className="h-8 text-xs"
+                      className="h-8 rounded-xl border-white/10 bg-black/30 text-xs text-white"
                     />
                   </div>
                 ))}
               </div>
             )}
 
-            <Button type="button" onClick={handleSaveBlueprint} disabled={saving} className="w-full gap-2">
+            <Button
+              type="button"
+              onClick={handleSaveBlueprint}
+              disabled={saving}
+              className="mt-4 w-full gap-2 rounded-2xl bg-orange-400 text-black hover:bg-orange-300"
+            >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
               Save Blueprint
             </Button>
-          </Card>
+          </section>
 
-          <Card className="space-y-3 p-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold">Saved Blueprints</h3>
-              {loadingBlueprints && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+          <section className="rounded-3xl border border-white/10 bg-[#0c0c0f]/90 p-4 shadow-[0_22px_80px_rgba(0,0,0,0.25)]">
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500">Saved Blueprints</p>
+                <h3 className="mt-1 text-lg font-semibold text-white">{blueprints.length} anchors</h3>
+              </div>
+              {loadingBlueprints && <Loader2 className="h-4 w-4 animate-spin text-zinc-500" />}
             </div>
-            <div className="max-h-[440px] space-y-3 overflow-y-auto pr-1">
-              {blueprints.length === 0 && !loadingBlueprints ? (
-                <p className="rounded-xl border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
+            <div className="max-h-[480px] space-y-3 overflow-y-auto pr-1">
+              {sortedBlueprints.length === 0 && !loadingBlueprints ? (
+                <p className="rounded-2xl border border-dashed border-white/[0.08] p-4 text-center text-sm text-zinc-500">
                   No reusable blueprints yet.
                 </p>
               ) : (
-                blueprints.slice(0, 12).map((blueprint) => (
-                  <div key={blueprint.id} className="rounded-xl border border-border p-3">
+                sortedBlueprints.slice(0, 18).map((blueprint) => (
+                  <div key={blueprint.id} className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-3">
                     <div className="flex items-start gap-3">
-                      <div className="h-12 w-12 overflow-hidden rounded-lg bg-muted">
-                        {blueprint.imageUrl ? (
-                          <img src={blueprint.imageUrl} alt={blueprint.name} className="h-full w-full object-cover" />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center">
-                            <AtSign className="h-5 w-5 text-muted-foreground" />
-                          </div>
-                        )}
-                      </div>
+                      <BlueprintThumb blueprint={blueprint} />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <p className="truncate text-sm font-semibold">{blueprint.name}</p>
-                          <Badge variant="outline" className="text-[10px] capitalize">{blueprint.kind}</Badge>
+                          <p className="truncate text-sm font-semibold text-white">{blueprint.name}</p>
+                          <Badge variant="outline" className="border-white/10 text-[10px] capitalize text-zinc-400">
+                            {blueprint.kind === 'environment' ? 'location' : blueprint.kind}
+                          </Badge>
                         </div>
                         <p className="truncate font-mono text-xs text-orange-300">@{blueprint.slug}</p>
-                        <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{blueprint.promptFragment}</p>
+                        <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-zinc-500">{blueprint.promptFragment}</p>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => void handleToggleBlueprintPin(blueprint)}
+                        className={cn(
+                          'flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border transition-colors',
+                          blueprint.isFavorite
+                            ? 'border-orange-300/30 bg-orange-300/10 text-orange-300'
+                            : 'border-white/[0.06] text-zinc-600 hover:text-zinc-300',
+                        )}
+                        aria-label={blueprint.isFavorite ? `Unpin ${blueprint.name}` : `Pin ${blueprint.name}`}
+                      >
+                        <Pin className={cn('h-3.5 w-3.5', blueprint.isFavorite && 'fill-current')} />
+                      </button>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => navigator.clipboard.writeText(`@${blueprint.slug}`)}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 gap-1 rounded-xl border-white/10 bg-black/20 text-xs text-zinc-300 hover:bg-white/[0.06]"
+                        onClick={() => {
+                          void navigator.clipboard.writeText(`@${blueprint.slug}`);
+                          toast.success(`Copied @${blueprint.slug}`);
+                        }}
+                      >
                         <Copy className="h-3.5 w-3.5" />
                         Copy
                       </Button>
-                      <Button size="sm" variant="outline" className="h-8" onClick={() => navigate(buildKanvasHref('image', blueprint.slug))}>
+                      <Button size="sm" variant="outline" className="h-8 rounded-xl border-white/10 bg-black/20 text-xs text-zinc-300 hover:bg-white/[0.06]" onClick={() => navigate(buildKanvasHref('image', blueprint.slug))}>
                         Image
                       </Button>
-                      <Button size="sm" variant="outline" className="h-8" onClick={() => navigate(buildKanvasHref('video', blueprint.slug))}>
+                      <Button size="sm" variant="outline" className="h-8 rounded-xl border-white/10 bg-black/20 text-xs text-zinc-300 hover:bg-white/[0.06]" onClick={() => navigate(buildKanvasHref('video', blueprint.slug))}>
                         Video
                       </Button>
-                      <Button size="sm" variant="outline" className="h-8" onClick={() => navigate(buildKanvasHref('cinema', blueprint.slug))}>
+                      <Button size="sm" variant="outline" className="h-8 rounded-xl border-white/10 bg-black/20 text-xs text-zinc-300 hover:bg-white/[0.06]" onClick={() => navigate(buildKanvasHref('cinema', blueprint.slug))}>
                         Cinema
                       </Button>
                     </div>
@@ -516,8 +722,8 @@ export function AuraAssetStore({ projects = [] }: AuraAssetStoreProps) {
                 ))
               )}
             </div>
-          </Card>
-        </div>
+          </section>
+        </aside>
       </div>
     </div>
   );

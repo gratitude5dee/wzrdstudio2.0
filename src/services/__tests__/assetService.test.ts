@@ -196,7 +196,16 @@ describe("assetService", () => {
 
   describe("list", () => {
     it("applies filters and ordering", async () => {
-      const builder = createListQuery([baseAsset]);
+      const unrelatedAsset: ProjectAsset = {
+        ...baseAsset,
+        id: "asset-2",
+        file_name: "ambient.wav",
+        original_file_name: "ambient.wav",
+        asset_type: "audio",
+        asset_category: "generated",
+        processing_status: "failed",
+      };
+      const builder = createListQuery([baseAsset, unrelatedAsset]);
       mockFrom.mockReturnValue(builder);
 
       const filters = {
@@ -210,27 +219,22 @@ describe("assetService", () => {
         dateTo: "2024-12-31",
         sortBy: "created_at" as const,
         sortOrder: "asc" as const,
-        limit: 10,
-        offset: 5,
       };
 
       const result = await assetService.list(filters);
       expect(result).toEqual([baseAsset]);
 
       expect(builder.__state.eq).toContainEqual(["project_id", "project-123"]);
-      expect(builder.__state.in).toContainEqual(["asset_type", ["image", "video"]]);
-      expect(builder.__state.in).toContainEqual(["asset_category", ["upload"]]);
-      expect(builder.__state.in).toContainEqual(["visibility", ["project"]]);
-      expect(builder.__state.in).toContainEqual(["processing_status", ["completed"]]);
-      expect(builder.__state.or).toContain("hero");
+      expect(builder.__state.in).toEqual([]);
+      expect(builder.__state.or).toBeNull();
       expect(builder.__state.gte).toContainEqual(["created_at", "2024-01-01"]);
       expect(builder.__state.lte).toContainEqual(["created_at", "2024-12-31"]);
       expect(builder.__state.order).toEqual([
         "created_at",
         { ascending: true },
       ]);
-      expect(builder.__state.limit).toBe(10);
-      expect(builder.__state.range).toEqual([5, 14]);
+      expect(builder.__state.limit).toBeNull();
+      expect(builder.__state.range).toBeNull();
     });
 
     it("normalizes legacy project_assets rows from the current generated DB shape", async () => {
@@ -252,6 +256,7 @@ describe("assetService", () => {
 
       expect(result[0]).toMatchObject({
         id: "asset-legacy",
+        user_id: "",
         file_name: "legacy-reference.png",
         original_file_name: "legacy-reference.png",
         asset_type: "image",

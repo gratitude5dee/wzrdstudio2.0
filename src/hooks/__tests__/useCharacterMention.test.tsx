@@ -7,6 +7,9 @@ import type { CharacterBlueprint } from '@/types/character-creation';
 
 vi.mock('@/services/characterBlueprintService', () => ({
   incrementBlueprintUsage: vi.fn(() => Promise.resolve()),
+  toggleBlueprintPinned: vi.fn((id: string, pinned: boolean) =>
+    Promise.resolve({ id, isFavorite: pinned }),
+  ),
 }));
 
 function createBlueprint(overrides: Partial<CharacterBlueprint> = {}): CharacterBlueprint {
@@ -55,13 +58,39 @@ describe('useCharacterMention', () => {
     expect(result.current.showSuggestions).toBe(true);
     expect(result.current.suggestions[0]?.slug).toBe('nova-pilot');
 
-    const resolved = result.current.resolvePrompt('A tracking shot of @nova-pilot');
+    let resolved: ReturnType<typeof result.current.resolvePrompt>;
+    act(() => {
+      resolved = result.current.resolvePrompt('A tracking shot of @nova-pilot');
+    });
 
-    expect(resolved.expandedPrompt).toContain('CHARACTER ANCHOR: Nova Pilot');
-    expect(resolved.elementPrompt).toContain('<<<element_1>>>');
-    expect(resolved.elementIds).toEqual(['element-nova']);
-    expect(resolved.referenceAssetIds).toEqual(['asset-image-1']);
-    expect(resolved.referenceImageUrls).toEqual(['https://cdn.example.com/nova-ref.png']);
-    expect(resolved.usedCharacters[0]?.gmiElementId).toBe('element-nova');
+    expect(resolved!.expandedPrompt).toContain('CHARACTER ANCHOR: Nova Pilot');
+    expect(resolved!.elementPrompt).toContain('<<<element_1>>>');
+    expect(resolved!.elementIds).toEqual(['element-nova']);
+    expect(resolved!.referenceAssetIds).toEqual(['asset-image-1']);
+    expect(resolved!.referenceImageUrls).toEqual(['https://cdn.example.com/nova-ref.png']);
+    expect(resolved!.usedCharacters[0]?.gmiElementId).toBe('element-nova');
+  });
+
+  it('shows suggestions immediately after @ and persists pin toggles', async () => {
+    useCharacterCreationStore.getState().setBlueprints([
+      createBlueprint({ id: 'object-1', name: 'Crystal Key', slug: 'crystal-key', kind: 'object', usageCount: 1 }),
+      createBlueprint({ id: 'location-1', name: 'Neon Bazaar', slug: 'neon-bazaar', kind: 'location', isFavorite: true, usageCount: 9 }),
+    ]);
+
+    const { result } = renderHook(() => useCharacterMention());
+
+    act(() => {
+      result.current.onPromptChange('@');
+    });
+
+    expect(result.current.showSuggestions).toBe(true);
+    expect(result.current.suggestions.map((mention) => mention.slug)).toEqual(['crystal-key', 'neon-bazaar']);
+
+    await act(async () => {
+      await result.current.toggleMentionPinned(result.current.suggestions[0]);
+    });
+
+    const pinned = useCharacterCreationStore.getState().blueprints.find((blueprint) => blueprint.id === 'object-1');
+    expect(pinned?.isFavorite).toBe(true);
   });
 });

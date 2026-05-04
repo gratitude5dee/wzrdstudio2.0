@@ -21,45 +21,96 @@ type AssetCollectionRow = any;
 
 const DEFAULT_STORAGE_LIMIT_BYTES = 50 * 1024 * 1024 * 1024;
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function asString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
 function toJsonRecord(value: Record<string, unknown> | undefined): Json {
   return (value ?? {}) as Json;
 }
 
 function normalizeAssetRow(row: ProjectAssetRow): ProjectAsset {
+  const metadata = asRecord(row.media_metadata ?? row.metadata);
+  const assetType = asString(row.asset_type) ?? asString(row.type) ?? asString(metadata.asset_type) ?? "image";
+  const fileName = asString(row.file_name) ?? asString(row.name) ?? asString(metadata.file_name) ?? "";
+  const originalFileName =
+    asString(row.original_file_name) ??
+    asString(metadata.original_file_name) ??
+    fileName;
+  const cdnUrl = asString(row.cdn_url) ?? asString(row.url) ?? asString(metadata.url);
+  const thumbnailUrl = asString(row.thumbnail_url) ?? asString(metadata.thumbnail_url);
+  const previewUrl = asString(row.preview_url) ?? asString(metadata.preview_url);
+
   return {
     id: row.id,
-    user_id: row.user_id,
-    project_id: row.project_id,
-    file_name: row.file_name ?? row.name ?? '',
-    original_file_name: row.original_file_name ?? row.name ?? '',
-    mime_type: row.mime_type ?? '',
-    file_size_bytes: row.file_size_bytes ?? row.size ?? 0,
-    asset_type: (row.asset_type ?? row.type ?? 'image') as ProjectAsset["asset_type"],
-    asset_category: (row.asset_category ?? 'upload') as ProjectAsset["asset_category"],
-    storage_provider: row.storage_provider ?? 'supabase',
-    storage_bucket: row.storage_bucket ?? '',
-    storage_path: row.storage_path ?? '',
-    cdn_url: row.cdn_url ?? row.url ?? '',
-    media_metadata:
-      row.media_metadata && typeof row.media_metadata === "object" && !Array.isArray(row.media_metadata)
-        ? row.media_metadata
-        : (row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata) ? row.metadata : {}),
-    processing_status: (row.processing_status ?? 'completed') as ProjectAsset["processing_status"],
+    user_id: row.user_id ?? asString(metadata.user_id) ?? "",
+    project_id: row.project_id ?? null,
+    file_name: fileName,
+    original_file_name: originalFileName,
+    mime_type: row.mime_type ?? asString(metadata.mime_type) ?? "",
+    file_size_bytes: row.file_size_bytes ?? row.size ?? metadata.file_size_bytes ?? metadata.file_size ?? 0,
+    asset_type: assetType as ProjectAsset["asset_type"],
+    asset_category: (row.asset_category ?? metadata.asset_category ?? 'upload') as ProjectAsset["asset_category"],
+    storage_provider: row.storage_provider ?? metadata.storage_provider ?? 'supabase',
+    storage_bucket: row.storage_bucket ?? asString(metadata.storage_bucket) ?? '',
+    storage_path: row.storage_path ?? asString(metadata.storage_path) ?? '',
+    cdn_url: cdnUrl,
+    media_metadata: metadata,
+    processing_status: (row.processing_status ?? metadata.processing_status ?? 'completed') as ProjectAsset["processing_status"],
     processing_error: row.processing_error ?? null,
-    thumbnail_bucket: row.thumbnail_bucket ?? null,
-    thumbnail_path: row.thumbnail_path ?? null,
-    thumbnail_url: row.thumbnail_url ?? null,
-    preview_bucket: row.preview_bucket ?? null,
-    preview_path: row.preview_path ?? null,
-    preview_url: row.preview_url ?? null,
-    used_in_pages: row.used_in_pages ?? [],
-    usage_count: row.usage_count ?? 0,
-    visibility: (row.visibility ?? 'private') as ProjectAsset["visibility"],
-    is_archived: row.is_archived ?? false,
+    thumbnail_bucket: row.thumbnail_bucket ?? metadata.thumbnail_bucket ?? null,
+    thumbnail_path: row.thumbnail_path ?? metadata.thumbnail_path ?? null,
+    thumbnail_url: thumbnailUrl,
+    preview_bucket: row.preview_bucket ?? metadata.preview_bucket ?? null,
+    preview_path: row.preview_path ?? metadata.preview_path ?? null,
+    preview_url: previewUrl,
+    used_in_pages: row.used_in_pages ?? asStringArray(metadata.used_in_pages),
+    usage_count: row.usage_count ?? metadata.usage_count ?? 0,
+    visibility: (row.visibility ?? metadata.visibility ?? 'private') as ProjectAsset["visibility"],
+    is_archived: row.is_archived ?? metadata.is_archived ?? false,
     created_at: row.created_at,
     updated_at: row.updated_at ?? row.created_at,
     last_accessed_at: row.last_accessed_at ?? null,
   };
+}
+
+function matchesAssetFilters(asset: ProjectAsset, filters: AssetFilters): boolean {
+  if (filters.assetType?.length && !filters.assetType.includes(asset.asset_type)) return false;
+  if (filters.assetCategory?.length && !filters.assetCategory.includes(asset.asset_category)) return false;
+  if (filters.visibility?.length && !filters.visibility.includes(asset.visibility)) return false;
+  if (filters.processingStatus?.length && !filters.processingStatus.includes(asset.processing_status)) return false;
+  if (filters.onlyArchived && !asset.is_archived) return false;
+  if (!filters.includeArchived && !filters.onlyArchived && asset.is_archived) return false;
+  if (filters.searchQuery?.trim()) {
+    const term = filters.searchQuery.trim().toLowerCase();
+    const haystack = `${asset.original_file_name} ${asset.file_name} ${asset.cdn_url ?? ""}`.toLowerCase();
+    if (!haystack.includes(term)) return false;
+  }
+  return true;
+}
+
+function compareAssetValues(left: ProjectAsset, right: ProjectAsset, sortBy: AssetFilters["sortBy"]): number {
+  switch (sortBy) {
+    case "file_name":
+      return left.file_name.localeCompare(right.file_name);
+    case "file_size_bytes":
+      return left.file_size_bytes - right.file_size_bytes;
+    case "updated_at":
+      return (left.updated_at ?? "").localeCompare(right.updated_at ?? "");
+    case "created_at":
+    default:
+      return (left.created_at ?? "").localeCompare(right.created_at ?? "");
+  }
 }
 
 function normalizeUsageRow(row: AssetUsageRow): AssetUsage {
@@ -182,24 +233,6 @@ export const assetService = {
     if (filters.projectId) {
       query = query.eq("project_id", filters.projectId);
     }
-    if (filters.assetType?.length) {
-      query = query.in("asset_type", filters.assetType);
-    }
-    if (filters.assetCategory?.length) {
-      query = query.in("asset_category", filters.assetCategory);
-    }
-    if (filters.visibility?.length) {
-      query = query.in("visibility", filters.visibility);
-    }
-    if (filters.processingStatus?.length) {
-      query = query.in("processing_status", filters.processingStatus);
-    }
-    // Note: is_archived column may not exist on all project_assets schemas.
-    // Skip filtering by is_archived to avoid 400 errors.
-    if (filters.searchQuery?.trim()) {
-      const term = filters.searchQuery.trim().replace(/[%_,]/g, " ");
-      query = query.or(`original_file_name.ilike.%${term}%,file_name.ilike.%${term}%`);
-    }
     if (filters.dateFrom) {
       query = query.gte("created_at", filters.dateFrom);
     }
@@ -207,11 +240,25 @@ export const assetService = {
       query = query.lte("created_at", filters.dateTo);
     }
 
-    query = query.order(filters.sortBy ?? "created_at", {
+    const serverSortColumn =
+      filters.sortBy === "updated_at" || filters.sortBy === "created_at" ? filters.sortBy : "created_at";
+
+    query = query.order(serverSortColumn, {
       ascending: filters.sortOrder === "asc",
     });
 
-    if (typeof filters.limit === "number") {
+    const requiresClientFiltering = Boolean(
+      filters.assetType?.length ||
+        filters.assetCategory?.length ||
+        filters.visibility?.length ||
+        filters.processingStatus?.length ||
+        filters.searchQuery?.trim() ||
+        filters.includeArchived ||
+        filters.onlyArchived ||
+        (filters.sortBy && filters.sortBy !== serverSortColumn),
+    );
+
+    if (typeof filters.limit === "number" && !requiresClientFiltering) {
       query = query.limit(filters.limit);
       if (typeof filters.offset === "number") {
         query = query.range(filters.offset, filters.offset + filters.limit - 1);
@@ -223,7 +270,20 @@ export const assetService = {
       throw error;
     }
 
-    return (data ?? []).map(normalizeAssetRow);
+    let rows = (data ?? []).map(normalizeAssetRow).filter((asset) => matchesAssetFilters(asset, filters));
+
+    rows = [...rows].sort((left, right) => {
+      const direction = filters.sortOrder === "asc" ? 1 : -1;
+      return compareAssetValues(left, right, filters.sortBy ?? "created_at") * direction;
+    });
+
+    if (typeof filters.offset === "number" || typeof filters.limit === "number") {
+      const start = filters.offset ?? 0;
+      const end = typeof filters.limit === "number" ? start + filters.limit : undefined;
+      rows = rows.slice(start, end);
+    }
+
+    return rows;
   },
 
   async get(assetId: string): Promise<ProjectAsset | null> {

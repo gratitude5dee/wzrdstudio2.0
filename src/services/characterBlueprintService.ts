@@ -295,6 +295,10 @@ export async function updateBlueprintRecord(
   return rowToBlueprint(data, summarizeReferences(referencesByBlueprint.get(data.id) ?? []));
 }
 
+export async function toggleBlueprintPinned(id: string, pinned: boolean): Promise<CharacterBlueprint> {
+  return updateBlueprintRecord(id, { isFavorite: pinned });
+}
+
 // ---------------------------------------------------------------------------
 // Delete a blueprint
 // ---------------------------------------------------------------------------

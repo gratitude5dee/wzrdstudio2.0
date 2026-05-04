@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useCharacterCreationStore } from '@/lib/stores/character-creation-store';
-import { incrementBlueprintUsage } from '@/services/characterBlueprintService';
+import { incrementBlueprintUsage, toggleBlueprintPinned } from '@/services/characterBlueprintService';
 import type { CharacterMention, ResolvedCharacterRef } from '@/types/character-creation';
 
 // ---------------------------------------------------------------------------
@@ -38,26 +38,30 @@ interface UseCharacterMentionReturn {
   };
   /** Close suggestions */
   closeSuggestions: () => void;
+  /** Persistently pin/unpin a mention in reference dropdowns. */
+  toggleMentionPinned: (mention: CharacterMention) => Promise<void>;
 }
 
 export function useCharacterMention(): UseCharacterMentionReturn {
+  const blueprints = useCharacterCreationStore((s) => s.blueprints);
   const getMentionList = useCharacterCreationStore((s) => s.getMentionList);
   const findBySlug = useCharacterCreationStore((s) => s.findBySlug);
   const incrementUsage = useCharacterCreationStore((s) => s.incrementUsage);
+  const updateBlueprint = useCharacterCreationStore((s) => s.updateBlueprint);
 
   const [activeQuery, setActiveQuery] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
 
   // All available mentions
-  const allMentions = useMemo(() => getMentionList(), [getMentionList]);
+  const allMentions = useMemo(() => getMentionList(), [getMentionList, blueprints]);
 
   // Filtered by active query
   const suggestions = useMemo(() => {
-    if (!activeQuery) return [];
+    if (!activeQuery) return allMentions.slice(0, 12);
     const q = activeQuery.toLowerCase();
     return allMentions
       .filter((m) => m.slug.startsWith(q) || m.name.toLowerCase().startsWith(q))
-      .slice(0, 8);
+      .slice(0, 12);
   }, [allMentions, activeQuery]);
 
   // Detect @mention typing
@@ -174,6 +178,21 @@ export function useCharacterMention(): UseCharacterMentionReturn {
     setActiveQuery('');
   }, []);
 
+  const toggleMentionPinned = useCallback(
+    async (mention: CharacterMention) => {
+      const nextPinned = !mention.isPinned;
+      updateBlueprint(mention.id, { isFavorite: nextPinned });
+      try {
+        const updated = await toggleBlueprintPinned(mention.id, nextPinned);
+        updateBlueprint(updated.id, updated);
+      } catch (error) {
+        updateBlueprint(mention.id, { isFavorite: mention.isPinned });
+        throw error;
+      }
+    },
+    [updateBlueprint],
+  );
+
   return {
     suggestions,
     showSuggestions,
@@ -181,5 +200,6 @@ export function useCharacterMention(): UseCharacterMentionReturn {
     onSelectSuggestion,
     resolvePrompt,
     closeSuggestions,
+    toggleMentionPinned,
   };
 }

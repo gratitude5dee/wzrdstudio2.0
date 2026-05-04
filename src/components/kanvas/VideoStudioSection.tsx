@@ -53,6 +53,7 @@ interface VideoStudioSectionProps {
   mentionSuggestions?: CharacterMention[];
   showMentionDropdown?: boolean;
   onMentionSelect?: (mention: CharacterMention) => void;
+  onMentionTogglePin?: (mention: CharacterMention) => void;
   onMentionChange?: (text: string, cursorPos?: number) => void;
   onCloseMentions?: () => void;
 }
@@ -167,7 +168,7 @@ export function VideoStudioSection({
   settings, onSettingsChange, submitting, onGenerate, jobs, selectedJob,
   assets, uploading, onUpload,
   mentionSuggestions = [], showMentionDropdown = false,
-  onMentionSelect, onMentionChange, onCloseMentions,
+  onMentionSelect, onMentionTogglePin, onMentionChange, onCloseMentions,
 }: VideoStudioSectionProps) {
   const { tier, isFree } = useUserTier();
   const [activeTab, setActiveTab] = useState<"create" | "edit" | "motion">("create");
@@ -297,6 +298,7 @@ export function VideoStudioSection({
           <MentionDropdown
             suggestions={mentionSuggestions}
             onSelect={handleMentionSelect}
+            onTogglePin={onMentionTogglePin}
             visible={showMentionDropdown}
           />
           <Textarea
@@ -536,6 +538,7 @@ export function VideoStudioSection({
           <MentionDropdown
             suggestions={mentionSuggestions}
             onSelect={handleMentionSelect}
+            onTogglePin={onMentionTogglePin}
             visible={showMentionDropdown}
           />
           <Textarea

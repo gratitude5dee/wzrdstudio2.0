@@ -150,6 +150,9 @@ export interface CharacterMention {
   imageUrl: string | null;
   promptFragment: string;
   kind: CharacterKind;
+  isPinned: boolean;
+  usageCount: number;
+  updatedAt: string;
   referenceAssetIds: string[];
   referenceImageUrls: string[];
   gmiElementId?: string | null;

@@ -12,6 +12,7 @@ import type {
   CharacterStyleDetails,
   CharacterTraits,
 } from '@/types/character-creation';
+import { sortBlueprintsForReference } from '@/lib/characterBlueprintReference';
 
 // ---------------------------------------------------------------------------
 // Defaults
@@ -283,13 +284,16 @@ export const useCharacterCreationStore = create<CharacterCreationState & Charact
     // -- @Mention helpers ---------------------------------------------------
 
     getMentionList: () => {
-      return get().blueprints.map((b) => ({
+      return sortBlueprintsForReference(get().blueprints).map((b) => ({
         id: b.id,
         name: b.name,
         slug: b.slug,
         imageUrl: b.imageUrl,
         promptFragment: b.promptFragment,
         kind: b.kind,
+        isPinned: b.isFavorite,
+        usageCount: b.usageCount,
+        updatedAt: b.updatedAt,
         referenceAssetIds: b.referenceAssetIds,
         referenceImageUrls: b.referenceImageUrls,
         gmiElementId: b.gmiElementId,

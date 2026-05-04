@@ -47,6 +47,7 @@ interface ImageStudioSectionProps {
   mentionSuggestions?: CharacterMention[];
   showMentionDropdown?: boolean;
   onMentionSelect?: (mention: CharacterMention) => void;
+  onMentionTogglePin?: (mention: CharacterMention) => void;
   onMentionChange?: (text: string, cursorPos?: number) => void;
   onCloseMentions?: () => void;
 }
@@ -122,6 +123,7 @@ export default function ImageStudioSection({
   mentionSuggestions = [],
   showMentionDropdown = false,
   onMentionSelect,
+  onMentionTogglePin,
   onMentionChange,
   onCloseMentions,
 }: ImageStudioSectionProps) {
@@ -528,6 +530,7 @@ export default function ImageStudioSection({
         <MentionDropdown
           suggestions={mentionSuggestions}
           onSelect={handleMentionSelect}
+          onTogglePin={onMentionTogglePin}
           visible={showMentionDropdown}
         />
 

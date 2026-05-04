@@ -36,6 +36,7 @@ interface CinemaStudioProps {
   mentionSuggestions?: CharacterMention[];
   showMentionDropdown?: boolean;
   onMentionSelect?: (mention: CharacterMention) => void;
+  onMentionTogglePin?: (mention: CharacterMention) => void;
   onCloseMentions?: () => void;
   onMentionChange?: (text: string, cursorPos?: number) => void;
   characterMentions?: CharacterMention[];
@@ -106,7 +107,7 @@ export default function CinemaStudioSection({
   currentModel, models, onModelChange,
   submitting, onGenerate, jobs, selectedJob, assets, onUpload, uploading,
   mentionSuggestions = [], showMentionDropdown = false,
-  onMentionSelect, onCloseMentions, onMentionChange,
+  onMentionSelect, onMentionTogglePin, onCloseMentions, onMentionChange,
   characterMentions = [],
 }: CinemaStudioProps) {
   const { tier } = useUserTier();
@@ -147,6 +148,7 @@ export default function CinemaStudioSection({
         <MentionDropdown
           suggestions={mentionSuggestions}
           onSelect={handleMentionSelect}
+          onTogglePin={onMentionTogglePin}
           visible={showMentionDropdown}
         />
         <div className="bg-[#1a1a1a] rounded-full px-4 py-2.5 flex items-center">

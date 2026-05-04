@@ -814,6 +814,7 @@ export default function KanvasPage() {
     onSelectSuggestion,
     resolvePrompt: resolveMentions,
     closeSuggestions: closeMentionDropdown,
+    toggleMentionPinned,
   } = useCharacterMention();
 
   const [imagePrompt, setImagePrompt] = useState("");
@@ -1369,10 +1370,11 @@ export default function KanvasPage() {
   }, [setBlueprints]);
 
   // Full character mention list for cinema cast (unfiltered)
+  const blueprintList = useCharacterCreationStore((s) => s.blueprints);
   const getMentionListFn = useCharacterCreationStore((s) => s.getMentionList);
   const allCharacterMentions = useMemo(() => {
     try { return getMentionListFn(); } catch { return []; }
-  }, [getMentionListFn]);
+  }, [blueprintList, getMentionListFn]);
 
   return (
     <div className="relative h-screen bg-[#050506] text-white overflow-hidden">
@@ -1556,6 +1558,11 @@ export default function KanvasPage() {
                   const replaced = onSelectSuggestion(mention, imagePrompt);
                   setImagePrompt(replaced);
                 }}
+                onMentionTogglePin={(mention) => {
+                  void toggleMentionPinned(mention).catch((error) => {
+                    toast.error(error instanceof Error ? error.message : "Failed to update pin.");
+                  });
+                }}
                 onMentionChange={onMentionChange}
                 onCloseMentions={closeMentionDropdown}
               />
@@ -1586,6 +1593,11 @@ export default function KanvasPage() {
                 onMentionSelect={(mention) => {
                   const replaced = onSelectSuggestion(mention, videoPrompt);
                   setVideoPrompt(replaced);
+                }}
+                onMentionTogglePin={(mention) => {
+                  void toggleMentionPinned(mention).catch((error) => {
+                    toast.error(error instanceof Error ? error.message : "Failed to update pin.");
+                  });
                 }}
                 onMentionChange={onMentionChange}
                 onCloseMentions={closeMentionDropdown}
@@ -1658,6 +1670,11 @@ export default function KanvasPage() {
                 onMentionSelect={(mention) => {
                   const replaced = onSelectSuggestion(mention, cinemaPrompt);
                   setCinemaPrompt(replaced);
+                }}
+                onMentionTogglePin={(mention) => {
+                  void toggleMentionPinned(mention).catch((error) => {
+                    toast.error(error instanceof Error ? error.message : "Failed to update pin.");
+                  });
                 }}
                 onCloseMentions={closeMentionDropdown}
                 onMentionChange={onMentionChange}
