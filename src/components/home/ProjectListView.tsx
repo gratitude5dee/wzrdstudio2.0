@@ -123,7 +123,7 @@ export const ProjectListView = ({ projects, onOpenProject, onRefresh }: ProjectL
       setEditValue('');
     } catch (error) {
       if (error instanceof z.ZodError) {
-        setEditError(error.errors[0].message);
+        setEditError(error.issues[0].message);
       } else {
         toast({
           title: 'Error',

@@ -1,5 +1,5 @@
-import { Loader2, Mic, MicOff, Volume2 } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { Loader2, Mic, MicOff, PhoneOff, Volume2 } from 'lucide-react';
+import { useCallback, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -11,11 +11,13 @@ interface VoiceActionButtonProps {
   disabled?: boolean;
   onPressStart: () => void | Promise<void>;
   onPressEnd: () => void | Promise<void>;
+  onDisconnect: () => void;
 }
 
 const STATUS_LABELS: Record<VoiceSessionStatus, string> = {
   idle: 'Ready',
   connecting: 'Connecting',
+  connected: 'Connected — hold to speak',
   listening: 'Listening',
   thinking: 'Thinking',
   speaking: 'Speaking',
@@ -23,17 +25,25 @@ const STATUS_LABELS: Record<VoiceSessionStatus, string> = {
   error: 'Voice unavailable',
 };
 
+/** Threshold in ms — presses shorter than this are treated as a toggle tap, not PTT. */
+const TAP_THRESHOLD = 200;
+
 export function VoiceActionButton({
   status,
   errorMessage,
   disabled,
   onPressStart,
   onPressEnd,
+  onDisconnect,
 }: VoiceActionButtonProps) {
   const [pressed, setPressed] = useState(false);
+  const pressStartTime = useRef(0);
+
+  const isActive = status !== 'idle' && status !== 'error';
 
   const start = useCallback(() => {
     if (disabled || pressed) return;
+    pressStartTime.current = Date.now();
     setPressed(true);
     void onPressStart();
   }, [disabled, onPressStart, pressed]);
@@ -41,8 +51,16 @@ export function VoiceActionButton({
   const stop = useCallback(() => {
     if (!pressed) return;
     setPressed(false);
+    const elapsed = Date.now() - pressStartTime.current;
+
+    // Short tap on an already-connected session → disconnect
+    if (elapsed < TAP_THRESHOLD && isActive) {
+      onDisconnect();
+      return;
+    }
+
     void onPressEnd();
-  }, [onPressEnd, pressed]);
+  }, [onPressEnd, pressed, isActive, onDisconnect]);
 
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLButtonElement>) => {
@@ -62,7 +80,16 @@ export function VoiceActionButton({
     [stop],
   );
 
-  const Icon = status === 'connecting' || status === 'thinking' ? Loader2 : status === 'speaking' ? Volume2 : status === 'error' ? MicOff : Mic;
+  const Icon =
+    status === 'connecting' || status === 'thinking'
+      ? Loader2
+      : status === 'speaking'
+        ? Volume2
+        : status === 'error'
+          ? MicOff
+          : status === 'connected'
+            ? PhoneOff
+            : Mic;
 
   return (
     <div
@@ -71,7 +98,7 @@ export function VoiceActionButton({
     >
       <Button
         type="button"
-        aria-label="Hold to speak"
+        aria-label={isActive ? 'Hold to speak, tap to disconnect' : 'Hold to speak'}
         disabled={disabled}
         onPointerDown={start}
         onPointerUp={stop}
@@ -83,10 +110,15 @@ export function VoiceActionButton({
           'pointer-events-auto h-12 w-12 rounded-full border border-white/15 bg-zinc-950/90 p-0 text-white shadow-2xl shadow-black/40 backdrop-blur transition',
           'hover:bg-zinc-900 focus-visible:ring-2 focus-visible:ring-orange-400',
           status === 'listening' && 'border-orange-400 bg-orange-500 text-black shadow-orange-500/30',
+          status === 'connected' && 'border-green-400/50 shadow-green-500/10',
           status === 'error' && 'border-red-400 bg-red-500/15 text-red-100',
         )}
       >
         <Icon className={cn('h-5 w-5', (status === 'connecting' || status === 'thinking') && 'animate-spin')} />
+        {/* Pulsing dot to indicate active session */}
+        {isActive && status !== 'listening' && status !== 'error' && (
+          <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-green-400 animate-pulse" />
+        )}
       </Button>
 
       {(status !== 'idle' || errorMessage) && (

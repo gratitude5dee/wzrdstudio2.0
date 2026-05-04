@@ -183,7 +183,7 @@ export const AppHeader = ({
       setIsEditing(false);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        toast.error(error.errors[0].message);
+        toast.error(error.issues[0].message);
       } else {
         toast.error('Failed to update project title');
       }
