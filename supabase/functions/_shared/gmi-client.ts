@@ -1,8 +1,8 @@
 /**
- * GMI Cloud API client for free-tier model execution.
+ * GMI Cloud API client for model execution.
  *
- * GMI Cloud serves as the provider for all free-tier users while
- * Pro/Enterprise users continue using the faster Fal API.
+ * GMI Cloud serves as an alternate provider for supported models. Credits are
+ * still reserved before provider calls.
  *
  * API endpoints:
  *   - LLM chat completions: https://api.gmi-serving.com/v1/chat/completions

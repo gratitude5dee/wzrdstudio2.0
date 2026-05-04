@@ -193,6 +193,15 @@ serve(async (req) => {
       return errorResponse(`User bootstrap failed: ${bootstrapError.message}`, 500);
     }
 
+    const { error: creditBootstrapError } = await supabaseAdmin.rpc('ensure_credit_account', {
+      p_user_id: userId,
+      p_source: 'wallet_auth',
+    });
+    if (creditBootstrapError) {
+      console.error('Credit account bootstrap failed:', creditBootstrapError);
+      return errorResponse(`Credit account bootstrap failed: ${creditBootstrapError.message}`, 500);
+    }
+
     console.log(`Bootstrap complete for ${walletAddressLower}:`, bootstrapData);
 
     // Sign in the user to get a session

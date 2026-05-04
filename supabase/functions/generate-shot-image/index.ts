@@ -215,8 +215,24 @@ serve(async (req) => {
         config: { shot_id: shotId, aspect_ratio: aspectRatio, image_size: imageSize },
       });
 
-      // GMI models are free — skip credit reservation
-      creditReservation = { holdId: null, requestedAmount: 0, skipped: true };
+      const gmiCreditCost = getCreditCostForModel(selectedImageModel, 'image');
+      creditReservation = await reserveCredits({
+        supabase,
+        userId: user.id,
+        resourceType: 'image',
+        requestedAmount: gmiCreditCost,
+        referenceType: 'shot_image_generation',
+        referenceId: shotId,
+        idempotencyKey: buildCreditIdempotencyKey('generate-shot-image', shotId, requestId, selectedImageModel),
+        metadata: {
+          endpoint: 'generate-shot-image',
+          project_id: shot.project_id,
+          shot_id: shotId,
+          model: selectedImageModel,
+          provider: 'gmi-cloud',
+        },
+        skipBilling: shouldSkipCreditBilling(req.headers),
+      });
 
       // Convert aspect ratio to WxH for Seedream
       const sizeMap: Record<string, string> = {
@@ -265,6 +281,19 @@ serve(async (req) => {
       // If all GMI models failed, fall through to FAL path
       if (!submitResult || !submitResult.success || !submitResult.requestId) {
         console.warn(`[generate-shot-image][Shot ${shotId}] All GMI models unavailable, falling through to FAL path`);
+        await releaseCredits({
+          supabase,
+          holdId: creditReservation.holdId,
+          skipped: creditReservation.skipped,
+          reason: 'gmi_unavailable_fallback_to_fal',
+          userId: user.id,
+          metadata: {
+            endpoint: 'generate-shot-image',
+            shot_id: shotId,
+            provider: 'gmi-cloud',
+          },
+        });
+        creditReservation = null;
       } else {
         await supabase.from("shots").update({ image_progress: 30 }).eq("id", shotId);
 
@@ -330,7 +359,18 @@ serve(async (req) => {
           relationType: 'output', metadata: { kind: 'shot_image', model_id: usedModelId },
         });
 
-        await commitCredits({ supabase, holdId: null, skipped: true, amount: 0, metadata: {} });
+        await commitCredits({
+          supabase,
+          holdId: creditReservation.holdId,
+          skipped: creditReservation.skipped,
+          amount: gmiCreditCost,
+          metadata: {
+            endpoint: 'generate-shot-image',
+            shot_id: shotId,
+            image_url: publicUrl,
+            provider: 'gmi-cloud',
+          },
+        });
         await updateGenerationJob(supabase, imageGenerationJobId, {
           status: 'completed', progress: 100, result_url: publicUrl,
           result_payload: { shot_id: shotId, asset_id: imageAssetId },
@@ -634,6 +674,10 @@ serve(async (req) => {
       );
 
     } catch (error: unknown) {
+      if (error instanceof InsufficientCreditsError) {
+        throw error;
+      }
+
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       const errorStack = error instanceof Error ? error.stack : undefined;
       console.error(`[generate-shot-image][Shot ${shotId}] Error in image generation: ${errorMsg}`);

@@ -3,6 +3,15 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders, errorResponse, successResponse, handleCors } from '../_shared/response.ts';
 import { authenticateRequest, AuthError } from '../_shared/auth.ts';
+import {
+  buildCreditIdempotencyKey,
+  commitCredits,
+  getCreditCostForModel,
+  InsufficientCreditsError,
+  insufficientCreditsResponse,
+  releaseCredits,
+  reserveCredits,
+} from '../_shared/credits.ts';
 
 interface RequestBody {
   shot_id: string;
@@ -55,6 +64,8 @@ serve(async (req) => {
   }
 
   let shotId: string | null = null;
+  let creditReservation: { holdId: string | null; requestedAmount: number; skipped: boolean } | null = null;
+  let creditCost = 0;
 
   try {
     const user = await authenticateRequest(req.headers);
@@ -130,7 +141,24 @@ serve(async (req) => {
       }
     }
 
-    // Update status to generating
+    creditCost = getCreditCostForModel(`gmi/${model_id}`, 'audio');
+    creditReservation = await reserveCredits({
+      supabase: supabaseClient,
+      userId: user.id,
+      resourceType: 'audio',
+      requestedAmount: creditCost,
+      referenceType: 'shot_audio_generation',
+      referenceId: shotId,
+      idempotencyKey: buildCreditIdempotencyKey('generate-shot-audio', shotId, contentHash),
+      metadata: {
+        endpoint: 'generate-shot-audio',
+        project_id: shotData.project_id,
+        shot_id: shotId,
+        model_id,
+      },
+    });
+
+    // Update status only after the reservation succeeds, so 402 responses do not leave a stuck job.
     await updateShotStatus(supabaseClient, shotId, 'generating');
     console.log(`[Shot ${shotId}] Generating audio with ElevenLabs`);
 
@@ -181,6 +209,19 @@ serve(async (req) => {
 
       // Update shot with audio URL
       await updateShotStatus(supabaseClient, shotId, 'completed', urlData.publicUrl);
+      await commitCredits({
+        supabase: supabaseClient,
+        holdId: creditReservation.holdId,
+        skipped: creditReservation.skipped,
+        amount: creditCost,
+        userId: user.id,
+        metadata: {
+          endpoint: 'generate-shot-audio',
+          shot_id: shotId,
+          audio_url: urlData.publicUrl,
+        },
+      });
+      creditReservation = null;
 
       return successResponse({
         message: 'Audio generated and stored successfully',
@@ -191,6 +232,21 @@ serve(async (req) => {
     } catch (error: unknown) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       console.error(`[Shot ${shotId}] Error generating audio:`, error);
+      if (creditReservation) {
+        await releaseCredits({
+          supabase: supabaseClient,
+          holdId: creditReservation.holdId,
+          skipped: creditReservation.skipped,
+          reason: 'audio_generation_failed',
+          userId: user.id,
+          metadata: {
+            endpoint: 'generate-shot-audio',
+            shot_id: shotId,
+            error: errorMsg,
+          },
+        });
+        creditReservation = null;
+      }
       await updateShotStatus(supabaseClient, shotId!, 'failed', null, errorMsg);
       return errorResponse(`Failed to generate or store audio: ${errorMsg}`, 500);
     }
@@ -201,6 +257,9 @@ serve(async (req) => {
     
     if (error instanceof AuthError) {
       return errorResponse(error.message, 401);
+    }
+    if (error instanceof InsufficientCreditsError) {
+      return insufficientCreditsResponse(error, corsHeaders);
     }
     
     return errorResponse(errorMsg, 500);

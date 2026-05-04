@@ -70,7 +70,7 @@ const ASPECT_RATIOS = ["1:1", "3:4", "4:3", "16:9", "9:16"] as const;
 
 const PROVIDER_GROUPS: { provider: string; icon: string; label: string }[] = [
   { provider: "fal-ai", icon: "F", label: "Fal" },
-  { provider: "gmi-cloud", icon: "✦", label: "GMI Cloud (Free)" },
+  { provider: "gmi-cloud", icon: "✦", label: "GMI Cloud" },
   { provider: "google", icon: "G", label: "Google" },
   { provider: "black_forest_labs", icon: "B", label: "Black Forest Labs" },
   { provider: "openai", icon: "O", label: "OpenAI" },
@@ -307,7 +307,7 @@ export default function ImageStudioSection({
                     <span className="font-medium">{m.name}</span>
                     {isGmi && (
                       <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-emerald-500/20 text-emerald-400">
-                        Free
+                        GMI
                       </span>
                     )}
                     {isFeatured && (

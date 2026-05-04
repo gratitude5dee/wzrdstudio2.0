@@ -43,7 +43,7 @@ const toToolbarModelMeta = (
     id: m.id,
     name: m.name,
     description: m.description,
-    badge: m.id.startsWith('gmi/') ? 'Free' : 'Paid',
+    badge: m.id.startsWith('gmi/') ? 'GMI' : 'Credits',
     icon:
       media === 'text'
         ? m.id.startsWith('gmi/')
@@ -257,7 +257,7 @@ export const BlockFloatingToolbar: React.FC<BlockFloatingToolbarProps> = ({
                         <p className="text-xs text-zinc-400 leading-tight">{model.description}</p>
                         <Badge
                           className={`mt-1.5 text-[10px] h-4 px-1.5 ${
-                            model.badge === 'Free'
+                            model.badge === 'GMI'
                               ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
                               : model.badge === 'Premium'
                               ? 'bg-purple-500/10 text-purple-400 border-purple-500/20'

@@ -26,6 +26,7 @@ import {
 } from '@/lib/studio-model-constants';
 import { buildCanonicalFalInputs, normalizeFalModelId } from '@/lib/falModelNormalization';
 import {
+  extractInsufficientCreditsError,
   extractInsufficientCreditsFromResponse,
   routeToBillingTopUp,
 } from '@/lib/billing-errors';
@@ -699,7 +700,14 @@ async function executeGmiCloud(
       },
     });
 
-    if (error) throw new GenerationError(error.message || 'GMI text generation failed', 'gmi_error');
+    if (error) {
+      const insufficient = await extractInsufficientCreditsError(error);
+      if (insufficient) {
+        routeToBillingTopUp(insufficient);
+        throw new InsufficientCreditsError(insufficient.required, insufficient.available);
+      }
+      throw new GenerationError(error.message || 'GMI text generation failed', 'gmi_error');
+    }
     onProgress?.({ percent: 100, message: 'Complete' });
 
     const text = data?.data?.choices?.[0]?.message?.content ?? '';
@@ -838,7 +846,14 @@ async function executeGmiCloud(
     },
   });
 
-  if (submitError) throw new GenerationError(submitError.message || 'GMI submission failed', 'gmi_error');
+  if (submitError) {
+    const insufficient = await extractInsufficientCreditsError(submitError);
+    if (insufficient) {
+      routeToBillingTopUp(insufficient);
+      throw new InsufficientCreditsError(insufficient.required, insufficient.available);
+    }
+    throw new GenerationError(submitError.message || 'GMI submission failed', 'gmi_error');
+  }
 
   const requestId = submitData?.requestId;
   if (!requestId) throw new GenerationError('No request ID from GMI Cloud', 'gmi_error');

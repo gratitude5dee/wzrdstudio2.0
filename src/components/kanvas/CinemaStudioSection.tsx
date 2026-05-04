@@ -615,7 +615,7 @@ export default function CinemaStudioSection({
                   const isGMI = m.id.toLowerCase().startsWith("gmi/");
                   return (
                     <option key={m.id} value={m.id}>
-                      {m.name} {isGMI ? "(Free)" : ""} — {m.credits}cr
+                      {m.name} {isGMI ? "(GMI)" : ""} — {m.credits}cr
                     </option>
                   );
                 })}

@@ -483,7 +483,7 @@ const imageGenerationModels: StudioModel[] = [
   },
 ];
 
-// ── GMI Cloud Free-Tier Image Models ────────────────────────────────────────
+// ── GMI Cloud Image Models ──────────────────────────────────────────────────
 const gmiImageGenerationModels: StudioModel[] = [
   {
     id: 'gmi/seedream-5.0',
@@ -1535,7 +1535,7 @@ const videoGenerationModels: StudioModel[] = [
   },
 ];
 
-// ── GMI Cloud Free-Tier Video Models ────────────────────────────────────────
+// ── GMI Cloud Video Models ──────────────────────────────────────────────────
 const gmiVideoGenerationModels: StudioModel[] = [
   {
     id: 'gmi/kling-v3-omni',
@@ -1694,7 +1694,7 @@ const gmiVideoGenerationModels: StudioModel[] = [
     id: 'gmi/seedance-2.0-t2v',
     name: 'Seedance 2.0',
     description: 'Next-generation cinematic text-to-video generation.',
-    credits: 0,
+    credits: 30,
     time: '~60s',
     icon: 'video',
     provider: 'gmi-cloud',
@@ -1709,7 +1709,7 @@ const gmiVideoGenerationModels: StudioModel[] = [
     id: 'gmi/seedance-2.0-i2v',
     name: 'Seedance 2.0 I2V',
     description: 'Seedance 2.0 with a first-frame image reference.',
-    credits: 0,
+    credits: 30,
     time: '~60s',
     icon: 'video',
     provider: 'gmi-cloud',
@@ -1724,7 +1724,7 @@ const gmiVideoGenerationModels: StudioModel[] = [
     id: 'gmi/seedance-2.0-fast-t2v',
     name: 'Seedance 2.0 Fast',
     description: 'Faster Seedance 2.0 text-to-video generation.',
-    credits: 0,
+    credits: 20,
     time: '~35s',
     icon: 'video',
     badge: 'Fast',
@@ -1740,7 +1740,7 @@ const gmiVideoGenerationModels: StudioModel[] = [
     id: 'gmi/seedance-2.0-fast-i2v',
     name: 'Seedance 2.0 Fast I2V',
     description: 'Faster Seedance 2.0 image-to-video generation.',
-    credits: 0,
+    credits: 20,
     time: '~35s',
     icon: 'video',
     badge: 'Fast',
@@ -1756,7 +1756,7 @@ const gmiVideoGenerationModels: StudioModel[] = [
     id: 'gmi/wan2.7-i2v',
     name: 'Wan 2.7 I2V',
     description: 'Image-to-video with stronger motion consistency and fidelity.',
-    credits: 0,
+    credits: 22,
     time: '~55s',
     icon: 'video',
     provider: 'gmi-cloud',
@@ -1771,7 +1771,7 @@ const gmiVideoGenerationModels: StudioModel[] = [
     id: 'gmi/wan2.7-r2v',
     name: 'Wan 2.7 R2V',
     description: 'Reference-to-video generation from a single image or video reference.',
-    credits: 0,
+    credits: 22,
     time: '~55s',
     icon: 'video',
     provider: 'gmi-cloud',
@@ -2834,7 +2834,7 @@ export const LIPSYNC_MODELS: StudioModel[] = [
   },
 ];
 
-// ── GMI Cloud Free-Tier Text Models ─────────────────────────────────────────
+// ── GMI Cloud Text Models ───────────────────────────────────────────────────
 const gmiTextModels: StudioModel[] = [
   {
     id: 'gmi/gemini-3.1-flash-lite',
@@ -2854,7 +2854,7 @@ const gmiTextModels: StudioModel[] = [
     id: 'gmi/claude-opus-4.7',
     name: 'Claude Opus 4.7',
     description: 'Anthropic flagship reasoning and coding model.',
-    credits: 0,
+    credits: 5,
     time: '~5s',
     icon: 'text',
     badge: 'Quality',
@@ -2868,7 +2868,7 @@ const gmiTextModels: StudioModel[] = [
     id: 'gmi/glm-5.1',
     name: 'GLM 5.1',
     description: 'Efficient general-purpose reasoning, multilingual, and coding model.',
-    credits: 0,
+    credits: 2,
     time: '~3s',
     icon: 'text',
     provider: 'gmi-cloud',

@@ -1,19 +1,29 @@
 /**
  * gmi-execute – Edge function that routes AI generation requests to
- * the GMI Cloud API. Used exclusively by free-tier users.
+ * the GMI Cloud API. GMI calls still consume credits and are blocked at zero balance.
  *
  * Supports three execution paths:
  *   1. LLM chat completions (text models → api.gmi-serving.com)
  *   2. Image queue (Seedream etc → console.gmicloud.ai request queue)
  *   3. Video queue (Kling V3 Omni etc → console.gmicloud.ai request queue)
  *
- * Pro/Enterprise users never hit this function — they go through falai-execute.
+ * Some surfaces route GMI models here directly while Fal models use falai-execute.
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { authenticateRequest, AuthError } from '../_shared/auth.ts';
 import { getCatalogModelById } from '../_shared/ai-model-catalog.ts';
 import { corsHeaders, errorResponse, successResponse, handleCors } from '../_shared/response.ts';
+import {
+  buildCreditIdempotencyKey,
+  commitCredits,
+  getCreditCostForModel,
+  InsufficientCreditsError,
+  insufficientCreditsResponse,
+  releaseCredits,
+  reserveCredits,
+} from '../_shared/credits.ts';
 import {
   executeGmiChatCompletion,
   executeGmiQueueModel,
@@ -39,8 +49,15 @@ serve(async (req) => {
     return handleCors();
   }
 
+  let creditReservation: { holdId: string | null; requestedAmount: number; skipped: boolean } | null = null;
+  let creditCost = 0;
+  let userId: string | null = null;
+  let modelIdForBilling = '';
+  let resourceTypeForBilling = 'generation';
+
   try {
-    await authenticateRequest(req.headers);
+    const user = await authenticateRequest(req.headers);
+    userId = user.id;
 
     const body: RequestBody = await req.json();
     const { modelId, inputs, action = 'submit', requestId, metadata } = body;
@@ -75,6 +92,39 @@ serve(async (req) => {
     }
 
     const apiModelId = model.endpointId;
+    modelIdForBilling = modelId;
+    resourceTypeForBilling = model.mediaType || 'generation';
+
+    const serviceClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      { auth: { persistSession: false } },
+    );
+    creditCost = getCreditCostForModel(modelId, resourceTypeForBilling);
+    creditReservation = await reserveCredits({
+      supabase: serviceClient,
+      userId,
+      resourceType: resourceTypeForBilling,
+      requestedAmount: creditCost,
+      referenceType: 'gmi_execute',
+      referenceId: metadata?.nodeId || requestId || crypto.randomUUID(),
+      idempotencyKey: buildCreditIdempotencyKey(
+        'gmi-execute',
+        userId,
+        metadata?.projectId,
+        metadata?.nodeId,
+        modelId,
+        requestId,
+        crypto.randomUUID(),
+      ),
+      metadata: {
+        endpoint: 'gmi-execute',
+        project_id: metadata?.projectId,
+        node_id: metadata?.nodeId,
+        source: metadata?.source,
+        model_id: modelId,
+      },
+    });
 
     console.log('[gmi-execute] Executing model:', {
       studioModelId: modelId,
@@ -95,8 +145,27 @@ serve(async (req) => {
       });
 
       if (!result.success) {
+        await releaseCredits({
+          supabase: serviceClient,
+          holdId: creditReservation.holdId,
+          skipped: creditReservation.skipped,
+          reason: 'gmi_text_failed',
+          userId,
+          metadata: { endpoint: 'gmi-execute', model_id: modelId },
+        });
+        creditReservation = null;
         return errorResponse(result.error ?? 'GMI LLM execution failed', 502);
       }
+
+      await commitCredits({
+        supabase: serviceClient,
+        holdId: creditReservation.holdId,
+        skipped: creditReservation.skipped,
+        amount: creditCost,
+        userId,
+        metadata: { endpoint: 'gmi-execute', model_id: modelId },
+      });
+      creditReservation = null;
 
       return successResponse({
         success: true,
@@ -113,8 +182,31 @@ serve(async (req) => {
     const result = await executeGmiQueueModel(apiModelId, payload, model.payloadKeys);
 
     if (!result.success) {
+      await releaseCredits({
+        supabase: serviceClient,
+        holdId: creditReservation.holdId,
+        skipped: creditReservation.skipped,
+        reason: 'gmi_queue_submit_failed',
+        userId,
+        metadata: { endpoint: 'gmi-execute', model_id: modelId },
+      });
+      creditReservation = null;
       return errorResponse(result.error ?? 'GMI queue submission failed', 502);
     }
+
+    await commitCredits({
+      supabase: serviceClient,
+      holdId: creditReservation.holdId,
+      skipped: creditReservation.skipped,
+      amount: creditCost,
+      userId,
+      metadata: {
+        endpoint: 'gmi-execute',
+        model_id: modelId,
+        request_id: result.requestId,
+      },
+    });
+    creditReservation = null;
 
     return successResponse({
       success: true,
@@ -128,6 +220,29 @@ serve(async (req) => {
 
     if (error instanceof AuthError) {
       return errorResponse(error.message, 401);
+    }
+    if (error instanceof InsufficientCreditsError) {
+      return insufficientCreditsResponse(error, corsHeaders);
+    }
+
+    if (creditReservation && userId) {
+      const serviceClient = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+        { auth: { persistSession: false } },
+      );
+      await releaseCredits({
+        supabase: serviceClient,
+        holdId: creditReservation.holdId,
+        skipped: creditReservation.skipped,
+        reason: 'gmi_execute_failed',
+        userId,
+        metadata: {
+          endpoint: 'gmi-execute',
+          model_id: modelIdForBilling,
+          resource_type: resourceTypeForBilling,
+        },
+      });
     }
 
     const message = error instanceof Error ? error.message : 'Failed to execute GMI model';

@@ -87,24 +87,24 @@ describe('credits constants', () => {
   });
 
   describe('STORYLINE_MODEL_OPTIONS', () => {
-    it('contains storyline model options with numeric credits, including free GMI entries', () => {
+    it('contains storyline model options with positive numeric credits', () => {
       expect(STORYLINE_MODEL_OPTIONS.length).toBeGreaterThan(0);
       for (const opt of STORYLINE_MODEL_OPTIONS) {
         expect(opt.id).toBeTruthy();
         expect(opt.label).toBeTruthy();
         expect(typeof opt.credits).toBe('number');
-        expect(opt.credits).toBeGreaterThanOrEqual(0);
+        expect(opt.credits).toBeGreaterThan(0);
       }
 
       expect(STORYLINE_MODEL_OPTIONS).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             id: 'gmi/claude-opus-4.7',
-            credits: 0,
+            credits: 5,
           }),
           expect.objectContaining({
             id: 'gmi/glm-5.1',
-            credits: 0,
+            credits: 2,
           }),
         ])
       );

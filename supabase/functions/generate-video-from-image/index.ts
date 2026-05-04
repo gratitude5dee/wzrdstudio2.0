@@ -18,6 +18,15 @@ import {
   enqueueStoryboardEvaluation,
   updateGenerationJob,
 } from "../_shared/observability.ts";
+import {
+  buildCreditIdempotencyKey,
+  commitCredits,
+  getCreditCostForModel,
+  InsufficientCreditsError,
+  insufficientCreditsResponse,
+  releaseCredits,
+  reserveCredits,
+} from "../_shared/credits.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") as string;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") as string;
@@ -215,6 +224,8 @@ serve(async (req) => {
       .eq('id', shot_id);
 
     let videoGenerationJobId: string | null = null;
+    let creditReservation: { holdId: string | null; requestedAmount: number; skipped: boolean } | null = null;
+    const creditCost = getCreditCostForModel(submission.modelId, 'video');
     try {
       videoGenerationJobId = await createGenerationJob(supabase, {
         userId: authData.user.id,
@@ -233,6 +244,23 @@ serve(async (req) => {
           fallback_reason: resolvedModel.fallbackReason,
           normalized_settings: submission.normalizedSettings,
           normalized_payload: submission.payload,
+        },
+      });
+
+      creditReservation = await reserveCredits({
+        supabase,
+        userId: authData.user.id,
+        resourceType: 'video',
+        requestedAmount: creditCost,
+        referenceType: 'shot_video_generation',
+        referenceId: shot_id,
+        idempotencyKey: buildCreditIdempotencyKey('generate-video-from-image', shot_id, submission.modelId),
+        metadata: {
+          endpoint: 'generate-video-from-image',
+          project_id: shot.project_id,
+          shot_id,
+          model: submission.modelId,
+          provider: 'gmi-cloud',
         },
       });
 
@@ -369,6 +397,19 @@ serve(async (req) => {
         completed_at: new Date().toISOString(),
       });
 
+      await commitCredits({
+        supabase,
+        holdId: creditReservation.holdId,
+        skipped: creditReservation.skipped,
+        amount: creditCost,
+        userId: authData.user.id,
+        metadata: {
+          endpoint: 'generate-video-from-image',
+          shot_id,
+          video_url: publicUrl,
+        },
+      });
+
       await enqueueStoryboardEvaluation(supabase, {
         userId: authData.user.id,
         projectId: shot.project_id,
@@ -391,8 +432,36 @@ serve(async (req) => {
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     } catch (error: unknown) {
+      if (error instanceof InsufficientCreditsError) {
+        await updateGenerationJob(supabase, videoGenerationJobId, {
+          status: 'failed',
+          error_message: 'Insufficient credits',
+          completed_at: new Date().toISOString(),
+        });
+        await supabase
+          .from('shots')
+          .update({ video_status: 'failed', failure_reason: 'Insufficient credits' })
+          .eq('id', shot_id);
+        return insufficientCreditsResponse(error, corsHeaders);
+      }
+
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       console.error(`[Shot ${shot_id}] Error: ${errorMsg}`);
+
+      if (creditReservation) {
+        await releaseCredits({
+          supabase,
+          holdId: creditReservation.holdId,
+          skipped: creditReservation.skipped,
+          reason: 'generation_failed',
+          userId: authData.user.id,
+          metadata: {
+            endpoint: 'generate-video-from-image',
+            shot_id,
+            error: errorMsg,
+          },
+        });
+      }
 
       await supabase
         .from('shots')

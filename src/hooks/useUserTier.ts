@@ -2,8 +2,7 @@
  * useUserTier – detects the current user's subscription tier and exposes
  * helpers for tier-aware model ordering.
  *
- * GMI Cloud remains the primary catalog experience.
- * Paid users can still default to legacy premium providers on selected surfaces.
+ * Tier helpers for provider ordering. GMI Cloud models still consume credits.
  */
 
 import { useMemo } from 'react';
@@ -14,7 +13,7 @@ export type UserTier = 'free' | 'pro' | 'enterprise';
 export interface UserTierInfo {
   /** Resolved tier for the current user */
   tier: UserTier;
-  /** Whether the user is on the free plan (no active paid subscription) */
+  /** Whether the user is on the free plan */
   isFree: boolean;
   /** Whether the user is on a paid plan (pro or enterprise) */
   isPaid: boolean;
@@ -30,6 +29,9 @@ function resolveTier(subscription: BillingSubscription | null): UserTier {
   }
 
   const planCode = (subscription.plan_code ?? '').toLowerCase();
+  if (planCode === 'free' || planCode.includes('free')) {
+    return 'free';
+  }
   if (planCode.includes('enterprise')) {
     return 'enterprise';
   }
@@ -61,7 +63,7 @@ export function useUserTier(): UserTierInfo {
 // ── Static helpers (for use outside React) ──────────────────────────────────
 
 /**
- * Returns true when the given model ID belongs to the GMI Cloud (free) provider.
+ * Returns true when the given model ID belongs to the GMI Cloud provider.
  */
 export function isGmiCloudModel(modelId: string): boolean {
   return modelId.startsWith('gmi/');

@@ -125,7 +125,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ projectId, onClose
         name: model.name,
         provider: getProviderLabel(model.provider),
         speed: model.time,
-        badge: model.id.startsWith('gmi/') ? 'Free' : undefined,
+        badge: model.id.startsWith('gmi/') ? 'GMI' : undefined,
         category: model.category,
         workflowType: model.workflow_type,
       });

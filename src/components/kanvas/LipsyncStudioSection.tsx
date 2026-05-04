@@ -217,7 +217,6 @@ function LipsyncDashboard({
     { num: "03", title: "Select", desc: "Choose the best output render" },
   ];
   const sortedModels = sortModelsForTier(models, tier);
-  const isGmiModel = currentModel?.id.startsWith("gmi/") ?? false;
 
   const activeWorkflowStep = !selectedJob ? 0 : selectedJob.status === "completed" ? 2 : 1;
 
@@ -267,7 +266,7 @@ function LipsyncDashboard({
               <div className="flex items-center justify-between gap-3">
                 <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 font-bold">Model</p>
                 <p className="text-[10px] text-zinc-600">
-                  {isGmiModel ? "Free" : `${currentModel?.credits ?? 0} credits`}
+                  {`${currentModel?.credits ?? 0} credits`}
                 </p>
               </div>
               <select
@@ -277,7 +276,7 @@ function LipsyncDashboard({
               >
                 {sortedModels.map((model) => (
                   <option key={model.id} value={model.id}>
-                    {model.name}{model.id.startsWith("gmi/") ? " (Free)" : ` — ${model.credits}cr`}
+                    {model.name}{model.id.startsWith("gmi/") ? " (GMI)" : ""} — {model.credits}cr
                   </option>
                 ))}
               </select>
@@ -392,7 +391,7 @@ function LipsyncDashboard({
             ) : (
               <>
                 <Sparkles className="h-5 w-5" />
-                Generate {isGmiModel ? "Free" : `✦ ${currentModel?.credits ?? 20}`} 
+                Generate ✦ {currentModel?.credits ?? 20}
               </>
             )}
           </button>

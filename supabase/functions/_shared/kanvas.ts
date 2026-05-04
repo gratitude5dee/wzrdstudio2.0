@@ -1062,15 +1062,15 @@ export const KANVAS_MODELS: KanvasStudioModel[] = [
     aliases: ['latent-sync'],
   }),
 
-  // ===================== GMI CLOUD — Free Tier =====================
+  // ===================== GMI CLOUD =====================
 
   // GMI Image
   studioModel({
     id: 'gmi/seedream-5.0-lite',
-    name: 'Seedream 5 Lite (Free)',
-    description: 'High-fidelity image generation by BytePlus. Free for all users.',
+    name: 'Seedream 5 Lite',
+    description: 'High-fidelity image generation by BytePlus.',
     studio: 'image', mode: 'text-to-image', mediaType: 'image', workflowType: 'text-to-image', uiGroup: 'generation',
-    credits: 0, requiresAssets: [], supportsPrompt: true,
+    credits: 2, requiresAssets: [], supportsPrompt: true,
     controls: [
       selectControl('aspect_ratio', 'Aspect Ratio', baseAspectRatios, '16:9'),
       selectControl('output_format', 'Format', [
@@ -1085,10 +1085,10 @@ export const KANVAS_MODELS: KanvasStudioModel[] = [
   // GMI Video — Kling V3 Omni
   studioModel({
     id: 'gmi/kling-v3-omni',
-    name: 'Kling V3 Omni (Free)',
-    description: 'Unified video generation — text, image, multi-shot storyboards. Free for all users.',
+    name: 'Kling V3 Omni',
+    description: 'Unified video generation — text, image, multi-shot storyboards.',
     studio: 'video', mode: 'text-to-video', mediaType: 'video', workflowType: 'text-to-video', uiGroup: 'generation',
-    credits: 0, requiresAssets: [], supportsPrompt: true,
+    credits: 28, requiresAssets: [], supportsPrompt: true,
     controls: [
       selectControl('aspect_ratio', 'Aspect Ratio', baseAspectRatios, '16:9'),
       selectControl('mode', 'Quality', [
@@ -1109,10 +1109,10 @@ export const KANVAS_MODELS: KanvasStudioModel[] = [
   // GMI Video — Wan 2.6 T2V
   studioModel({
     id: 'gmi/wan2.6-t2v',
-    name: 'Wan 2.6 T2V (Free)',
-    description: 'Text-to-video generation by Wan. Free for all users.',
+    name: 'Wan 2.6 T2V',
+    description: 'Text-to-video generation by Wan.',
     studio: 'video', mode: 'text-to-video', mediaType: 'video', workflowType: 'text-to-video', uiGroup: 'generation',
-    credits: 0, requiresAssets: [], supportsPrompt: true,
+    credits: 18, requiresAssets: [], supportsPrompt: true,
     controls: [],
     defaults: { video_length: 5 },
     aliases: ['wan-2-6-t2v'],
@@ -1121,20 +1121,20 @@ export const KANVAS_MODELS: KanvasStudioModel[] = [
   // GMI Video — Minimax Hailuo 2.3
   studioModel({
     id: 'gmi/minimax-hailuo-2.3',
-    name: 'Minimax Hailuo 2.3 (Free)',
-    description: 'Improved motion and visual consistency. Free for all users.',
+    name: 'Minimax Hailuo 2.3',
+    description: 'Improved motion and visual consistency.',
     studio: 'video', mode: 'text-to-video', mediaType: 'video', workflowType: 'text-to-video', uiGroup: 'generation',
-    credits: 0, requiresAssets: [], supportsPrompt: true,
+    credits: 22, requiresAssets: [], supportsPrompt: true,
     controls: [],
     defaults: {},
     aliases: ['minimax-hailuo-2-3'],
   }),
   studioModel({
     id: 'gmi/ltx-fast-i2v',
-    name: 'LTX Fast I2V (Free)',
-    description: 'Image-to-video animation with optional audio and camera motion. Free for all users.',
+    name: 'LTX Fast I2V',
+    description: 'Image-to-video animation with optional audio and camera motion.',
     studio: 'video', mode: 'image-to-video', mediaType: 'video', workflowType: 'image-to-video', uiGroup: 'generation',
-    credits: 0, requiresAssets: ['image'], supportsPrompt: true,
+    credits: 5, requiresAssets: ['image'], supportsPrompt: true,
     controls: [
       selectControl('duration', 'Duration', ltxDurations, 6),
       selectControl('resolution', 'Resolution', ltxFastResolutions, '1920x1080'),
@@ -1147,10 +1147,10 @@ export const KANVAS_MODELS: KanvasStudioModel[] = [
   }),
   studioModel({
     id: 'gmi/seedream-5.0-lite',
-    name: 'Seedream 5 Cinema (Free)',
-    description: 'Cinematic still generation via GMI Cloud. Free for all users.',
+    name: 'Seedream 5 Cinema',
+    description: 'Cinematic still generation via GMI Cloud.',
     studio: 'cinema', mode: 'cinematic-image', mediaType: 'image', workflowType: 'text-to-image', uiGroup: 'generation',
-    credits: 0, requiresAssets: [], supportsPrompt: true,
+    credits: 2, requiresAssets: [], supportsPrompt: true,
     controls: [
       selectControl('aspect_ratio', 'Aspect Ratio', baseAspectRatios, '16:9'),
       selectControl('output_format', 'Format', [
@@ -1163,10 +1163,10 @@ export const KANVAS_MODELS: KanvasStudioModel[] = [
   }),
   studioModel({
     id: 'gmi/ltx-pro-a2v',
-    name: 'LTX Pro Audio Video (Free)',
-    description: 'Audio-driven talking-head generation with optional portrait conditioning. Free for all users.',
+    name: 'LTX Pro Audio Video',
+    description: 'Audio-driven talking-head generation with optional portrait conditioning.',
     studio: 'lipsync', mode: 'talking-head', mediaType: 'video', workflowType: 'audio-to-video', uiGroup: 'generation',
-    credits: 0, requiresAssets: ['audio'], supportsPrompt: true,
+    credits: 12, requiresAssets: ['audio'], supportsPrompt: true,
     controls: [],
     defaults: { resolution: '1920x1080' },
     aliases: ['ltx-pro-a2v', 'ltx-2-pro-audio-to-video'],

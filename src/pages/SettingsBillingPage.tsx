@@ -14,10 +14,10 @@ const FALLBACK_PLANS: BillingPlan[] = [
   {
     plan_code: 'free',
     display_name: 'Free',
-    description: 'Get started with 100 credits per month.',
+    description: 'One-time 100-credit welcome grant. Top up or upgrade when credits run out.',
     monthly_price_cents: 0,
     yearly_price_cents: null,
-    monthly_quota: 100,
+    monthly_quota: 0,
     rollover_cap: 0,
   },
   {
@@ -276,7 +276,9 @@ const SettingsBillingPage = () => {
                     {billingPlan.plan_code !== 'enterprise' ? <span className="text-sm text-zinc-500">/mo</span> : null}
                   </p>
                   <p className="mt-2 text-xs text-zinc-400">
-                    {billingPlan.monthly_quota > 0
+                    {billingPlan.plan_code === 'free'
+                      ? 'One-time welcome credits'
+                      : billingPlan.monthly_quota > 0
                       ? `${billingPlan.monthly_quota.toLocaleString()} monthly credits`
                       : 'Custom quota and invoicing'}
                   </p>

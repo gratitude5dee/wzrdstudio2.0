@@ -1,19 +1,15 @@
-
-import { useState } from 'react';
 import { useCredits, CreditTransaction } from '@/hooks/useCredits';
 import { useAuth } from '@/providers/AuthProvider';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { Coins, ArrowLeft, PlusCircle, MinusCircle, RefreshCw } from 'lucide-react';
-import { toast } from 'sonner';
 import { appRoutes } from '@/lib/routes';
 
 const Credits = () => {
-  const { availableCredits, isLoading, transactions, addCredits, refreshTransactions } = useCredits();
+  const { availableCredits, isLoading, transactions, refreshTransactions } = useCredits();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [isBuying, setIsBuying] = useState(false);
 
   if (!user) {
     return (
@@ -31,9 +27,6 @@ const Credits = () => {
     // Route all purchases through proper payment flow
     navigate(appRoutes.settings.billing);
   };
-
-  // Demo credits disabled in production - use billing flow instead
-  const isDemoMode = import.meta.env.DEV;
 
   const getTransactionIcon = (transaction: CreditTransaction) => {
     if (transaction.amount > 0) {
@@ -88,20 +81,8 @@ const Credits = () => {
 
                 <p className="text-zinc-300 mb-6">
                   Credits are used for AI-generated content like images and videos.
-                  Each generation costs 1 credit by default.
+                  Generation costs vary by model and are checked before provider jobs start.
                 </p>
-
-                {isDemoMode && (
-                  <div className="flex flex-wrap gap-4">
-                    <Button
-                      onClick={() => addCredits(5, 'free', { reason: 'demo' })}
-                      variant="outline"
-                      className="text-zinc-300 border-zinc-700"
-                    >
-                      Get 5 Free Demo Credits (Dev Only)
-                    </Button>
-                  </div>
-                )}
               </div>
             </div>
 
@@ -166,7 +147,6 @@ const Credits = () => {
                     <Button 
                       className="w-full" 
                       size="sm"
-                      disabled={isBuying}
                       onClick={() => handleBuyCredits(10, '$2.99')}
                     >
                       Purchase
@@ -182,7 +162,6 @@ const Credits = () => {
                     <Button 
                       className="w-full" 
                       size="sm"
-                      disabled={isBuying}
                       onClick={() => handleBuyCredits(50, '$9.99')}
                     >
                       Purchase
@@ -197,7 +176,6 @@ const Credits = () => {
                     <Button 
                       className="w-full" 
                       size="sm"
-                      disabled={isBuying}
                       onClick={() => handleBuyCredits(100, '$16.99')}
                     >
                       Purchase
@@ -206,8 +184,7 @@ const Credits = () => {
                 </div>
                 
                 <div className="mt-6 text-zinc-400 text-xs">
-                  <p>* For demonstration purposes only. No actual payment will be processed.</p>
-                  <p className="mt-2">In a production app, this would be connected to a payment processor such as Stripe.</p>
+                  <p>Purchases route through the billing page and will use Stripe when live billing is configured.</p>
                 </div>
               </div>
             </div>

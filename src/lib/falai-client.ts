@@ -1,6 +1,10 @@
 import { supabase } from '@/integrations/supabase/client'
 import { RealtimeChannel } from '@supabase/supabase-js'
-import { extractInsufficientCreditsFromResponse, routeToBillingTopUp } from '@/lib/billing-errors'
+import {
+  extractInsufficientCreditsError,
+  extractInsufficientCreditsFromResponse,
+  routeToBillingTopUp,
+} from '@/lib/billing-errors'
 import type { GenerationResult as UnifiedGenerationResult, OnProgress } from '@/services/unifiedGenerationService'
 
 export interface FalAIClientOptions {
@@ -53,7 +57,13 @@ export class FalAIClient {
         },
       })
 
-      if (error) throw error
+      if (error) {
+        const insufficient = await extractInsufficientCreditsError(error)
+        if (insufficient) {
+          routeToBillingTopUp(insufficient)
+        }
+        throw error
+      }
 
       // For async models, subscribe to updates
       if (data.requestId && options) {

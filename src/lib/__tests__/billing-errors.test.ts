@@ -13,6 +13,7 @@ describe('billing-errors', () => {
         required: 6,
         available: 2,
         top_up_url: '/settings/billing',
+        upgrade_url: '/settings/billing#plans',
       }),
       { status: 402, headers: { 'Content-Type': 'application/json' } }
     );
@@ -23,6 +24,7 @@ describe('billing-errors', () => {
       required: 6,
       available: 2,
       top_up_url: '/settings/billing',
+      upgrade_url: '/settings/billing#plans',
     });
   });
 

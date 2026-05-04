@@ -46,7 +46,7 @@ const toSettingsModel = (m: StudioModel) => ({
 export const TEXT_MODELS = STUDIO_TEXT_MODELS.map(toSettingsModel);
 
 export const STORYLINE_TEXT_MODELS = STUDIO_TEXT_MODELS
-  .filter((m) => m.badge === 'Fast' || m.badge === 'Free' || m.id.includes('flash'))
+  .filter((m) => m.badge === 'Fast' || m.id.includes('flash'))
   .map(toSettingsModel);
 
 // Only show generation models (not editing/advanced) in settings selectors

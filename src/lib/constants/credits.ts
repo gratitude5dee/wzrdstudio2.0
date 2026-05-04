@@ -44,13 +44,7 @@ export const TEXT_CREDITS = buildCreditsMap(TEXT_MODELS);
  * e.g. `"FLUX Schnell (3 credits)"`
  */
 export function formatModelLabel(model: StudioModel): string {
-  // Promotional / explicitly free models render as "(Free)".
-  // All other models — including GMI Cloud — show their credit cost so users
-  // know exactly what each generation will consume.
-  if (model.credits === 0) {
-    return `${model.name} (Free)`;
-  }
-  return `${model.name} (${model.credits} credits)`;
+  return `${model.name} (${Math.max(1, model.credits)} credits)`;
 }
 
 /**
@@ -74,8 +68,8 @@ export interface StorylineModelOption {
 
 export const STORYLINE_MODEL_OPTIONS: StorylineModelOption[] = [
   { id: 'gmi/gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash-Lite', credits: 1 },
-  { id: 'gmi/claude-opus-4.7', label: 'Claude Opus 4.7', credits: 0 },
-  { id: 'gmi/glm-5.1', label: 'GLM 5.1', credits: 0 },
+  { id: 'gmi/claude-opus-4.7', label: 'Claude Opus 4.7', credits: 5 },
+  { id: 'gmi/glm-5.1', label: 'GLM 5.1', credits: 2 },
   { id: 'gmi/deepseek-r1', label: 'DeepSeek R1', credits: 4 },
   { id: 'gmi/openai-o4-mini', label: 'OpenAI o4 Mini', credits: 3 },
   { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B Versatile', credits: 1 },
@@ -86,8 +80,7 @@ export const STORYLINE_MODEL_OPTIONS: StorylineModelOption[] = [
  * Format a storyline model option with credits for dropdown display.
  */
 export function formatStorylineModelLabel(option: StorylineModelOption): string {
-  if (option.credits === 0) return `${option.label}`;
-  return `${option.label} (${option.credits} credits)`;
+  return `${option.label} (${Math.max(1, option.credits)} credits)`;
 }
 
 // ── Timeline / Storyboard generation credit helpers ─────────────────────────

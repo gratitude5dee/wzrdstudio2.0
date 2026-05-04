@@ -8,10 +8,10 @@ const FALLBACK_PLANS = [
   {
     plan_code: 'free',
     display_name: 'Free',
-    description: 'Get started with 100 credits per month.',
+    description: 'One-time 100-credit welcome grant. Top up or upgrade when credits run out.',
     monthly_price_cents: 0,
     yearly_price_cents: null,
-    monthly_quota: 100,
+    monthly_quota: 0,
     rollover_cap: 0,
     stripe_price_monthly_id: null,
     stripe_price_yearly_id: null,
@@ -113,7 +113,18 @@ serve(async (req) => {
 
     let walletBalance = null;
     try {
-      const { data: balance, error: balanceError } = await (userClient as any).rpc('credits_get_balance');
+      let { data: balance, error: balanceError } = await userClient.rpc('credits_get_balance');
+      if (balanceError) {
+        const repair = await userClient.rpc('ensure_credit_account', {
+          p_user_id: user.id,
+          p_source: 'billing_catalog_repair',
+        });
+        if (!repair.error) {
+          const retry = await userClient.rpc('credits_get_balance');
+          balance = retry.data;
+          balanceError = retry.error;
+        }
+      }
       if (!balanceError) {
         walletBalance = balance;
       }

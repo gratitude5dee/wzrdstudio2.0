@@ -317,7 +317,7 @@ export function VideoStudioSection({
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{m.name}</span>
                     {m.id.startsWith("gmi/") && isFree && (
-                      <span className="px-2 py-0.5 rounded-full bg-[#f97316]/20 text-[9px] font-bold text-[#f97316] uppercase">Free</span>
+                      <span className="px-2 py-0.5 rounded-full bg-[#f97316]/20 text-[9px] font-bold text-[#f97316] uppercase">GMI</span>
                     )}
                   </div>
                   <span className="text-[10px] text-zinc-600">✦ {m.credits}</span>

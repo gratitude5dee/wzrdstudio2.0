@@ -382,25 +382,17 @@ export async function createRemixJob(input: CreateRemixJobInput): Promise<RemixJ
   if (userError || !user) throw new Error('You must be signed in to export');
 
   const creditCost = quoteRemixCredits(input.durationMs, input.quantity);
-  try {
-    const { data: enoughCredits, error } = await supabase.rpc('use_credits', {
-      resource_type: 'video',
-      credit_cost: creditCost,
-      metadata: {
-        source: 'kanvas-remix',
-        templateId: input.templateId,
-        quantity: input.quantity,
-      },
-    });
-    if (error) throw error;
-    if (enoughCredits === false) throw new Error('Not enough credits available');
-  } catch (error) {
-    // SPEC-DECISION: exports remain usable in demo/local databases that have not
-    // installed the legacy credit RPCs yet; real production deployments enforce
-    // credit usage through the existing RPC above.
-    console.warn('[remix] credit RPC unavailable or rejected', error);
-    if (error instanceof Error && /not enough/i.test(error.message)) throw error;
-  }
+  const { data: enoughCredits, error } = await supabase.rpc('use_credits', {
+    resource_type: 'video',
+    credit_cost: creditCost,
+    metadata: {
+      source: 'kanvas-remix',
+      templateId: input.templateId,
+      quantity: input.quantity,
+    },
+  });
+  if (error) throw error;
+  if (enoughCredits === false) throw new Error('Not enough credits available');
 
   const assets = input.clipIds?.length
     ? (await listFootageAssets()).filter((asset) => input.clipIds?.includes(asset.id))

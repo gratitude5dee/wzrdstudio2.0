@@ -5,6 +5,7 @@ export interface InsufficientCreditsPayload {
   required: number;
   available: number;
   top_up_url: string;
+  upgrade_url?: string;
   error?: string;
 }
 
@@ -36,6 +37,7 @@ function parsePayloadCandidate(value: unknown): InsufficientCreditsPayload | nul
     required: asNumber(payload.required, 0),
     available: asNumber(payload.available, 0),
     top_up_url: typeof payload.top_up_url === 'string' ? payload.top_up_url : DEFAULT_TOP_UP_URL,
+    upgrade_url: typeof payload.upgrade_url === 'string' ? payload.upgrade_url : undefined,
     error: typeof payload.error === 'string' ? payload.error : undefined,
   };
 }

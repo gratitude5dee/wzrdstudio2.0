@@ -132,6 +132,7 @@ const WORKFLOW_COSTS: Record<string, number> = {
 };
 
 const TOP_UP_URL = '/settings/billing';
+const UPGRADE_URL = '/settings/billing#plans';
 
 function asNumber(value: unknown, fallback = 0): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -155,12 +156,14 @@ export class InsufficientCreditsError extends Error {
   readonly required: number;
   readonly available: number;
   readonly topUpUrl: string;
+  readonly upgradeUrl: string;
 
-  constructor(required: number, available: number, topUpUrl = TOP_UP_URL) {
+  constructor(required: number, available: number, topUpUrl = TOP_UP_URL, upgradeUrl = UPGRADE_URL) {
     super('Insufficient credits');
     this.required = required;
     this.available = available;
     this.topUpUrl = topUpUrl;
+    this.upgradeUrl = upgradeUrl;
   }
 }
 
@@ -173,21 +176,14 @@ interface CreditSupabaseClient {
     functionName: string,
     args: Record<string, unknown>,
   ): Promise<{ data: unknown; error: CreditSupabaseError | null }>;
-  from(table: string): {
-    insert(values: Record<string, unknown>): PromiseLike<{ error?: CreditSupabaseError | null }>;
-    select(columns: string): {
-      eq(column: string, value: string): {
-        single(): Promise<{ data: { used_credits?: number } | null; error: CreditSupabaseError | null }>;
-      };
-    };
-    update(values: Record<string, unknown>): {
-      eq(column: string, value: string): PromiseLike<{ error?: CreditSupabaseError | null }>;
-    };
-  };
 }
 
 export function shouldSkipCreditBilling(headers: Headers): boolean {
-  return (headers.get('x-credit-billing') || '').toLowerCase() === 'upstream';
+  // Browser callers can set arbitrary CORS-allowed headers, so credit billing
+  // must not be skipped from request metadata. Composite server flows should
+  // reserve once at the parent operation instead of bypassing child calls.
+  void headers;
+  return false;
 }
 
 export function buildCreditIdempotencyKey(...parts: Array<string | number | null | undefined>): string {
@@ -205,7 +201,7 @@ export function getCreditCostForModel(modelId: string | null | undefined, resour
   if (requestedModel.startsWith('gmi/')) {
     const gmiCost = GMI_MODEL_COSTS[requestedModel];
     if (typeof gmiCost === 'number') {
-      return Math.max(0, Math.ceil(gmiCost));
+      return Math.max(1, Math.ceil(gmiCost));
     }
     // Fallback by media type when model not in table
     const fallback = normalizedResource === 'video' ? 20
@@ -276,53 +272,51 @@ function parseRpcPayload(data: unknown): Record<string, unknown> {
 export async function reserveCredits(input: ReserveCreditsInput): Promise<CreditReserveResult> {
   const requestedAmount = Math.max(1, Math.ceil(input.requestedAmount));
 
-  if (input.skipBilling) {
-    return {
-      holdId: null,
-      requestedAmount,
-      availableAfter: 0,
-      skipped: true,
-    };
-  }
-
-  // Use atomic PostgreSQL function with row-level locking
-  const { data, error } = await input.supabase.rpc('deduct_credits', {
-    p_user_id: input.userId,
-    p_amount: requestedAmount,
-  });
-
-  if (error) {
-    // Parse the error to distinguish insufficient credits from other failures
-    const msg = error.message || '';
-    if (msg.includes('Insufficient credits')) {
-      const match = msg.match(/available=(\d+)/);
-      const available = match ? parseInt(match[1], 10) : 0;
-      throw new InsufficientCreditsError(requestedAmount, available);
-    }
-    if (msg.includes('No credit record found')) {
-      throw new InsufficientCreditsError(requestedAmount, 0);
-    }
-    throw new Error(`Credit deduction failed: ${msg}`);
-  }
-
-  const availableAfter = typeof data === 'number' ? data : 0;
-
-  // Record transaction
-  await input.supabase.from('credit_transactions').insert({
-    user_id: input.userId,
-    amount: -requestedAmount,
-    transaction_type: 'usage',
+  const { data, error } = await input.supabase.rpc('credits_reserve', {
     resource_type: input.resourceType,
+    requested_amount: requestedAmount,
+    reference_type: input.referenceType,
+    reference_id: input.referenceId,
+    idempotency_key: input.idempotencyKey,
     metadata: {
       ...(input.metadata || {}),
-      reference_type: input.referenceType,
-      reference_id: input.referenceId,
-      idempotency_key: input.idempotencyKey,
+      user_id: input.userId,
     },
   });
 
+  if (error) {
+    const msg = error.message || '';
+    if (msg.includes('Insufficient credits')) {
+      const match = msg.match(/available=([0-9.]+)/);
+      const available = match ? Number(match[1]) : 0;
+      throw new InsufficientCreditsError(requestedAmount, available);
+    }
+    if (msg.includes('No credit record found') || msg.includes('Not authenticated')) {
+      throw new InsufficientCreditsError(requestedAmount, 0);
+    }
+    throw new Error(`Credit reservation failed: ${msg}`);
+  }
+
+  const payload = parseRpcPayload(data);
+  const success = payload.success === true;
+  if (!success) {
+    const code = typeof payload.code === 'string' ? payload.code : 'credit_reservation_failed';
+    if (code === 'insufficient_credits') {
+      throw new InsufficientCreditsError(
+        requestedAmount,
+        asNumber(payload.available, 0),
+        typeof payload.top_up_url === 'string' ? payload.top_up_url : TOP_UP_URL,
+        typeof payload.upgrade_url === 'string' ? payload.upgrade_url : UPGRADE_URL,
+      );
+    }
+    throw new Error(`Credit reservation failed: ${code}`);
+  }
+
+  const holdId = typeof payload.hold_id === 'string' ? payload.hold_id : null;
+  const availableAfter = asNumber(payload.available_after, 0);
+
   return {
-    holdId: input.referenceId,
+    holdId,
     requestedAmount,
     availableAfter,
     skipped: false,
@@ -340,60 +334,45 @@ interface CreditSettleInput {
 }
 
 export async function commitCredits(input: CreditSettleInput): Promise<void> {
-  // Credits already deducted upfront via use_credits — nothing to do
-  return;
+  if (input.skipped || !input.holdId) return;
+
+  const { data, error } = await input.supabase.rpc('credits_commit', {
+    hold_id: input.holdId,
+    actual_amount: input.amount ?? null,
+    metadata: input.metadata || {},
+  });
+
+  if (error) {
+    throw new Error(`Credit commit failed: ${error.message || 'unknown error'}`);
+  }
+
+  const payload = parseRpcPayload(data);
+  if (payload.success === false) {
+    throw new Error(`Credit commit failed: ${String(payload.code || 'unknown_error')}`);
+  }
 }
 
 export async function releaseCredits(input: CreditSettleInput): Promise<void> {
   if (input.skipped || !input.holdId) return;
 
-  const refundAmount = input.amount ?? 0;
-  if (refundAmount <= 0) return;
-
-  const userId =
-    input.userId ||
-    ((input.metadata as Record<string, unknown> | undefined)?.user_id as string | undefined);
-
-  if (!userId) {
-    console.error('releaseCredits: missing user_id in metadata, cannot refund');
-    return;
-  }
-
-  // Single atomic update: decrement used_credits by refundAmount, floor at 0
-  const { data: currentRow, error: fetchError } = await input.supabase
-    .from('user_credits')
-    .select('used_credits')
-    .eq('user_id', userId)
-    .single();
-
-  if (fetchError || !currentRow) {
-    console.error('releaseCredits: user_credits row not found for', userId);
-    return;
-  }
-
-  const newUsedCredits = Math.max(0, (currentRow.used_credits ?? 0) - refundAmount);
-  
-  const { error: updateError } = await input.supabase
-    .from('user_credits')
-    .update({ used_credits: newUsedCredits, updated_at: new Date().toISOString() })
-    .eq('user_id', userId);
-
-  if (updateError) {
-    console.error('releaseCredits: update failed', updateError.message);
-  }
-
-  // Record refund transaction
-  await input.supabase.from('credit_transactions').insert({
-    user_id: userId,
-    amount: refundAmount,
-    transaction_type: 'refund',
-    resource_type: 'credit',
+  const { data, error } = await input.supabase.rpc('credits_release', {
+    hold_id: input.holdId,
+    reason: input.reason || 'operation_failed',
     metadata: {
-      reason: input.reason || 'operation_failed',
-      reference_id: input.holdId,
       ...(input.metadata || {}),
+      ...(input.userId ? { user_id: input.userId } : {}),
     },
   });
+
+  if (error) {
+    console.error('releaseCredits: release failed', error.message);
+    return;
+  }
+
+  const payload = parseRpcPayload(data);
+  if (payload.success === false) {
+    console.error('releaseCredits: release failed', String(payload.code || 'unknown_error'));
+  }
 }
 
 export function insufficientCreditsResponse(error: InsufficientCreditsError, extraHeaders: Record<string, string> = {}): Response {
@@ -404,6 +383,7 @@ export function insufficientCreditsResponse(error: InsufficientCreditsError, ext
       required: error.required,
       available: error.available,
       top_up_url: error.topUpUrl,
+      upgrade_url: error.upgradeUrl,
     }),
     {
       status: 402,
