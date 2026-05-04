@@ -6,7 +6,7 @@ import { videoEditorService } from '@/services/videoEditorService';
 import { toast } from 'sonner';
 
 const mapRecordToLibraryItem = (record: Record<string, any>): LibraryMediaItem | null => {
-  return videoEditorService.mapMediaItemRecord(record);
+  return videoEditorService.mapMediaItemRecord(record as any);
 };
 
 export function useComputeFlowSync(projectId?: string | null) {
