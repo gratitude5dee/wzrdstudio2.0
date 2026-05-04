@@ -239,9 +239,15 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
   }, [connect]);
 
   const pushToTalkStop = useCallback(() => {
-    if (!sessionRef.current) return;
-    sessionRef.current.transport.sendEvent({ type: 'input_audio_buffer.commit' } as never);
-    sessionRef.current.transport.sendEvent({ type: 'response.create' } as never);
+    const session = sessionRef.current;
+    if (!session) return;
+    // Only send commit/response if the transport is actually connected
+    if (session.transport.status !== 'connected') {
+      console.warn('[Voice] pushToTalkStop skipped — transport not connected');
+      return;
+    }
+    session.transport.sendEvent({ type: 'input_audio_buffer.commit' } as never);
+    session.transport.sendEvent({ type: 'response.create' } as never);
     setStatus('thinking');
   }, []);
 
