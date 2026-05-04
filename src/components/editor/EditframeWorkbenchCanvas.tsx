@@ -404,7 +404,7 @@ export function EditframeWorkbenchCanvas({
         position: { x: Math.round(relativeX), y: Math.round(relativeY) },
       });
     },
-    collect: (monitor) => ({ isOver: monitor.isOver() }),
+    collect: (monitor) => ({ isOver: monitor.isOver(), canDrop: monitor.canDrop() }),
   });
 
   const setTimelineDropRef = useCallback(
