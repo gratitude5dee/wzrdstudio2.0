@@ -94,7 +94,7 @@ async function listBlueprintImagesForBlueprints(blueprintIds: string[]): Promise
 // Row ↔ Domain mapping helpers
 // ---------------------------------------------------------------------------
 
-export function rowToBlueprint(row: CharacterBlueprintRow, references: BlueprintReferenceSummary = {
+export function rowToBlueprint(row: CharacterBlueprintRow & Record<string, any>, references: BlueprintReferenceSummary = {
   referenceAssetIds: [],
   referenceImageUrls: [],
 }): CharacterBlueprint {
@@ -126,7 +126,7 @@ export function rowToBlueprint(row: CharacterBlueprintRow, references: Blueprint
   };
 }
 
-export function rowToImage(row: CharacterBlueprintImageRow): CharacterBlueprintImage {
+export function rowToImage(row: CharacterBlueprintImageRow & Record<string, any>): CharacterBlueprintImage {
   return {
     id: row.id,
     blueprintId: row.blueprint_id,
@@ -276,11 +276,11 @@ export async function updateBlueprintRecord(
   if (updates.promptFragment !== undefined) payload.prompt_fragment = updates.promptFragment;
   if (updates.imageUrl !== undefined) payload.image_url = updates.imageUrl;
   if (updates.thumbnailUrl !== undefined) payload.thumbnail_url = updates.thumbnailUrl;
-  if (updates.gmiElementId !== undefined) payload.gmi_element_id = updates.gmiElementId;
-  if (updates.gmiElementRequestId !== undefined) payload.gmi_element_request_id = updates.gmiElementRequestId;
-  if (updates.gmiElementStatus !== undefined) payload.gmi_element_status = updates.gmiElementStatus;
-  if (updates.gmiElementError !== undefined) payload.gmi_element_error = updates.gmiElementError;
-  if (updates.gmiElementUpdatedAt !== undefined) payload.gmi_element_updated_at = updates.gmiElementUpdatedAt;
+  if (updates.gmiElementId !== undefined) (payload as any).gmi_element_id = updates.gmiElementId;
+  if (updates.gmiElementRequestId !== undefined) (payload as any).gmi_element_request_id = updates.gmiElementRequestId;
+  if (updates.gmiElementStatus !== undefined) (payload as any).gmi_element_status = updates.gmiElementStatus;
+  if (updates.gmiElementError !== undefined) (payload as any).gmi_element_error = updates.gmiElementError;
+  if (updates.gmiElementUpdatedAt !== undefined) (payload as any).gmi_element_updated_at = updates.gmiElementUpdatedAt;
   if (updates.isFavorite !== undefined) payload.is_favorite = updates.isFavorite;
 
   const { data, error } = await supabase
@@ -359,12 +359,12 @@ export async function addBlueprintImage(input: {
     .from('character_blueprint_images')
     .insert({
       blueprint_id: input.blueprintId,
-      asset_id: input.assetId ?? null,
       image_url: input.imageUrl,
       label: input.label ?? null,
       is_primary: input.isPrimary ?? false,
       sort_order: input.sortOrder ?? 0,
-    } satisfies CharacterBlueprintImageInsert)
+      ...(input.assetId ? { asset_id: input.assetId } : {}),
+    } as any)
     .select('*')
     .single();
 
