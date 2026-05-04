@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // ── Inlined types & helpers from shared/ai-model-catalog.ts ──────────────

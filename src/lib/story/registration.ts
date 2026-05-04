@@ -60,7 +60,7 @@ export function buildLicenseTermsData(item: IPVaultItem): LicenseTermsDataInput[
         terms: PILFlavor.commercialUse({
           defaultMintingFee: normalizeFee(item.minting_fee_wip),
           currency: WIP_TOKEN_ADDRESS,
-          royaltyPolicy: item.royalty_policy ?? ROYALTY_POLICY_LAP_ADDRESS,
+          royaltyPolicy: (item.royalty_policy ?? ROYALTY_POLICY_LAP_ADDRESS) as any,
         }),
       },
     ];
@@ -73,7 +73,7 @@ export function buildLicenseTermsData(item: IPVaultItem): LicenseTermsDataInput[
           defaultMintingFee: normalizeFee(item.minting_fee_wip),
           commercialRevShare: item.commercial_rev_share ?? 5,
           currency: WIP_TOKEN_ADDRESS,
-          royaltyPolicy: item.royalty_policy ?? ROYALTY_POLICY_LAP_ADDRESS,
+          royaltyPolicy: (item.royalty_policy ?? ROYALTY_POLICY_LAP_ADDRESS) as any,
         }),
       },
     ];
@@ -84,7 +84,7 @@ export function buildLicenseTermsData(item: IPVaultItem): LicenseTermsDataInput[
       {
         terms: PILFlavor.creativeCommonsAttribution({
           currency: WIP_TOKEN_ADDRESS,
-          royaltyPolicy: item.royalty_policy ?? ROYALTY_POLICY_LAP_ADDRESS,
+          royaltyPolicy: (item.royalty_policy ?? ROYALTY_POLICY_LAP_ADDRESS) as any,
         }),
       },
     ];

@@ -174,7 +174,7 @@ const MediaPanel = () => {
       
       if (!mediaType) return;
       
-      await supabaseService.media.delete(id, mediaType);
+      await supabaseService.media.delete(id, mediaType as 'video' | 'image' | 'audio');
 
       if (clips.some(item => item.id === id)) {
         removeClip(id);

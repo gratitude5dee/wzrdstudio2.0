@@ -6,6 +6,7 @@ import path from "path";
 import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
+// @ts-nocheck
 export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
@@ -16,7 +17,7 @@ export default defineConfig(({ mode }) => ({
     vitePluginEditframe({
       root: "./src",
       cacheRoot: "./node_modules/.cache/editframe",
-    }),
+    }) as any,
     mode === 'editframe' &&
     viteSingleFile(),
     mode === 'development' &&

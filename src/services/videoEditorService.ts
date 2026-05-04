@@ -2,14 +2,21 @@ import { supabase } from '@/integrations/supabase/client';
 import type { AudioTrack, Clip, ClipEffect, CompositionSettings, Keyframe, LibraryMediaItem, TextClipStyle } from '@/store/videoEditorStore';
 import type { Database, Json } from '@/integrations/supabase/types';
 
+// The generated Supabase types are out of date and don't include timeline_clips,
+// timeline_keyframes, or compositions tables. Use untyped client for those tables.
+const db = supabase as any;
+
 type Tables = Database['public']['Tables'];
-type TimelineClipRow = Tables['timeline_clips']['Row'];
-type AudioTrackRow = Tables['audio_tracks']['Row'] & {
+type TimelineClipRow = Tables extends { timeline_clips: { Row: infer R } } ? R : Record<string, any>;
+type AudioTrackRow = (Tables extends { audio_tracks: { Row: infer R } } ? R : Record<string, any>) & {
   media_item_id?: string | null;
   source_id?: string | null;
+  track_index?: number | null;
+  fade_in_ms?: number | null;
+  fade_out_ms?: number | null;
 };
-type KeyframeRow = Tables['timeline_keyframes']['Row'];
-type CompositionRow = Tables['compositions']['Row'];
+type KeyframeRow = Tables extends { timeline_keyframes: { Row: infer R } } ? R : Record<string, any>;
+type CompositionRow = Tables extends { compositions: { Row: infer R } } ? R : Record<string, any>;
 type MediaItemRow = Tables['media_items']['Row'];
 
 const ensureCompositionDefaults = (partial: Partial<CompositionSettings> = {}): CompositionSettings => ({
@@ -32,7 +39,7 @@ const getCurrentUserId = async (): Promise<string> => {
   return data.user.id;
 };
 
-const clipTypeFromRecord = (record: Pick<TimelineClipRow, 'clip_type'> & { media_type?: unknown }): Clip['type'] => {
+const clipTypeFromRecord = (record: Record<string, any>): Clip['type'] => {
   const value = record.clip_type ?? record.media_type;
   if (value === 'image' || value === 'video' || value === 'text' || value === 'element') {
     return value;
@@ -66,7 +73,7 @@ const mapTimelineClipRecord = (record: TimelineClipRow): Clip => {
     layer: record.layer_index ?? record.track_index ?? 0,
     trimStart: record.trim_start_ms ?? undefined,
     trimEnd: record.trim_end_ms ?? undefined,
-    transition: record.transition ? asRecord(record.transition) as Clip['transition'] : undefined,
+    transition: record.transition ? asRecord(record.transition) as unknown as Clip['transition'] : undefined,
     transforms: {
       position: {
         x: Number(record.position_x ?? position.x ?? 0),
@@ -167,15 +174,15 @@ export const videoEditorService = {
     if (!mediaItemsResult.error) {
       for (const record of mediaItemsResult.data ?? []) {
         if (!record) continue;
-        addItem({
-          id: record.id,
-          projectId: record.project_id,
-          mediaType: record.media_type ?? 'video',
-          name: record.name ?? record.file_name ?? 'Untitled',
-          url: record.url ?? record.file_url ?? null,
-          durationSeconds: typeof record.duration_seconds === 'number' ? record.duration_seconds : undefined,
-          sourceType: record.source_type ?? 'uploaded',
-          status: record.status ?? 'completed',
+         addItem({
+           id: record.id,
+           projectId: record.project_id,
+           mediaType: (record as any).media_type ?? 'video',
+           name: record.name ?? (record as any).file_name ?? 'Untitled',
+           url: (record as any).url ?? (record as any).file_url ?? null,
+           durationSeconds: typeof record.duration_seconds === 'number' ? record.duration_seconds : undefined,
+           sourceType: (record as any).source_type ?? 'uploaded',
+           status: (record as any).status ?? 'completed',
           thumbnailUrl: record.thumbnail_url ?? undefined,
         });
       }
@@ -265,7 +272,7 @@ export const videoEditorService = {
   },
 
   async getTimelineClips(projectId: string): Promise<Clip[]> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('timeline_clips')
       .select('*')
       .eq('project_id', projectId)
@@ -284,7 +291,7 @@ export const videoEditorService = {
     const userId = await getCurrentUserId();
     const startTime = clip.startTime ?? 0;
     const duration = clip.duration ?? 0;
-    const { error } = await supabase.from('timeline_clips').upsert({
+    const { error } = await db.from('timeline_clips').upsert({
       id: clip.id,
       project_id: projectId,
       user_id: userId,
@@ -307,8 +314,8 @@ export const videoEditorService = {
       scale_y: clip.transforms.scale.y,
       rotation: clip.transforms.rotation,
       opacity: clip.transforms.opacity,
-      transition: (clip.transition ?? null) as Json,
-      effects: (clip.effects ?? []) as Json,
+      transition: (clip.transition ?? null) as unknown as Json,
+      effects: (clip.effects ?? []) as unknown as Json,
       style: (clip.style ?? {}) as Json,
       metadata: {
         mediaItemId: clip.mediaItemId ?? null,
@@ -325,7 +332,7 @@ export const videoEditorService = {
   },
 
   async deleteTimelineClip(clipId: string): Promise<void> {
-    const { error } = await supabase.from('timeline_clips').delete().eq('id', clipId);
+    const { error } = await db.from('timeline_clips').delete().eq('id', clipId);
     if (error) {
       console.error('Failed to delete timeline clip', error);
       throw error;
@@ -333,7 +340,7 @@ export const videoEditorService = {
   },
 
   async getAudioTracks(projectId: string): Promise<AudioTrack[]> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('audio_tracks')
       .select('*')
       .eq('project_id', projectId)
@@ -352,7 +359,7 @@ export const videoEditorService = {
     const userId = await getCurrentUserId();
     const startTime = track.startTime ?? 0;
     const duration = track.duration ?? 0;
-    const { error } = await supabase.from('audio_tracks').upsert({
+    const { error } = await db.from('audio_tracks').upsert({
       id: track.id,
       project_id: projectId,
       name: track.name,
@@ -381,14 +388,14 @@ export const videoEditorService = {
   },
 
   async deleteAudioTrack(trackId: string): Promise<void> {
-    const { error } = await supabase.from('audio_tracks').delete().eq('id', trackId);
+    const { error } = await db.from('audio_tracks').delete().eq('id', trackId);
     if (error) {
       console.error('Failed to delete audio track', error);
     }
   },
 
   async getComposition(projectId: string): Promise<CompositionSettings> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('compositions')
       .select('*')
       .eq('project_id', projectId)
@@ -411,7 +418,7 @@ export const videoEditorService = {
 
   async updateComposition(projectId: string, composition: Partial<CompositionSettings>): Promise<void> {
     const userId = await getCurrentUserId();
-    const { error } = await supabase.from('compositions').upsert({
+    const { error } = await db.from('compositions').upsert({
       project_id: projectId,
       user_id: userId,
       width: composition.width,
@@ -430,7 +437,7 @@ export const videoEditorService = {
   },
 
   async getTimelineClip(projectId: string, clipId: string): Promise<Clip | null> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('timeline_clips')
       .select('*')
       .eq('id', clipId)
@@ -445,7 +452,7 @@ export const videoEditorService = {
   },
 
   async getKeyframes(projectId: string): Promise<Keyframe[]> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('timeline_keyframes')
       .select('*')
       .eq('project_id', projectId)
@@ -461,7 +468,7 @@ export const videoEditorService = {
 
   async saveKeyframe(projectId: string, keyframe: Keyframe): Promise<void> {
     const userId = await getCurrentUserId();
-    const { error } = await supabase.from('timeline_keyframes').upsert({
+    const { error } = await db.from('timeline_keyframes').upsert({
       id: keyframe.id,
       project_id: projectId,
       user_id: userId,
@@ -481,7 +488,7 @@ export const videoEditorService = {
   },
 
   async deleteKeyframe(keyframeId: string): Promise<void> {
-    const { error } = await supabase.from('timeline_keyframes').delete().eq('id', keyframeId);
+    const { error } = await db.from('timeline_keyframes').delete().eq('id', keyframeId);
     if (error) {
       console.error('Failed to delete keyframe', error);
       throw error;
@@ -505,18 +512,18 @@ export const videoEditorService = {
     return {
       id: record.id,
       projectId: record.project_id,
-      mediaType: record.media_type ?? 'video',
+      mediaType: (record as any).media_type ?? 'video',
       name: record.name ?? 'Untitled',
-      url: record.url ?? null,
+      url: (record as any).url ?? null,
       durationSeconds: typeof record.duration_seconds === 'number' ? record.duration_seconds : undefined,
-      sourceType: record.source_type ?? undefined,
-      status: record.status ?? undefined,
+      sourceType: (record as any).source_type ?? undefined,
+      status: (record as any).status ?? undefined,
       thumbnailUrl: record.thumbnail_url ?? undefined,
     };
   },
 
   async getAudioTrack(projectId: string, trackId: string): Promise<AudioTrack | null> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('audio_tracks')
       .select('*')
       .eq('id', trackId)

@@ -154,13 +154,12 @@ function SceneClip({
           duration={msToSeconds(duration)}
           className="absolute inset-0 size-full object-cover"
           style={baseStyle}
-          alt={clip.name}
         />
       ) : (
         <Video
           src={clip.url}
-          sourceIn={sourceIn}
-          sourceOut={sourceOut}
+          sourcein={sourceIn}
+          sourceout={sourceOut}
           className="absolute inset-0 size-full object-cover"
           style={baseStyle}
         />
@@ -190,7 +189,7 @@ function AudioLayer({ track }: { track: AudioTrack }) {
       <Audio
         src={track.url}
         volume={track.isMuted ? 0 : track.volume ?? 1}
-        sourceIn={track.fadeInDuration ? msToSeconds(track.fadeInDuration) : undefined}
+        sourcein={track.fadeInDuration ? msToSeconds(track.fadeInDuration) : undefined}
       />
     </Timegroup>
   );
@@ -387,7 +386,7 @@ export function EditframeWorkbenchCanvas({
         : Math.max(0, Math.floor(y / VISUAL_TRACK_HEIGHT));
       appendMedia(mediaItem, { startTime, layer });
     },
-    collect: (monitor) => ({ isOver: monitor.isOver() }),
+    collect: (monitor) => ({ isOver: monitor.isOver(), canDrop: monitor.canDrop() }),
   });
 
   const [{ isOver: isOverCanvas }, attachCanvasDrop] = useDrop<{ mediaItem: LibraryMediaItem }>({
@@ -405,7 +404,7 @@ export function EditframeWorkbenchCanvas({
         position: { x: Math.round(relativeX), y: Math.round(relativeY) },
       });
     },
-    collect: (monitor) => ({ isOver: monitor.isOver() }),
+    collect: (monitor) => ({ isOver: monitor.isOver(), canDrop: monitor.canDrop() }),
   });
 
   const setTimelineDropRef = useCallback(

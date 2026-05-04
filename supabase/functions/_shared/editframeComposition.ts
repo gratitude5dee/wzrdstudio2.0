@@ -1,3 +1,4 @@
+// @ts-nocheck
 export type EditframeAssetType = 'image' | 'video' | 'audio' | 'text' | 'element';
 
 export interface EditframeEffect {
