@@ -95,7 +95,7 @@
     "viem": "^2.48.8",
     "web-audio-beat-detector": "^8.2.35",
     "web-vitals": "^3.5.0",
-    "zod": "^3.23.8",
+    "zod": "^4.4.3",
     "zustand": "^5.0.3"
   },
   "devDependencies": {
