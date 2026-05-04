@@ -232,24 +232,8 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
         apiKey,
         model,
         sessionConfig: {
-          type: 'realtime',
-          model,
-          output_modalities: ['audio'],
-          audio: {
-            input: {
-              format: {
-                type: 'audio/pcm',
-                rate: 24000,
-              },
-              turn_detection: null,
-            },
-            output: {
-              format: {
-                type: 'audio/pcm',
-              },
-              voice,
-            },
-          },
+          modalities: ['text', 'audio'],
+          voice,
           instructions: getVoiceInstructions(),
           tools: getVoiceToolDefinitions(registryRef.current),
           tool_choice: 'auto',

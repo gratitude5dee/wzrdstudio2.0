@@ -1,23 +1,44 @@
+
 ## Problem
 
-The error `Model "gpt-realtime" does not match the realtime token model` occurs because:
+Two issues:
 
-1. The edge function creates an ephemeral token scoped to model `gpt-4o-realtime-preview-2025-06-03`
-2. The client-side code in `useWzrdRealtimeSession.ts` line 112 still defaults to `'gpt-realtime'`
-3. When the WebRTC transport connects to `api.openai.com/v1/realtime?model=gpt-realtime`, OpenAI rejects it because the token was issued for a different model
+1. **"Unknown parameter: 'session.type'"** — The `session.update` payload sent on data channel open uses the beta-era format with `type: 'realtime'` and nested `audio.input/output` structure. The GA API rejects `session.type` and doesn't understand the nested audio format, so the session never gets configured with instructions/tools. Without instructions, the model defaults to whatever locale it infers (Spanish) and has no tool definitions to act on.
 
-## Fix
+2. **Spanish responses + no actions** — Direct consequence of #1. Since session config is rejected, the model has no system instructions (which say "speak in short, useful lines" in English) and no tool definitions.
 
-**File: `src/voice/realtime/useWzrdRealtimeSession.ts` (line 112)**
+## Changes
 
-Change the default model from `'gpt-realtime'` to `'gpt-4o-realtime-preview-2025-06-03'` to match the edge function default.
+### 1. Fix session config format in `src/voice/realtime/useWzrdRealtimeSession.ts` (lines 234-258)
+
+Replace the beta-era session config with the GA format:
 
 ```ts
-// Before
-const model = import.meta.env.VITE_WZRD_REALTIME_MODEL ?? 'gpt-realtime';
-
-// After
-const model = import.meta.env.VITE_WZRD_REALTIME_MODEL ?? 'gpt-4o-realtime-preview-2025-06-03';
+sessionConfig: {
+  modalities: ['text', 'audio'],
+  voice,
+  instructions: getVoiceInstructions(),
+  tools: getVoiceToolDefinitions(registryRef.current),
+  tool_choice: 'auto',
+  turn_detection: null,
+  input_audio_transcription: { model: 'gpt-4o-mini-transcribe' },
+},
 ```
 
-One line change. No other files need modification.
+Key changes:
+- Remove `type: 'realtime'` (not a valid session parameter in GA)
+- Remove `model` from session config (model is set via the WebRTC URL query param, not session.update)
+- Replace `output_modalities` with `modalities: ['text', 'audio']`
+- Remove nested `audio.input/output` structure — use flat `voice` at top level
+- Keep `turn_detection: null` at top level for push-to-talk
+
+### 2. Clean up `RealtimeSessionConfig` type in `src/voice/realtime/webrtcTransport.ts` (lines 30-45)
+
+Remove the `type` and `audio` fields from the interface to match the GA API shape, preventing future regressions.
+
+## Expected outcome
+
+- Session config is accepted by OpenAI GA API
+- Instructions (English, with tool definitions) are applied
+- Model responds in English and executes `execute_worldstudio_action` tool calls
+- Voice actions dispatch through the registry as designed
