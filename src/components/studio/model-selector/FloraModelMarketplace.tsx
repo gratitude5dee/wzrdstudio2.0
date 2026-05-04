@@ -141,11 +141,21 @@ const NEW_MODELS = new Set<string>([
 ]);
 
 function getProviderLabel(provider?: string, modelId?: string, providerLabel?: string): string {
-  if (providerLabel) {
-    return providerLabel === 'fal.ai' ? 'Fal' : providerLabel;
-  }
-  if (provider === 'fal-ai') {
+  const normalizedProvider = provider?.trim().toLowerCase();
+  const normalizedLabel = providerLabel?.trim().toLowerCase();
+  if (
+    normalizedProvider === 'fal-ai' ||
+    normalizedProvider === 'fal.ai' ||
+    normalizedProvider === 'fal' ||
+    normalizedProvider === 'fal_ai' ||
+    normalizedLabel === 'fal.ai' ||
+    normalizedLabel === 'fal' ||
+    modelId?.startsWith('fal-ai/')
+  ) {
     return 'Fal';
+  }
+  if (providerLabel) {
+    return providerLabel;
   }
   if (provider === 'gmi-cloud' || modelId?.startsWith('gmi/')) {
     return 'GMI Cloud';
@@ -304,7 +314,7 @@ export function FloraModelMarketplace({
     [workflowType, workflowTypes]
   );
   const effectiveStudioSurface = studioSurface ?? (`studio:${mediaType}` as CatalogStudioSurface);
-  const { models: catalogModels, total: catalogTotal = 0, isLoading } = useCatalogModels({
+  const { models: catalogModels, total: catalogTotal = 0, isLoading, diagnostics } = useCatalogModels({
     mediaType,
     uiGroup: fullCatalogMode ? undefined : uiGroup,
     provider,
@@ -496,6 +506,26 @@ export function FloraModelMarketplace({
   const activeProvider = providers.find((provider) => provider.key === activeProviderKey) ?? providers[0] ?? null;
   const visibleModelCount = providers.reduce((count, currentProvider) => count + currentProvider.models.length, 0);
   const totalModelCount = catalogTotal || catalogModels.length;
+  const emptyStateMessage = useMemo(() => {
+    const falDiagnostics = diagnostics?.fal;
+    if (!falDiagnostics) {
+      return 'No models match this search.';
+    }
+
+    if (falDiagnostics.total === 0) {
+      return 'Fal catalog rows were not found. Apply the latest Supabase model catalog migrations and redeploy the model-catalog function.';
+    }
+
+    if (falDiagnostics.visibleForRequest === 0 && falDiagnostics.missingStudioSurface > 0) {
+      return `${falDiagnostics.total} Fal rows exist, but ${falDiagnostics.missingStudioSurface} are missing Studio surface mappings. Run the Fal catalog repair migration.`;
+    }
+
+    if (falDiagnostics.visibleForRequest === 0) {
+      return `${falDiagnostics.total} Fal rows exist, but none match this media type, surface, or Recommended/All filter. Try All or search the full catalog.`;
+    }
+
+    return 'No models match this search.';
+  }, [diagnostics]);
 
   const renderModelRow = (model: MarketplaceModel, compactRow = false) => {
     const isSelected = value.selectedModelIds.includes(model.id);
@@ -866,7 +896,7 @@ export function FloraModelMarketplace({
                 </>
               ) : (
                 <div className="flex h-full min-h-[260px] items-center justify-center px-6 text-sm text-zinc-600">
-                  No models match this search.
+                  {emptyStateMessage}
                 </div>
               )}
             </div>

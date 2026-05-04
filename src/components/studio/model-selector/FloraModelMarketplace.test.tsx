@@ -238,4 +238,47 @@ describe('FloraModelMarketplace', () => {
       expect(screen.getByRole('button', { name: /^nano banana 2$/i })).toBeInTheDocument();
     });
   });
+
+  it('shows Fal catalog setup diagnostics when no Fal rows are returned', async () => {
+    const user = userEvent.setup();
+    catalogHook.mockReturnValue({
+      models: [],
+      total: 0,
+      isLoading: false,
+      diagnostics: {
+        request: {
+          provider: 'fal-ai',
+          mediaType: 'image',
+          uiGroup: 'generation',
+          studioSurface: 'studio:image',
+        },
+        scanned: 0,
+        providers: [],
+        fal: {
+          provider: 'fal-ai',
+          providerLabel: 'Fal',
+          total: 0,
+          enabled: 0,
+          visibleForRequest: 0,
+          missingStudioSurface: 0,
+          byMediaType: {},
+          byUiGroup: {},
+        },
+      },
+    });
+
+    render(
+      <FloraModelMarketplace
+        mediaType="image"
+        value={{ auto: false, selectedModelIds: [], useMultipleModels: false }}
+        onChange={vi.fn()}
+        provider="fal-ai"
+        triggerVariant="toolbar"
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /select model/i }));
+
+    expect(screen.getByText(/Fal catalog rows were not found/i)).toBeInTheDocument();
+  });
 });

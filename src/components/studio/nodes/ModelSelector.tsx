@@ -33,11 +33,17 @@ const ModelSelector = ({
   defaultCollapsed = true,
   compact = false,
 }: ModelSelectorProps) => {
-  const { models, isLoading, error } = useCatalogModels({ autoFetch: true });
   const [isOpen, setIsOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
   const [search, setSearch] = useState('');
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
+  const serverSearch = search.trim();
+  const { models, isLoading, error, diagnostics } = useCatalogModels({
+    autoFetch: true,
+    includeAdvanced: serverSearch.length > 0,
+    search: serverSearch.length > 0 ? serverSearch : undefined,
+    limit: serverSearch.length > 0 ? 250 : undefined,
+  });
 
   const filteredModels = useMemo(() => {
     const searchValue = normalize(search);
@@ -223,7 +229,9 @@ const ModelSelector = ({
             {/* Empty state */}
             {!isLoading && !error && categoryKeys.length === 0 && (
               <div className="px-2 py-4 text-xs text-text-tertiary text-center">
-                No models available
+                {diagnostics?.fal?.total === 0
+                  ? 'Fal catalog rows were not found. Run the latest catalog migration.'
+                  : 'No models available'}
               </div>
             )}
 

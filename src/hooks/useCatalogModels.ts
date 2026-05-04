@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { normalizeCatalogProviderKey } from '../../shared/ai-model-catalog';
 
 export type CatalogMediaType = 'text' | 'image' | 'video' | 'audio' | 'json' | '3d';
 export type CatalogUiGroup = 'generation' | 'advanced';
@@ -52,6 +53,29 @@ export interface CatalogModelSummary {
   default_rank?: number;
 }
 
+export interface CatalogProviderDiagnostics {
+  provider: string;
+  providerLabel: string;
+  total: number;
+  enabled: number;
+  visibleForRequest: number;
+  missingStudioSurface: number;
+  byMediaType: Record<string, number>;
+  byUiGroup: Record<string, number>;
+}
+
+export interface CatalogDiagnostics {
+  request: {
+    provider?: string;
+    mediaType?: string;
+    uiGroup?: string;
+    studioSurface?: string;
+  };
+  scanned: number;
+  providers: CatalogProviderDiagnostics[];
+  fal?: CatalogProviderDiagnostics;
+}
+
 export interface UseCatalogModelsOptions {
   category?: string;
   mediaType?: CatalogMediaType;
@@ -70,6 +94,8 @@ export interface UseCatalogModelsOptions {
 interface CatalogModelsPayload {
   models: CatalogModelSummary[];
   total: number;
+  scanned?: number;
+  diagnostics?: CatalogDiagnostics;
 }
 
 const modelCache = new Map<string, CatalogModelsPayload>();
@@ -142,6 +168,8 @@ export const useCatalogModels = (options: UseCatalogModelsOptions = {}) => {
   } = options;
   const [models, setModels] = useState<CatalogModelSummary[]>([]);
   const [total, setTotal] = useState(0);
+  const [scanned, setScanned] = useState(0);
+  const [diagnostics, setDiagnostics] = useState<CatalogDiagnostics | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
@@ -154,7 +182,7 @@ export const useCatalogModels = (options: UseCatalogModelsOptions = {}) => {
     const effectiveCategory = overrides.category || category;
     const effectiveMediaType = overrides.mediaType || mediaType;
     const effectiveUiGroup = overrides.uiGroup || uiGroup;
-    const effectiveProvider = overrides.provider || provider;
+    const effectiveProvider = normalizeCatalogProviderKey(overrides.provider ?? provider);
     const effectiveWorkflowType = overrides.workflowType || workflowType;
     const effectiveWorkflowTypes = overrides.workflowTypes || workflowTypes;
     const effectiveStudioSurface = overrides.studioSurface || studioSurface;
@@ -181,6 +209,8 @@ export const useCatalogModels = (options: UseCatalogModelsOptions = {}) => {
       if (cachedPayload) {
         setModels(cachedPayload.models);
         setTotal(cachedPayload.total);
+        setScanned(cachedPayload.scanned ?? cachedPayload.models.length);
+        setDiagnostics(cachedPayload.diagnostics ?? null);
         return;
       }
 
@@ -200,6 +230,7 @@ export const useCatalogModels = (options: UseCatalogModelsOptions = {}) => {
               search: effectiveSearch,
               limit: effectiveLimit,
               offset: effectiveOffset,
+              diagnostics: effectiveProvider === 'fal-ai',
             },
           });
 
@@ -216,6 +247,10 @@ export const useCatalogModels = (options: UseCatalogModelsOptions = {}) => {
           const payload = {
             models: transformedModels,
             total: typeof data.total === 'number' ? data.total : transformedModels.length,
+            scanned: typeof data.scanned === 'number' ? data.scanned : transformedModels.length,
+            diagnostics: data.diagnostics && typeof data.diagnostics === 'object'
+              ? data.diagnostics as CatalogDiagnostics
+              : undefined,
           };
           modelCache.set(cacheKey, payload);
           return payload;
@@ -225,11 +260,15 @@ export const useCatalogModels = (options: UseCatalogModelsOptions = {}) => {
       const payload = await fetchPromise;
       setModels(payload.models);
       setTotal(payload.total);
+      setScanned(payload.scanned ?? payload.models.length);
+      setDiagnostics(payload.diagnostics ?? null);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch models';
       setError(errorMessage);
       setModels([]);
       setTotal(0);
+      setScanned(0);
+      setDiagnostics(null);
 
       toast({
         title: 'Model catalog unavailable',
@@ -262,6 +301,8 @@ export const useCatalogModels = (options: UseCatalogModelsOptions = {}) => {
     models,
     grouped,
     total,
+    scanned,
+    diagnostics,
     isLoading,
     error,
     fetchModels,

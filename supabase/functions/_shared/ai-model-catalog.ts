@@ -5,6 +5,13 @@ import type {
   CatalogModel,
   CatalogSurface,
 } from "../../../shared/ai-model-catalog.ts";
+import {
+  catalogProviderAliasesForFilter,
+  formatCatalogProviderLabel,
+  getEffectiveStudioSurfaces,
+  modelMatchesCatalogStudioSurface,
+  normalizeCatalogProviderKey,
+} from "../../../shared/ai-model-catalog.ts";
 export type {
   CatalogControlDefinition,
   CatalogKanvasMode,
@@ -40,6 +47,31 @@ export interface CatalogListResult {
   scanned: number;
 }
 
+export interface CatalogDiagnosticsRequest {
+  provider?: string;
+  mediaType?: string;
+  uiGroup?: string;
+  studioSurface?: CatalogSurface;
+}
+
+export interface CatalogProviderDiagnostics {
+  provider: string;
+  providerLabel: string;
+  total: number;
+  enabled: number;
+  visibleForRequest: number;
+  missingStudioSurface: number;
+  byMediaType: Record<string, number>;
+  byUiGroup: Record<string, number>;
+}
+
+export interface CatalogDiagnostics {
+  request: CatalogDiagnosticsRequest;
+  scanned: number;
+  providers: CatalogProviderDiagnostics[];
+  fal?: CatalogProviderDiagnostics;
+}
+
 function createCatalogClient() {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
@@ -69,6 +101,91 @@ function asStringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string" && item.length > 0)
     : [];
+}
+
+function isCatalogRowVisibleForRequest(model: CatalogModel, request: CatalogDiagnosticsRequest): boolean {
+  if (!model.enabled) {
+    return false;
+  }
+  if (request.provider && normalizeCatalogProviderKey(model.provider) !== normalizeCatalogProviderKey(request.provider)) {
+    return false;
+  }
+  if (request.mediaType && model.mediaType !== request.mediaType) {
+    return false;
+  }
+  if (request.uiGroup && model.uiGroup !== request.uiGroup) {
+    return false;
+  }
+
+  return modelMatchesCatalogStudioSurface(model, request.studioSurface);
+}
+
+function modelMatchesCatalogSurface(model: CatalogModel, surface?: CatalogSurface | null): boolean {
+  if (!surface || surface.startsWith("studio:")) {
+    return modelMatchesCatalogStudioSurface(model, surface);
+  }
+
+  return model.studioSurfaces.includes(surface);
+}
+
+function summarizeDiagnosticsRows(rows: CatalogModel[], request: CatalogDiagnosticsRequest): CatalogDiagnostics {
+  const grouped = new Map<string, CatalogProviderDiagnostics>();
+
+  for (const row of rows) {
+    const provider = normalizeCatalogProviderKey(row.provider) ?? row.provider;
+    const providerLabel = formatCatalogProviderLabel(provider, row.providerLabel);
+    const current = grouped.get(provider) ?? {
+      provider,
+      providerLabel,
+      total: 0,
+      enabled: 0,
+      visibleForRequest: 0,
+      missingStudioSurface: 0,
+      byMediaType: {},
+      byUiGroup: {},
+    };
+
+    current.total += 1;
+    if (row.enabled) {
+      current.enabled += 1;
+    }
+    if (!row.studioSurfaces.some((surface) => surface.startsWith("studio:"))) {
+      current.missingStudioSurface += 1;
+    }
+    if (isCatalogRowVisibleForRequest(row, request)) {
+      current.visibleForRequest += 1;
+    }
+    current.byMediaType[row.mediaType] = (current.byMediaType[row.mediaType] ?? 0) + 1;
+    current.byUiGroup[row.uiGroup] = (current.byUiGroup[row.uiGroup] ?? 0) + 1;
+    grouped.set(provider, current);
+  }
+
+  const providers = Array.from(grouped.values()).sort((left, right) => {
+    if (left.provider === "fal-ai") return -1;
+    if (right.provider === "fal-ai") return 1;
+    return left.providerLabel.localeCompare(right.providerLabel);
+  });
+  const requestedProvider = normalizeCatalogProviderKey(request.provider);
+  const requestedFal = requestedProvider === "fal-ai" && !providers.some((provider) => provider.provider === "fal-ai")
+    ? {
+        provider: "fal-ai",
+        providerLabel: "Fal",
+        total: 0,
+        enabled: 0,
+        visibleForRequest: 0,
+        missingStudioSurface: 0,
+        byMediaType: {},
+        byUiGroup: {},
+      }
+    : undefined;
+  const effectiveProviders = requestedFal ? [requestedFal, ...providers] : providers;
+
+  return {
+    request,
+    scanned: rows.length,
+    providers: effectiveProviders,
+    fal: effectiveProviders.find((provider) => provider.provider === "fal-ai"),
+  };
 }
 
 function asControls(value: unknown): CatalogControlDefinition[] {
@@ -233,16 +350,13 @@ export async function listCatalogModelsPage(filters: CatalogQueryFilters = {}): 
     query = query.eq("category", filters.category);
   }
   if (filters.provider) {
-    query = query.eq("provider", filters.provider);
+    query = query.in("provider", catalogProviderAliasesForFilter(filters.provider));
   }
   if (filters.workflowType) {
     query = query.eq("workflow_type", filters.workflowType);
   }
   if (filters.workflowTypes?.length) {
     query = query.in("workflow_type", filters.workflowTypes);
-  }
-  if (filters.studioSurface) {
-    query = query.contains("studio_surfaces", [filters.studioSurface]);
   }
   if (filters.kanvasMode) {
     query = query.contains("kanvas_modes", [filters.kanvasMode]);
@@ -262,6 +376,7 @@ export async function listCatalogModelsPage(filters: CatalogQueryFilters = {}): 
 
   const filtered = (data ?? [])
     .map((row) => normalizeCatalogModel(row as QueryableCatalogRow))
+    .filter((model) => modelMatchesCatalogSurface(model, filters.studioSurface))
     .filter((model) => matchesSearch(model, filters.search))
     .filter((model) => matchesCapabilities(model, filters.capabilities));
   const offset = typeof filters.offset === "number" && Number.isFinite(filters.offset)
@@ -276,6 +391,53 @@ export async function listCatalogModelsPage(filters: CatalogQueryFilters = {}): 
     total: filtered.length,
     scanned: data?.length ?? 0,
   };
+}
+
+export async function getCatalogDiagnostics(request: CatalogDiagnosticsRequest = {}): Promise<CatalogDiagnostics> {
+  const client = createCatalogClient();
+  let query = client
+    .from("ai_model_catalog")
+    .select("id,provider,provider_label,enabled,media_type,ui_group,studio_surfaces");
+
+  if (request.provider) {
+    query = query.in("provider", catalogProviderAliasesForFilter(request.provider));
+  }
+
+  const { data, error } = await query.range(0, 4999);
+  if (error) {
+    throw new Error(`Failed to query ai_model_catalog diagnostics: ${error.message}`);
+  }
+
+  const rows = (data ?? []).map((row) => normalizeCatalogModel({
+    ...row,
+    endpoint_id: "",
+    name: "",
+    description: "",
+    category: "",
+    pricing_text: "",
+    transport_type: "",
+    workflow_type: "",
+    supports: [],
+    payload_keys: [],
+    requires_assets: [],
+    defaults: {},
+    controls: [],
+    aliases: [],
+    credits: 0,
+    time_label: "",
+    sort_rank: 0,
+    kanvas_modes: [],
+    raw_api_example: "",
+    raw_payload: {},
+    raw_source_block: "",
+    is_default: false,
+    default_rank: 0,
+  } as QueryableCatalogRow));
+
+  return summarizeDiagnosticsRows(rows, {
+    ...request,
+    provider: normalizeCatalogProviderKey(request.provider),
+  });
 }
 
 export async function listCatalogModels(filters: CatalogQueryFilters = {}): Promise<CatalogModel[]> {
@@ -309,13 +471,10 @@ export async function getCatalogModelById(
     directQuery = directQuery.eq("ui_group", filters.uiGroup);
   }
   if (filters.provider) {
-    directQuery = directQuery.eq("provider", filters.provider);
+    directQuery = directQuery.in("provider", catalogProviderAliasesForFilter(filters.provider));
   }
   if (filters.workflowType) {
     directQuery = directQuery.eq("workflow_type", filters.workflowType);
-  }
-  if (filters.studioSurface) {
-    directQuery = directQuery.contains("studio_surfaces", [filters.studioSurface]);
   }
   if (filters.kanvasMode) {
     directQuery = directQuery.contains("kanvas_modes", [filters.kanvasMode]);
@@ -326,7 +485,8 @@ export async function getCatalogModelById(
     throw new Error(`Failed to query ai_model_catalog by id: ${direct.error.message}`);
   }
   if (direct.data) {
-    return normalizeCatalogModel(direct.data as QueryableCatalogRow);
+    const model = normalizeCatalogModel(direct.data as QueryableCatalogRow);
+    return modelMatchesCatalogSurface(model, filters.studioSurface) ? model : null;
   }
 
   let aliasQuery = client
@@ -345,13 +505,10 @@ export async function getCatalogModelById(
     aliasQuery = aliasQuery.eq("ui_group", filters.uiGroup);
   }
   if (filters.provider) {
-    aliasQuery = aliasQuery.eq("provider", filters.provider);
+    aliasQuery = aliasQuery.in("provider", catalogProviderAliasesForFilter(filters.provider));
   }
   if (filters.workflowType) {
     aliasQuery = aliasQuery.eq("workflow_type", filters.workflowType);
-  }
-  if (filters.studioSurface) {
-    aliasQuery = aliasQuery.contains("studio_surfaces", [filters.studioSurface]);
   }
   if (filters.kanvasMode) {
     aliasQuery = aliasQuery.contains("kanvas_modes", [filters.kanvasMode]);
@@ -361,7 +518,12 @@ export async function getCatalogModelById(
   if (alias.error) {
     throw new Error(`Failed to query ai_model_catalog by alias: ${alias.error.message}`);
   }
-  return alias.data ? normalizeCatalogModel(alias.data as QueryableCatalogRow) : null;
+  if (!alias.data) {
+    return null;
+  }
+
+  const model = normalizeCatalogModel(alias.data as QueryableCatalogRow);
+  return modelMatchesCatalogSurface(model, filters.studioSurface) ? model : null;
 }
 
 export function toStudioCatalogModel(model: CatalogModel) {

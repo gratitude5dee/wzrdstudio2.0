@@ -10,6 +10,7 @@ import {
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const modelsMarkdown = readFileSync(resolve(currentDir, "../../models.md"), "utf8");
+const falSeedRows = JSON.parse(readFileSync(resolve(currentDir, "../supabase/seeds/fal-model-catalog.seed.json"), "utf8"));
 const parsedModels = parseFalModelsMarkdown(modelsMarkdown);
 const rows = buildFalCatalogRows(parsedModels);
 const rowsById = new Map(rows.map((row) => [row.id, row]));
@@ -73,5 +74,28 @@ describe("fal models.md catalog parser", () => {
 
     expect(sorted.slice(0, 8).every((row) => row.isDefault)).toBe(true);
     expect(sorted[0].id).toBe("fal-ai/nano-banana-2");
+  });
+
+  it("keeps the committed Fal seed visible to Studio surfaces", () => {
+    const requiredIds = [
+      "fal-ai/nano-banana-2",
+      "fal-ai/nano-banana-2/edit",
+      "fal-ai/kling-video/o3/standard/text-to-video",
+      "fal-ai/kling-video/o3/standard/image-to-video",
+      "fal-ai/elevenlabs/tts/turbo-v2.5",
+      "fal-ai/trellis/multi",
+      "openai/gpt-image-2",
+      "openai/gpt-image-2/edit",
+    ];
+    const seedRowsById = new Map(falSeedRows.map((row: any) => [row.id, row]));
+
+    for (const id of requiredIds) {
+      const row = seedRowsById.get(id) as any;
+      expect(row).toBeTruthy();
+      expect(row.provider).toBe("fal-ai");
+      expect(row.enabled).toBe(true);
+      expect(row.isDefault).toBe(true);
+      expect(row.studioSurfaces).toContain(`studio:${row.mediaType}`);
+    }
   });
 });

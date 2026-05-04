@@ -68,6 +68,7 @@ describe('useCatalogModels', () => {
           provider: 'fal-ai',
           studio_surface: 'studio:image',
           includeAdvanced: true,
+          diagnostics: true,
           search: 'nano banana edit',
           limit: 250,
           offset: 0,
@@ -79,6 +80,23 @@ describe('useCatalogModels', () => {
     await waitFor(() => {
       expect(result.current.models).toHaveLength(1);
       expect(result.current.total).toBe(42);
+    });
+  });
+
+  it('normalizes Fal provider aliases before invoking the catalog function', async () => {
+    renderHook(() => useCatalogModels({
+      mediaType: 'image',
+      provider: 'fal.ai',
+      studioSurface: 'studio:image',
+    }));
+
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith('model-catalog', {
+        body: expect.objectContaining({
+          provider: 'fal-ai',
+          diagnostics: true,
+        }),
+      });
     });
   });
 });

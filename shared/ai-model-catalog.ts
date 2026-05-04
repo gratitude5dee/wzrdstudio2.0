@@ -95,3 +95,99 @@ export interface CatalogModel {
   isDefault: boolean;
   defaultRank: number;
 }
+
+const CATALOG_PROVIDER_ALIASES: Record<string, string> = {
+  fal: "fal-ai",
+  "fal.ai": "fal-ai",
+  fal_ai: "fal-ai",
+  falai: "fal-ai",
+  "fal-ai": "fal-ai",
+  gmi: "gmi-cloud",
+  "gmi cloud": "gmi-cloud",
+  gmi_cloud: "gmi-cloud",
+  "gmi-cloud": "gmi-cloud",
+};
+
+export function normalizeCatalogProviderKey(provider?: string | null): string | undefined {
+  const normalized = provider?.trim().toLowerCase();
+  if (!normalized) {
+    return undefined;
+  }
+
+  return CATALOG_PROVIDER_ALIASES[normalized] ?? normalized;
+}
+
+export function catalogProviderAliasesForFilter(provider?: string | null): string[] {
+  const normalized = normalizeCatalogProviderKey(provider);
+  if (!normalized) {
+    return [];
+  }
+
+  if (normalized === "fal-ai") {
+    return ["fal-ai", "fal.ai", "fal", "fal_ai", "falai"];
+  }
+
+  if (normalized === "gmi-cloud") {
+    return ["gmi-cloud", "gmi", "gmi cloud", "gmi_cloud"];
+  }
+
+  return [normalized];
+}
+
+export function formatCatalogProviderLabel(provider?: string | null, providerLabel?: string | null): string {
+  const normalized = normalizeCatalogProviderKey(provider ?? providerLabel);
+  if (normalized === "fal-ai") {
+    return "Fal";
+  }
+  if (normalized === "gmi-cloud") {
+    return "GMI Cloud";
+  }
+
+  const source = providerLabel?.trim() || provider?.trim();
+  if (!source) {
+    return "Other";
+  }
+
+  return source
+    .split(/[-_/\s.]+/)
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(" ");
+}
+
+export function studioSurfaceForCatalogMediaType(mediaType?: string | null): CatalogSurface | null {
+  if (
+    mediaType === "text" ||
+    mediaType === "image" ||
+    mediaType === "video" ||
+    mediaType === "audio" ||
+    mediaType === "json" ||
+    mediaType === "3d"
+  ) {
+    return `studio:${mediaType}` as CatalogSurface;
+  }
+
+  return null;
+}
+
+export function getEffectiveStudioSurfaces(model: Pick<CatalogModel, "mediaType" | "studioSurfaces">): CatalogSurface[] {
+  const explicit = model.studioSurfaces.filter((surface) => surface.startsWith("studio:"));
+  if (explicit.length > 0) {
+    return explicit;
+  }
+
+  const inferred = studioSurfaceForCatalogMediaType(model.mediaType);
+  return inferred ? [inferred] : [];
+}
+
+export function modelMatchesCatalogStudioSurface(
+  model: Pick<CatalogModel, "mediaType" | "studioSurfaces">,
+  studioSurface?: CatalogSurface | null,
+): boolean {
+  const effectiveSurfaces = getEffectiveStudioSurfaces(model);
+  if (!studioSurface) {
+    return effectiveSurfaces.length > 0;
+  }
+
+  return effectiveSurfaces.includes(studioSurface);
+}

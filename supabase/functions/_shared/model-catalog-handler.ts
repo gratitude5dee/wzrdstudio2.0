@@ -1,10 +1,12 @@
 import {
   getCatalogModelById,
+  getCatalogDiagnostics,
   listCatalogModelsPage,
   listCatalogModels,
   toKanvasCatalogModel,
   toStudioCatalogModel,
 } from "./ai-model-catalog.ts";
+import { modelMatchesCatalogStudioSurface, normalizeCatalogProviderKey } from "../../../shared/ai-model-catalog.ts";
 import { authenticateRequest, AuthError } from "./auth.ts";
 import { errorResponse, handleCors, successResponse } from "./response.ts";
 import type {
@@ -88,6 +90,7 @@ function parseParams(url: URL, body: Record<string, unknown> | null) {
     kanvasStudio: get("kanvas_studio") as KanvasStudio | null,
     kanvasMode: get("kanvas_mode") as CatalogKanvasMode | null,
     includeAdvanced: getBoolean("includeAdvanced") ?? getBoolean("include_advanced") ?? false,
+    diagnostics: getBoolean("diagnostics") ?? false,
     capabilities,
   };
 }
@@ -110,7 +113,7 @@ function inferKanvasMode(model: CatalogModel, preferred?: CatalogKanvasMode | nu
 }
 
 function hasStudioSurface(model: CatalogModel): boolean {
-  return model.studioSurfaces.some((surface) => surface.startsWith("studio:"));
+  return modelMatchesCatalogStudioSurface(model);
 }
 
 function expandKanvasModels(
@@ -189,7 +192,9 @@ export async function handleModelCatalogRequest(req: Request): Promise<Response>
       limit,
       offset,
       capabilities,
+      diagnostics: diagnosticsRequested,
     } = parseParams(url, body);
+    const normalizedProvider = normalizeCatalogProviderKey(provider) ?? undefined;
 
     if (studio === "kanvas") {
       const surface = kanvasStudio ? (`kanvas:${kanvasStudio}` as CatalogSurface) : undefined;
@@ -234,7 +239,7 @@ export async function handleModelCatalogRequest(req: Request): Promise<Response>
 
     if (modelId) {
       const model = await getCatalogModelById(modelId, {
-        provider: provider ?? undefined,
+        provider: normalizedProvider,
         workflowType: workflowType ?? undefined,
         studioSurface: studioSurface ?? undefined,
       });
@@ -250,7 +255,7 @@ export async function handleModelCatalogRequest(req: Request): Promise<Response>
       category: category ?? undefined,
       mediaType: mediaType ?? undefined,
       uiGroup: effectiveUiGroup,
-      provider: provider ?? undefined,
+      provider: normalizedProvider,
       ...workflowFilter,
       studioSurface: studioSurface ?? undefined,
       search: search ?? undefined,
@@ -261,11 +266,22 @@ export async function handleModelCatalogRequest(req: Request): Promise<Response>
     const models = page.models
       .filter(hasStudioSurface)
       .map(toStudioCatalogModel);
+    const shouldIncludeDiagnostics = diagnosticsRequested || models.length === 0;
+    const diagnostics = shouldIncludeDiagnostics
+      ? await getCatalogDiagnostics({
+          provider: normalizedProvider,
+          mediaType: mediaType ?? undefined,
+          uiGroup: effectiveUiGroup,
+          studioSurface: studioSurface ?? undefined,
+        })
+      : undefined;
 
     return successResponse({
       models,
       total: page.total,
+      scanned: page.scanned,
       categories: Array.from(new Set(models.map((model) => model.category))),
+      diagnostics,
     });
   } catch (error) {
     console.error("Model catalog error:", error);

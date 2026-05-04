@@ -1,4 +1,4 @@
-CREATE TABLE public.ai_model_catalog (
+CREATE TABLE IF NOT EXISTS public.ai_model_catalog (
   id TEXT PRIMARY KEY,
   endpoint_id TEXT NOT NULL DEFAULT '',
   provider TEXT NOT NULL DEFAULT '',
