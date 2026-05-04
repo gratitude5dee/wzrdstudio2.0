@@ -25,7 +25,7 @@
     "@fal-ai/client": "^1.2.3",
     "@fal-ai/serverless-client": "^0.15.0",
     "@hookform/resolvers": "^3.9.0",
-    "@openai/agents": "^0.0.5",
+    "@openai/agents": "^0.8.5",
     "@radix-ui/react-accordion": "^1.2.0",
     "@radix-ui/react-alert-dialog": "^1.1.1",
     "@radix-ui/react-aspect-ratio": "^1.1.0",
@@ -95,7 +95,7 @@
     "viem": "^2.48.8",
     "web-audio-beat-detector": "^8.2.35",
     "web-vitals": "^3.5.0",
-    "zod": "^3.23.8",
+    "zod": "^4.4.3",
     "zustand": "^5.0.3"
   },
   "devDependencies": {

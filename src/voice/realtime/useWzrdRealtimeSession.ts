@@ -21,6 +21,7 @@ type RealtimeSessionInstance = {
   close: () => void;
   interrupt: () => void;
   transport: {
+    status: string;
     sendEvent: (event: { type: string }) => void;
   };
   on: (event: string, callback: (...args: unknown[]) => void) => void;
@@ -52,7 +53,13 @@ function stopStream(stream: MediaStream | null) {
  * object forwarded from the Realtime API.
  */
 function normalizeVoiceError(raw: unknown): string {
-  if (raw instanceof Error) return raw.message;
+  if (raw instanceof Error) {
+    const msg = raw.message;
+    if (msg.includes('Failed to parse SessionDescription') || msg.includes('Expect line: v=')) {
+      return 'Voice connection failed — the Realtime API rejected the WebRTC session. Please try again.';
+    }
+    return msg;
+  }
   if (typeof raw === 'string') return raw;
 
   if (raw && typeof raw === 'object') {
@@ -157,13 +164,21 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
         tracingDisabled: true,
         config: {
           voice,
-          modalities: ['text', 'audio'],
-          inputAudioTranscription: {
-            model: 'gpt-4o-mini-transcribe',
-            language: 'en',
+          outputModalities: ['text', 'audio'],
+          audio: {
+            input: {
+              transcription: {
+                model: 'gpt-4o-mini-transcribe',
+                language: 'en',
+              },
+              // Use semantic_vad but don't auto-create responses so
+              // push-to-talk can send response.create manually.
+              turnDetection: {
+                type: 'semantic_vad',
+                createResponse: false,
+              },
+            },
           },
-          // Let the server use its default turn detection (semantic_vad).
-          // Push-to-talk commit/response events are sent by the caller.
         },
       });
 
@@ -224,9 +239,15 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
   }, [connect]);
 
   const pushToTalkStop = useCallback(() => {
-    if (!sessionRef.current) return;
-    sessionRef.current.transport.sendEvent({ type: 'input_audio_buffer.commit' } as never);
-    sessionRef.current.transport.sendEvent({ type: 'response.create' } as never);
+    const session = sessionRef.current;
+    if (!session) return;
+    // Only send commit/response if the transport is actually connected
+    if (session.transport.status !== 'connected') {
+      console.warn('[Voice] pushToTalkStop skipped — transport not connected');
+      return;
+    }
+    session.transport.sendEvent({ type: 'input_audio_buffer.commit' } as never);
+    session.transport.sendEvent({ type: 'response.create' } as never);
     setStatus('thinking');
   }, []);
 
