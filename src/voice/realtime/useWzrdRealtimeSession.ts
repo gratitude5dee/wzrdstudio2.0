@@ -28,14 +28,66 @@ type RealtimeSessionInstance = {
 
 type RealtimeRuntime = {
   RealtimeSession: new (agent: unknown, options: Record<string, unknown>) => RealtimeSessionInstance;
-  OpenAIRealtimeWebRTC: new (options: { audioElement: HTMLAudioElement }) => unknown;
+  OpenAIRealtimeWebRTC: new (options: { audioElement: HTMLAudioElement; mediaStream: MediaStream }) => unknown;
   agent: unknown;
 };
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Stop all tracks on a MediaStream, ignoring errors. */
+function stopStream(stream: MediaStream | null) {
+  if (!stream) return;
+  try {
+    stream.getTracks().forEach((t) => t.stop());
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Extract a user-friendly message from the SDK's `error` event payload, which
+ * can be an Error, a string, or a nested `{ error: { type, message, details } }`
+ * object forwarded from the Realtime API.
+ */
+function normalizeVoiceError(raw: unknown): string {
+  if (raw instanceof Error) return raw.message;
+  if (typeof raw === 'string') return raw;
+
+  if (raw && typeof raw === 'object') {
+    const rec = raw as Record<string, unknown>;
+
+    // SDK wraps server errors as `{ type: 'error', error: { type, message } }`
+    const inner = rec.error;
+    if (inner && typeof inner === 'object') {
+      const err = inner as Record<string, unknown>;
+      const errType = typeof err.type === 'string' ? err.type : '';
+      const errMsg = typeof err.message === 'string' ? err.message : '';
+
+      if (errType === 'service_unavailable' || errMsg.includes('temporarily unavailable')) {
+        return 'OpenAI Realtime service is temporarily unavailable — please try again in a moment.';
+      }
+      if (errMsg) return errMsg;
+      if (errType) return errType;
+    }
+
+    // Top-level message field
+    if (typeof rec.message === 'string') return rec.message;
+  }
+
+  return 'Voice session error.';
+}
+
+// ---------------------------------------------------------------------------
+// Hook
+// ---------------------------------------------------------------------------
 
 export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptions) {
   const sessionRef = useRef<RealtimeSessionInstance | null>(null);
   const runtimeRef = useRef<Promise<RealtimeRuntime> | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
   const [status, setStatus] = useState<VoiceSessionStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -63,13 +115,15 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
       audioRef.current.autoplay = true;
     }
 
+    let micStream: MediaStream | null = null;
+
     try {
-      // Request microphone permission up-front so we get a clear error
-      let micStream: MediaStream;
+      // ------------------------------------------------------------------
+      // 1. Acquire microphone — keep the stream so we hand it to WebRTC
+      // ------------------------------------------------------------------
       try {
         micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        // Release immediately — the WebRTC transport will request its own stream
-        micStream.getTracks().forEach((t) => t.stop());
+        micStreamRef.current = micStream;
       } catch (micError) {
         const msg = micError instanceof Error ? micError.message : String(micError);
         const denied =
@@ -83,15 +137,24 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
         );
       }
 
+      // ------------------------------------------------------------------
+      // 2. Load runtime, fetch ephemeral key
+      // ------------------------------------------------------------------
       const { RealtimeSession, OpenAIRealtimeWebRTC, agent } = await loadRuntime();
       const apiKey = await fetchRealtimeClientSecret();
       const model = import.meta.env.VITE_WZRD_REALTIME_MODEL ?? 'gpt-realtime';
       const voice = import.meta.env.VITE_WZRD_REALTIME_VOICE ?? 'ash';
+
+      // ------------------------------------------------------------------
+      // 3. Create session — pass our mic stream directly to the transport
+      // ------------------------------------------------------------------
       const session = new RealtimeSession(agent, {
         transport: new OpenAIRealtimeWebRTC({
           audioElement: audioRef.current,
+          mediaStream: micStream,
         }),
         model,
+        tracingDisabled: true,
         config: {
           voice,
           modalities: ['text', 'audio'],
@@ -99,18 +162,26 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
             model: 'gpt-4o-mini-transcribe',
             language: 'en',
           },
-          turnDetection: null as unknown as Record<string, unknown>,
+          // Let the server use its default turn detection (semantic_vad).
+          // Push-to-talk commit/response events are sent by the caller.
         },
       });
 
+      // ------------------------------------------------------------------
+      // 4. Wire up event handlers
+      // ------------------------------------------------------------------
       session.on('audio_start', () => setStatus('speaking'));
       session.on('audio_stopped', () => setStatus('idle'));
       session.on('agent_tool_start', () => setStatus('thinking'));
       session.on('agent_tool_end', () => setStatus('idle'));
+
       session.on('error', (error: unknown) => {
+        const msg = normalizeVoiceError(error);
+        console.warn('[Voice] session error:', msg, error);
         setStatus('error');
-        setErrorMessage(error instanceof Error ? error.message : 'Voice session error.');
+        setErrorMessage(msg);
       });
+
       session.on('transport_event', (event: { type?: string }) => {
         if (event.type === 'response.output_audio_transcript.delta') {
           setStatus('speaking');
@@ -120,11 +191,17 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
         }
       });
 
+      // ------------------------------------------------------------------
+      // 5. Connect — this establishes the WebRTC peer connection
+      // ------------------------------------------------------------------
       await session.connect({ apiKey, model });
       sessionRef.current = session;
       setStatus('idle');
       return session;
     } catch (error) {
+      // Clean up on failure
+      stopStream(micStream);
+      micStreamRef.current = null;
       setStatus('error');
       setErrorMessage(error instanceof Error ? error.message : 'Voice connection failed.');
       throw error;
@@ -134,6 +211,8 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
   const disconnect = useCallback(() => {
     sessionRef.current?.close();
     sessionRef.current = null;
+    stopStream(micStreamRef.current);
+    micStreamRef.current = null;
     setStatus('idle');
   }, []);
 
