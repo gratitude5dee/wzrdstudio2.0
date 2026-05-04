@@ -1,26 +1,23 @@
-
 ## Problem
 
-The error "API version mismatch. You cannot start a Realtime beta session with a GA client secret" occurs because:
+The error `Model "gpt-realtime" does not match the realtime token model` occurs because:
 
-1. The `realtime-client-secret` edge function creates a **GA** ephemeral key (via `/v1/realtime/client_secrets` without a beta header)
-2. But it uses a beta-era request body format (`session.type: "realtime"`, nested `audio.output.voice`, `expires_after`) and the model name `gpt-realtime` which doesn't exist in GA
-3. The client-side model default is also wrong (`gpt-4o-realtime-preview-2025-06-03` may not match what the ephemeral key was scoped to)
+1. The edge function creates an ephemeral token scoped to model `gpt-4o-realtime-preview-2025-06-03`
+2. The client-side code in `useWzrdRealtimeSession.ts` line 112 still defaults to `'gpt-realtime'`
+3. When the WebRTC transport connects to `api.openai.com/v1/realtime?model=gpt-realtime`, OpenAI rejects it because the token was issued for a different model
 
 ## Fix
 
-**1. Edge function: `supabase/functions/realtime-client-secret/index.ts`**
+**File: `src/voice/realtime/useWzrdRealtimeSession.ts` (line 112)**
 
-Update the request body to match the GA `/v1/realtime/client_secrets` format:
-- Change default model from `"gpt-realtime"` to `"gpt-4o-realtime-preview-2025-06-03"`
-- Simplify request body to GA format: `{ model, voice }` (no `session` wrapper, no `type`, no `expires_after`)
+Change the default model from `'gpt-realtime'` to `'gpt-4o-realtime-preview-2025-06-03'` to match the edge function default.
 
-**2. Client: `src/voice/realtime/useWzrdRealtimeSession.ts`**
+```ts
+// Before
+const model = import.meta.env.VITE_WZRD_REALTIME_MODEL ?? 'gpt-realtime';
 
-- Change default model from `gpt-4o-realtime-preview-2025-06-03` to match the edge function default (they must agree)
+// After
+const model = import.meta.env.VITE_WZRD_REALTIME_MODEL ?? 'gpt-4o-realtime-preview-2025-06-03';
+```
 
-**3. Deploy the edge function**
-
-## Files
-- `supabase/functions/realtime-client-secret/index.ts`
-- `src/voice/realtime/useWzrdRealtimeSession.ts` (model default alignment)
+One line change. No other files need modification.
