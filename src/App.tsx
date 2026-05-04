@@ -66,6 +66,7 @@ const KanvasLyrics = lazyWithRetry(() => import("./pages/KanvasLyrics"));
 const KanvasRemix = lazyWithRetry(() => import("./pages/KanvasRemix"));
 const KanvasRemixJobs = lazyWithRetry(() => import("./pages/KanvasRemixJobs"));
 const AssetsPage = lazyWithRetry(() => import("./pages/AssetsPage"));
+const IPVault = lazyWithRetry(() => import("./pages/IPVault"));
 
 const RedirectProjectTimelineAlias = () => {
   const { projectId } = useParams();
@@ -196,6 +197,15 @@ const App = () => {
                         </ProtectedRoute>
                       }
                     />
+                    <Route
+                      path={appRoutes.ipVault}
+                      element={
+                        <ProtectedRoute>
+                          <IPVault />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route path={appRoutes.legacy.ipVault} element={<Navigate to={appRoutes.ipVault} replace />} />
                     <Route
                       path={appRoutes.learningStudio}
                       element={

@@ -1,4 +1,4 @@
-import { Users, Globe, Star, ChevronLeft, LogOut, Layers, Sparkles, FolderKanban, Images } from 'lucide-react';
+import { Users, Globe, Star, ChevronLeft, LogOut, Layers, Sparkles, FolderKanban, Images, ShieldCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 import CreditsDisplay from '../CreditsDisplay';
@@ -59,9 +59,10 @@ export const Sidebar = ({ activeView, onViewChange }: SidebarProps) => {
 
   const mainNavItems = [
     { id: 'all', label: 'All Projects', icon: FolderKanban },
-    { id: 'kanvas', label: 'Kanvas', icon: Layers, isRoute: true, showBadge: true },
+    { id: 'kanvas', label: 'Kanvas', icon: Layers, isRoute: true, path: appRoutes.kanvas, showBadge: true },
     { id: 'aura', label: 'Aura', icon: Sparkles },
     { id: 'asset-store', label: 'Asset Store', icon: Images },
+    { id: 'ip-vault', label: 'IP Vault', icon: ShieldCheck, isRoute: true, path: appRoutes.ipVault },
   ];
 
   const secondaryNavItems = [
@@ -91,9 +92,10 @@ export const Sidebar = ({ activeView, onViewChange }: SidebarProps) => {
         transition={{ delay: index * 0.05 }}
         whileHover={{ x: isCollapsed ? 0 : 2 }}
         whileTap={{ scale: 0.98 }}
+        aria-label={item.label}
         onClick={() => {
           if (item.isRoute) {
-            navigate(appRoutes.kanvas);
+            navigate(item.path ?? appRoutes.kanvas);
           } else {
             onViewChange(item.id);
           }
@@ -170,6 +172,7 @@ export const Sidebar = ({ activeView, onViewChange }: SidebarProps) => {
 
     const content = (
       <button
+        aria-label={item.label}
         onClick={() => onViewChange(item.id)}
         className={cn(
           "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200",
@@ -282,7 +285,7 @@ export const Sidebar = ({ activeView, onViewChange }: SidebarProps) => {
                       type="button"
                       onClick={() => {
                         if ('isRoute' in item && item.isRoute) {
-                          navigate(appRoutes.kanvas);
+                          navigate(item.path ?? appRoutes.kanvas);
                         } else if (item.id === '_favorites') {
                           setFavoritesOpen(!favoritesOpen);
                         } else if (item.id === 'asset-store') {

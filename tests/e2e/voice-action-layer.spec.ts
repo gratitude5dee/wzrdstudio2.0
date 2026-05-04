@@ -9,6 +9,14 @@ test('voice action layer appears and can drive core navigation through the test 
   await expect(page.getByRole('button', { name: 'Hold to speak' })).toBeVisible({
     timeout: 15_000,
   });
+  await expect(page.getByRole('button', { name: /IP Vault/i })).toBeVisible();
+
+  const ipVaultResult = await page.evaluate(() =>
+    window.__wzrdVoiceActionTest!.execute('open_ip_vault'),
+  );
+  expect(ipVaultResult.ok).toBe(true);
+  await expect(page).toHaveURL(/\/ip-vault$/);
+  await expect(page.getByTestId('ip-vault-page')).toBeVisible();
 
   const projectResult = await page.evaluate(() =>
     window.__wzrdVoiceActionTest!.execute('start_new_project'),

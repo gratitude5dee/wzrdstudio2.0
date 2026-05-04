@@ -46,6 +46,9 @@ describe('routes contract', () => {
 
   it('registers canonical, legacy, and deferred routes in the manifest', () => {
     expect(isRegisteredRoute('/projects/project-1/timeline')).toBe(true);
+    expect(isRegisteredRoute(appRoutes.ipVault)).toBe(true);
+    expect(getRouteEntry(appRoutes.ipVault)?.category).toBe('core');
+    expect(getRouteEntry(appRoutes.legacy.ipVault)?.category).toBe('legacy');
     expect(getRouteEntry('/storyboard/project-1')?.category).toBe('legacy');
     expect(isDeferredRoute(appRoutes.deferred.demo)).toBe(true);
     expect(isDeferredRoute(appRoutes.deferred.profile)).toBe(true);

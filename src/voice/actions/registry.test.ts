@@ -97,4 +97,42 @@ describe('voice action registry', () => {
       message: 'global',
     });
   });
+
+  it('gates Story Protocol IP Vault actions behind confirmation', async () => {
+    const registry = createVoiceActionRegistry();
+    const handler = vi.fn(async () => ({
+      ok: true as const,
+      status: 'completed' as const,
+      message: 'registration submitted',
+    }));
+
+    registry.register({
+      name: 'ip_vault_register_ip',
+      scope: 'ip-vault',
+      confirmation: {
+        risk: 'sensitive',
+        message: 'Register this IP on Story Protocol with your wallet?',
+      },
+      handler,
+    });
+
+    const blocked = await registry.execute('ip_vault_register_ip', { itemId: 'vault-1' });
+    expect(blocked).toMatchObject({
+      ok: false,
+      status: 'needs_confirmation',
+      confirmation: {
+        actionName: 'ip_vault_register_ip',
+        risk: 'sensitive',
+      },
+    });
+    expect(handler).not.toHaveBeenCalled();
+
+    await expect(
+      registry.execute('ip_vault_register_ip', { itemId: 'vault-1' }, { confirmed: true }),
+    ).resolves.toMatchObject({
+      ok: true,
+      status: 'completed',
+    });
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
 });

@@ -1,4 +1,4 @@
-import { X, FolderKanban, Layers, Users, Globe, Settings, HelpCircle, LogOut, Sparkles, Images } from 'lucide-react';
+import { X, FolderKanban, Layers, Users, Globe, Settings, HelpCircle, LogOut, Sparkles, Images, ShieldCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -31,9 +31,10 @@ export const MobileSidebarDrawer = ({ isOpen, onClose, activeView, onViewChange 
 
   const mainNavItems = [
     { id: 'all', label: 'All Projects', icon: FolderKanban },
-    { id: 'kanvas', label: 'Kanvas', icon: Layers, isRoute: true, showBadge: true },
+    { id: 'kanvas', label: 'Kanvas', icon: Layers, isRoute: true, path: appRoutes.kanvas, showBadge: true },
     { id: 'aura', label: 'Aura', icon: Sparkles },
     { id: 'asset-store', label: 'Asset Store', icon: Images },
+    { id: 'ip-vault', label: 'IP Vault', icon: ShieldCheck, isRoute: true, path: appRoutes.ipVault },
   ];
 
   const secondaryNavItems = [
@@ -43,7 +44,7 @@ export const MobileSidebarDrawer = ({ isOpen, onClose, activeView, onViewChange 
 
   const handleNavClick = (item: typeof mainNavItems[0]) => {
     if (item.isRoute) {
-      navigate(appRoutes.kanvas);
+      navigate(item.path ?? appRoutes.kanvas);
     } else {
       onViewChange(item.id);
     }

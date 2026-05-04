@@ -9,6 +9,7 @@ describe('voice navigation actions', () => {
   it('resolves core app targets into route paths', () => {
     expect(resolveVoiceNavigationTarget({ target: 'home' })).toBe('/home');
     expect(resolveVoiceNavigationTarget({ target: 'project_setup' })).toBe('/project-setup');
+    expect(resolveVoiceNavigationTarget({ target: 'ip_vault' })).toBe('/ip-vault');
     expect(resolveVoiceNavigationTarget({ target: 'kanvas_character_creation' })).toBe(
       '/kanvas?studio=character-creation',
     );
@@ -42,5 +43,22 @@ describe('voice navigation actions', () => {
       message: expect.stringContaining('Project setup'),
     });
     expect(navigate).toHaveBeenCalledWith('/project-setup');
+  });
+
+  it('opens IP Vault through the global shortcut action', async () => {
+    const navigate = vi.fn();
+    const actions = createGlobalVoiceActions({
+      navigate,
+      getLocationPath: () => '/home',
+      getCurrentProjectId: () => null,
+    });
+    const openIpVault = actions.find((action) => action.name === 'open_ip_vault');
+
+    await expect(Promise.resolve(openIpVault?.handler({}, {}))).resolves.toMatchObject({
+      ok: true,
+      status: 'completed',
+      data: { path: '/ip-vault' },
+    });
+    expect(navigate).toHaveBeenCalledWith('/ip-vault');
   });
 });

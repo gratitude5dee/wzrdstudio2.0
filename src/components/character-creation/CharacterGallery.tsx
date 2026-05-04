@@ -1,6 +1,7 @@
 import React from 'react';
-import { Heart, MoreHorizontal, Plus, Search, Trash2, User2 } from 'lucide-react';
+import { Heart, MoreHorizontal, Plus, Search, ShieldCheck, Trash2, User2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { FinalizeAssetDialog } from '@/components/ip-vault/FinalizeAssetDialog';
 import { useCharacterCreationStore } from '@/lib/stores/character-creation-store';
 import type { CharacterBlueprint } from '@/types/character-creation';
 
@@ -13,6 +14,7 @@ export function CharacterGallery() {
     useCharacterCreationStore();
   const [search, setSearch] = React.useState('');
   const [contextMenu, setContextMenu] = React.useState<string | null>(null);
+  const [finalizeBlueprint, setFinalizeBlueprint] = React.useState<CharacterBlueprint | null>(null);
 
   const filtered = React.useMemo(() => {
     if (!search.trim()) return blueprints;
@@ -85,10 +87,30 @@ export function CharacterGallery() {
               onSelect={() => selectBlueprint(bp.id)}
               onFavorite={() => toggleFavorite(bp.id)}
               onDelete={() => removeBlueprint(bp.id)}
+              onFinalize={() => setFinalizeBlueprint(bp)}
             />
           ))}
         </div>
       )}
+      <FinalizeAssetDialog
+        open={Boolean(finalizeBlueprint)}
+        onOpenChange={(open) => {
+          if (!open) setFinalizeBlueprint(null);
+        }}
+        source={
+          finalizeBlueprint
+            ? {
+                sourceType: 'character_blueprint',
+                sourceId: finalizeBlueprint.id,
+                title: finalizeBlueprint.name,
+                description: finalizeBlueprint.promptFragment,
+                assetKind: finalizeBlueprint.kind === 'environment' ? 'location' : finalizeBlueprint.kind,
+                previewUrl: finalizeBlueprint.thumbnailUrl ?? finalizeBlueprint.imageUrl,
+              }
+            : null
+        }
+        onFinalized={() => setFinalizeBlueprint(null)}
+      />
     </div>
   );
 }
@@ -104,6 +126,7 @@ function CharacterCard({
   onSelect,
   onFavorite,
   onDelete,
+  onFinalize,
 }: {
   blueprint: CharacterBlueprint;
   showContext: boolean;
@@ -111,6 +134,7 @@ function CharacterCard({
   onSelect: () => void;
   onFavorite: () => void;
   onDelete: () => void;
+  onFinalize: () => void;
 }) {
   return (
     <div
@@ -142,6 +166,17 @@ function CharacterCard({
 
         {/* Overlay actions */}
         <div className="absolute right-2 top-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onFinalize();
+            }}
+            className="rounded-lg bg-black/60 p-1.5 text-zinc-300 backdrop-blur-sm hover:text-orange-300"
+            aria-label={`Finalize ${blueprint.name} into IP Vault`}
+          >
+            <ShieldCheck className="h-3.5 w-3.5" />
+          </button>
           <button
             type="button"
             onClick={(e) => {

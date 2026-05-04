@@ -9,6 +9,13 @@ export type VoiceActionName =
   | 'character_open'
   | 'character_select'
   | 'character_edit_image'
+  | 'open_ip_vault'
+  | 'ip_vault_finalize_asset'
+  | 'ip_vault_select_item'
+  | 'ip_vault_set_license'
+  | 'ip_vault_register_ip'
+  | 'ip_vault_set_derivative'
+  | 'ip_vault_claim_revenue'
   | 'studio_create_node'
   | 'studio_select_node';
 

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Copy, Heart, Loader2, Sparkles, Trash2, Upload, User2 } from 'lucide-react';
+import { ArrowLeft, Copy, Heart, Loader2, ShieldCheck, Sparkles, Trash2, Upload, User2 } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { FinalizeAssetDialog } from '@/components/ip-vault/FinalizeAssetDialog';
 import { cn } from '@/lib/utils';
 import { useUserTier } from '@/hooks/useUserTier';
 import { useCharacterCreationStore } from '@/lib/stores/character-creation-store';
@@ -37,6 +38,7 @@ export function CharacterDetail() {
   const [uploadingReference, setUploadingReference] = useState(false);
   const [generatingPortrait, setGeneratingPortrait] = useState(false);
   const [creatingElement, setCreatingElement] = useState(false);
+  const [finalizeOpen, setFinalizeOpen] = useState(false);
   const uploadRef = useRef<HTMLInputElement | null>(null);
 
   const blueprint = blueprints.find((b) => b.id === selectedBlueprintId);
@@ -286,6 +288,14 @@ export function CharacterDetail() {
             </button>
             <button
               type="button"
+              onClick={() => setFinalizeOpen(true)}
+              className="flex items-center gap-2 rounded-xl border border-orange-300/20 bg-orange-300/10 px-3 py-2 text-xs text-orange-100 hover:bg-orange-300/15"
+            >
+              <ShieldCheck className="h-3 w-3" />
+              Finalize asset
+            </button>
+            <button
+              type="button"
               onClick={handleDelete}
               className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs text-red-400 hover:bg-red-500/10"
             >
@@ -410,6 +420,19 @@ export function CharacterDetail() {
           </p>
         </div>
       </div>
+      <FinalizeAssetDialog
+        open={finalizeOpen}
+        onOpenChange={setFinalizeOpen}
+        source={{
+          sourceType: 'character_blueprint',
+          sourceId: blueprint.id,
+          title: blueprint.name,
+          description: blueprint.promptFragment,
+          assetKind: blueprint.kind === 'environment' ? 'location' : blueprint.kind,
+          previewUrl: blueprint.thumbnailUrl ?? blueprint.imageUrl,
+        }}
+        onFinalized={() => setFinalizeOpen(false)}
+      />
     </div>
   );
 }

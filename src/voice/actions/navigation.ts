@@ -9,6 +9,7 @@ export type VoiceNavigationTarget =
   | 'home'
   | 'project_setup'
   | 'assets'
+  | 'ip_vault'
   | 'learning_studio'
   | 'settings_billing'
   | 'kanvas'
@@ -54,6 +55,8 @@ export function resolveVoiceNavigationTarget(input: VoiceNavigationInput): strin
       return appRoutes.projectSetup;
     case 'assets':
       return appRoutes.assets;
+    case 'ip_vault':
+      return appRoutes.ipVault;
     case 'learning_studio':
       return appRoutes.learningStudio;
     case 'settings_billing':
@@ -122,6 +125,14 @@ export function createGlobalVoiceActions(options: GlobalVoiceActionOptions): Voi
 
         options.navigate(path);
         return completed(`Opened ${navInput.target ?? 'destination'}.`, { path });
+      },
+    },
+    {
+      name: 'open_ip_vault',
+      scope: 'global',
+      handler: () => {
+        options.navigate(appRoutes.ipVault);
+        return completed('IP Vault is open.', { path: appRoutes.ipVault });
       },
     },
     {

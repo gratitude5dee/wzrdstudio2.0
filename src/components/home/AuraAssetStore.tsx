@@ -11,6 +11,7 @@ import {
   MapPin,
   Pin,
   Search,
+  ShieldCheck,
   Sparkles,
   User2,
   Video,
@@ -20,6 +21,7 @@ import {
 import { toast } from 'sonner';
 
 import { MentionDropdown } from '@/components/character-creation/MentionDropdown';
+import { FinalizeAssetDialog } from '@/components/ip-vault/FinalizeAssetDialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -179,6 +181,14 @@ export function AuraAssetStore({ projects = [] }: AuraAssetStoreProps) {
   const [name, setName] = useState('');
   const [promptAnchor, setPromptAnchor] = useState(KIND_META.character.seed);
   const [referenceLabels, setReferenceLabels] = useState<Record<string, string>>({});
+  const [finalizeSource, setFinalizeSource] = useState<{
+    sourceType: 'project_asset';
+    sourceId: string;
+    title: string;
+    description: string | null;
+    assetKind: string;
+    previewUrl: string | null;
+  } | null>(null);
 
   const selectedAssets = useMemo(
     () => selectedIds.map((id) => assets.find((asset) => asset.id === id)).filter((asset): asset is ProjectAsset => Boolean(asset)),
@@ -505,12 +515,19 @@ export function AuraAssetStore({ projects = [] }: AuraAssetStoreProps) {
                   const selected = selectedIds.includes(asset.id);
                   const canReference = Boolean(getReferenceImageUrl(asset));
                   return (
-                    <button
+                    <div
                       key={asset.id}
-                      type="button"
                       onClick={() => toggleAsset(asset)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          toggleAsset(asset);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
                       className={cn(
-                        'group overflow-hidden rounded-2xl border bg-[#111114] text-left transition-all',
+                        'group overflow-hidden rounded-2xl border bg-[#111114] text-left transition-all cursor-pointer',
                         'hover:border-orange-300/40 hover:bg-[#161619]',
                         selected ? 'border-orange-300 ring-2 ring-orange-300/20' : 'border-white/[0.06]',
                       )}
@@ -543,6 +560,24 @@ export function AuraAssetStore({ projects = [] }: AuraAssetStoreProps) {
                             <Check className="h-4 w-4" />
                           </span>
                         )}
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setFinalizeSource({
+                              sourceType: 'project_asset',
+                              sourceId: asset.id,
+                              title: asset.original_file_name || asset.file_name || 'Untitled asset',
+                              description: null,
+                              assetKind: asset.asset_category || asset.asset_type,
+                              previewUrl,
+                            });
+                          }}
+                          className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full border border-orange-300/25 bg-black/70 px-2 py-1 text-[10px] font-semibold text-orange-100 opacity-0 backdrop-blur transition-opacity hover:bg-orange-300/15 group-hover:opacity-100 focus:opacity-100"
+                        >
+                          <ShieldCheck className="h-3 w-3" />
+                          Finalize
+                        </button>
                       </div>
                       <div className="space-y-1.5 p-3">
                         <p className="truncate text-xs font-semibold text-white">{asset.original_file_name}</p>
@@ -553,7 +588,7 @@ export function AuraAssetStore({ projects = [] }: AuraAssetStoreProps) {
                           </span>
                         </div>
                       </div>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -725,6 +760,14 @@ export function AuraAssetStore({ projects = [] }: AuraAssetStoreProps) {
           </section>
         </aside>
       </div>
+      <FinalizeAssetDialog
+        open={Boolean(finalizeSource)}
+        onOpenChange={(open) => {
+          if (!open) setFinalizeSource(null);
+        }}
+        source={finalizeSource}
+        onFinalized={() => setFinalizeSource(null)}
+      />
     </div>
   );
 }

@@ -22,8 +22,10 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock,
+  ShieldCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { FinalizeAssetDialog } from '@/components/ip-vault/FinalizeAssetDialog';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
@@ -65,6 +67,7 @@ export function FinalExportPanel({
   const [includeVoiceover, setIncludeVoiceover] = useState(true);
   const [includeSfx, setIncludeSfx] = useState(true);
   const [includeMusic, setIncludeMusic] = useState(true);
+  const [finalizeAsset, setFinalizeAsset] = useState<FinalProjectAsset | null>(null);
 
   const clips = useVideoEditorStore((state) => state.clips);
   const audioTracks = useVideoEditorStore((state) => state.audioTracks);
@@ -303,12 +306,22 @@ export function FinalExportPanel({
                               </span>
                             )}
                           </div>
-                          <button
-                            onClick={() => removeAsset(asset.id)}
-                            className="p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:text-rose-400"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </button>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setFinalizeAsset(asset)}
+                              className="p-1 opacity-0 transition-opacity hover:text-orange-300 group-hover:opacity-100"
+                              aria-label={`Finalize ${asset.name} into IP Vault`}
+                            >
+                              <ShieldCheck className="h-3 w-3" />
+                            </button>
+                            <button
+                              onClick={() => removeAsset(asset.id)}
+                              className="p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:text-rose-400"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -367,6 +380,25 @@ export function FinalExportPanel({
           )}
         </AnimatePresence>
       </motion.div>
+      <FinalizeAssetDialog
+        open={Boolean(finalizeAsset)}
+        onOpenChange={(open) => {
+          if (!open) setFinalizeAsset(null);
+        }}
+        source={
+          finalizeAsset
+            ? {
+                sourceType: 'final_project_asset',
+                sourceId: finalizeAsset.id,
+                title: finalizeAsset.name,
+                description: finalizeAsset.metadata?.description as string | undefined,
+                assetKind: finalizeAsset.asset_subtype ?? finalizeAsset.asset_type,
+                previewUrl: finalizeAsset.thumbnail_url ?? finalizeAsset.url,
+              }
+            : null
+        }
+        onFinalized={() => setFinalizeAsset(null)}
+      />
     </TooltipProvider>
   );
 }
