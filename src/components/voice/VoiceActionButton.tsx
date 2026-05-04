@@ -65,7 +65,10 @@ export function VoiceActionButton({
   const Icon = status === 'connecting' || status === 'thinking' ? Loader2 : status === 'speaking' ? Volume2 : status === 'error' ? MicOff : Mic;
 
   return (
-    <div className="pointer-events-none fixed bottom-20 left-4 z-[80] flex items-center gap-2 md:bottom-4">
+    <div
+      data-testid="voice-action-button-container"
+      className="pointer-events-none fixed bottom-20 right-4 z-[80] flex flex-row-reverse items-center gap-2 md:bottom-4"
+    >
       <Button
         type="button"
         aria-label="Hold to speak"

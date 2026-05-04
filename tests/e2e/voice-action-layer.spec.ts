@@ -9,6 +9,12 @@ test('voice action layer appears and can drive core navigation through the test 
   await expect(page.getByRole('button', { name: 'Hold to speak' })).toBeVisible({
     timeout: 15_000,
   });
+  const micBox = await page.getByRole('button', { name: 'Hold to speak' }).boundingBox();
+  const viewport = page.viewportSize();
+  expect(micBox).not.toBeNull();
+  expect(viewport).not.toBeNull();
+  expect(micBox!.x).toBeGreaterThan(viewport!.width - 96);
+
   await expect(page.getByRole('button', { name: /IP Vault/i })).toBeVisible();
 
   const ipVaultResult = await page.evaluate(() =>

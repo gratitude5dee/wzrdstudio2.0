@@ -100,6 +100,7 @@ export const MobileSidebarDrawer = ({ isOpen, onClose, activeView, onViewChange 
                   <button
                     key={item.id}
                     onClick={() => handleNavClick(item)}
+                    aria-label={item.label}
                     className={cn(
                       "w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium transition-all",
                       isActive
@@ -140,6 +141,7 @@ export const MobileSidebarDrawer = ({ isOpen, onClose, activeView, onViewChange 
                   <button
                     key={item.id}
                     onClick={() => { onViewChange(item.id); onClose(); }}
+                    aria-label={item.label}
                     className={cn(
                       "w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium transition-all",
                       isActive

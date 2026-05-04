@@ -64,6 +64,14 @@ function renderMobileDrawer() {
   );
 }
 
+function getPrimaryNavLabels() {
+  const primaryLabels = ['All Projects', 'Kanvas', 'Aura', 'Asset Store', 'IP Vault'];
+  return screen
+    .getAllByRole('button')
+    .map((button) => button.getAttribute('aria-label') ?? button.textContent?.trim() ?? '')
+    .filter((label) => primaryLabels.includes(label));
+}
+
 describe('home navigation IP Vault entry', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -86,10 +94,13 @@ describe('home navigation IP Vault entry', () => {
   it('places IP Vault after Asset Store in the desktop sidebar and navigates to it', () => {
     renderDesktopSidebar();
 
-    const labels = screen
-      .getAllByRole('button')
-      .map((button) => button.textContent?.trim() ?? '');
-    expect(labels.indexOf('IP Vault')).toBeGreaterThan(labels.indexOf('Asset Store'));
+    expect(getPrimaryNavLabels()).toEqual([
+      'All Projects',
+      'Kanvas',
+      'Aura',
+      'Asset Store',
+      'IP Vault',
+    ]);
 
     fireEvent.click(screen.getByRole('button', { name: /ip vault/i }));
     expect(screen.getByTestId('location-path')).toHaveTextContent('/ip-vault');
@@ -98,10 +109,13 @@ describe('home navigation IP Vault entry', () => {
   it('places IP Vault after Asset Store in the mobile drawer and navigates to it', () => {
     renderMobileDrawer();
 
-    const labels = screen
-      .getAllByRole('button')
-      .map((button) => button.textContent?.trim() ?? '');
-    expect(labels.indexOf('IP Vault')).toBeGreaterThan(labels.indexOf('Asset Store'));
+    expect(getPrimaryNavLabels()).toEqual([
+      'All Projects',
+      'Kanvas',
+      'Aura',
+      'Asset Store',
+      'IP Vault',
+    ]);
 
     fireEvent.click(screen.getByRole('button', { name: /ip vault/i }));
     expect(screen.getByTestId('location-path')).toHaveTextContent('/ip-vault');

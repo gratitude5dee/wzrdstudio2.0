@@ -58,4 +58,21 @@ describe('VoiceActionButton', () => {
 
     expect(screen.getByText('Microphone permission denied')).toBeInTheDocument();
   });
+
+  it('anchors the control bottom-right and opens status to the left', () => {
+    render(
+      <VoiceActionButton
+        status="thinking"
+        onPressStart={vi.fn()}
+        onPressEnd={vi.fn()}
+      />,
+    );
+
+    const container = screen.getByTestId('voice-action-button-container');
+    expect(container).toHaveClass('right-4');
+    expect(container).not.toHaveClass('left-4');
+    expect(container).toHaveClass('flex-row-reverse');
+    expect(container).toHaveClass('bottom-20');
+    expect(container).toHaveClass('md:bottom-4');
+  });
 });
