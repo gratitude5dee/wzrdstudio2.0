@@ -65,6 +65,7 @@ describe('processAssetsRemote', () => {
     vi.restoreAllMocks();
     globalThis.fetch = originalFetch;
     delete (globalThis as unknown as { Deno?: unknown }).Deno;
+    delete (globalThis as { __WZRD_EDITFRAME_API__?: unknown }).__WZRD_EDITFRAME_API__;
   });
 
   function responseJson(body: unknown, init: ResponseInit = {}) {
@@ -201,6 +202,94 @@ describe('processAssetsRemote', () => {
         falRequestId: 'failed-compose',
       },
     } satisfies Partial<ExportProcessingError>);
+    expect(updates.some((patch) => patch.provider_job_id === 'failed-compose')).toBe(true);
+  });
+
+  it('reports fal failure and Editframe render failure separately', async () => {
+    (globalThis as unknown as { Deno: unknown }).Deno = {
+      env: {
+        get: (key: string) => {
+          if (key === 'FAL_KEY') return 'fal-key';
+          if (key === 'EDITFRAME_API_KEY') return 'editframe-key';
+          return undefined;
+        },
+      },
+    };
+    (globalThis as {
+      __WZRD_EDITFRAME_API__?: unknown;
+    }).__WZRD_EDITFRAME_API__ = {
+      Client: class {
+        constructor(public key: string) {}
+      },
+      createRender: vi.fn(async () => {
+        throw new Error('render rejected');
+      }),
+      getRenderProgress: vi.fn(),
+      downloadRender: vi.fn(),
+    };
+
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === 'HEAD') return new Response(null, { status: 200 });
+      if (url.includes('/fal-ai/ffmpeg-api/compose')) {
+        return responseJson({
+          request_id: 'failed-compose-render',
+          status_url: 'https://queue.fal.run/failed-compose-render-status',
+        });
+      }
+      if (url.startsWith('https://queue.fal.run/failed-compose-render-status')) {
+        return responseJson({ status: 'FAILED', logs: [{ message: 'bad source' }] });
+      }
+      throw new Error(`Unexpected fetch ${url}`);
+    }) as typeof fetch;
+
+    await expect(processAssetsRemote(
+      supabaseAdmin,
+      'project-1',
+      [{ id: 'image-1', type: 'image', url: 'https://cdn.example.com/image.jpg', duration_ms: 5000, order_index: 0 }],
+      'job-4',
+      'final-exports',
+      { includeAudio: false }
+    )).rejects.toMatchObject({
+      name: 'ExportProcessingError',
+      message: expect.stringContaining('Editframe fallback failed: render rejected'),
+      providerPayload: {
+        fallbackStatus: 'failed',
+        fallbackError: 'render rejected',
+        falRequestId: 'failed-compose-render',
+        falError: expect.stringContaining('bad source'),
+      },
+    });
+  });
+
+  it('rejects invalid fal compose tracks before provider submission', async () => {
+    const requests: string[] = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      requests.push(url);
+      if (init?.method === 'HEAD') return new Response(null, { status: 200 });
+      throw new Error(`Unexpected fetch ${url}`);
+    }) as typeof fetch;
+
+    await expect(processAssetsRemote(
+      supabaseAdmin,
+      'project-1',
+      [{ id: 'image-1', type: 'image', url: 'https://cdn.example.com/image.jpg', duration_ms: 0, order_index: 0 }],
+      'job-5',
+      'final-exports',
+      { includeAudio: false }
+    )).rejects.toMatchObject({
+      name: 'ExportProcessingError',
+      message: 'Fal input validation failed before provider submission',
+      providerPayload: {
+        renderer: 'fal_input_validation',
+        targetRenderer: 'fal-ai/ffmpeg-api/compose',
+        failedShotCount: 1,
+      },
+    });
+
+    expect(requests.some((url) => url.includes('queue.fal.run'))).toBe(false);
+    expect(updates.some((patch) => (patch.provider_payload as Record<string, unknown>)?.renderer === 'fal_input_validation')).toBe(true);
   });
 });
 

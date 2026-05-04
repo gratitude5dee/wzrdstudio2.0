@@ -30,7 +30,7 @@ interface TimelineAssetRow {
 }
 
 interface RequestBody {
-  action: 'sync' | 'create' | 'status';
+  action: 'sync' | 'create' | 'retry' | 'status';
   projectId?: string;
   jobId?: string;
   settings?: ExportSettings;
@@ -64,8 +64,7 @@ const mapTimelineAssetsToExportAssets = (assets: TimelineAssetRow[]): ExportAsse
     });
 
 
-
-const syncTimelineAssets = async (supabaseAdmin: any, userId: string, projectId: string) => {
+const assertProjectAccess = async (supabaseAdmin: any, userId: string, projectId: string) => {
   const { data: project, error: projectError } = await supabaseAdmin
     .from('projects')
     .select('id, user_id')
@@ -75,6 +74,12 @@ const syncTimelineAssets = async (supabaseAdmin: any, userId: string, projectId:
   if (projectError || !project || project.user_id !== userId) {
     throw new Error('Project not found or access denied');
   }
+
+  return project;
+};
+
+const syncTimelineAssets = async (supabaseAdmin: any, userId: string, projectId: string) => {
+  await assertProjectAccess(supabaseAdmin, userId, projectId);
 
   const { data: scenes, error: scenesError } = await supabaseAdmin
     .from('scenes')
@@ -395,6 +400,7 @@ serve(async (req) => {
           error: job.error_message,
           provider: job.provider,
           providerStatus: job.provider_status,
+          providerJobId: job.provider_job_id,
           fallbackUsed: job.fallback_used,
           providerPayload: job.provider_payload,
         }),
@@ -416,8 +422,12 @@ serve(async (req) => {
       });
     }
 
-    if (action === 'create') {
-      await syncTimelineAssets(supabaseAdmin, user.id, projectId);
+    if (action === 'create' || action === 'retry') {
+      if (action === 'create') {
+        await syncTimelineAssets(supabaseAdmin, user.id, projectId);
+      } else {
+        await assertProjectAccess(supabaseAdmin, user.id, projectId);
+      }
 
       const { data: timelineAssets, error: timelineError } = await supabaseAdmin
         .from('timeline_assets')

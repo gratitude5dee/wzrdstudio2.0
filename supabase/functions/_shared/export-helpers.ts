@@ -35,6 +35,18 @@ export interface ShotFailure {
   reason: string;
 }
 
+interface FalTrackKeyframe {
+  timestamp: number;
+  duration: number;
+  url: string;
+}
+
+interface FalTrack {
+  id: string;
+  type: 'video' | 'audio' | 'image';
+  keyframes: FalTrackKeyframe[];
+}
+
 export interface ProcessAssetsResult {
   publicUrl: string;
   shotFailures: ShotFailure[];
@@ -123,6 +135,101 @@ function assetStartMs(asset: ExportAsset, fallback: number): number {
 
 function normalizeUrl(url: string): string {
   return url.trim();
+}
+
+function chooseFalRenderer(visualAssets: ExportAsset[], audioAssets: ExportAsset[]) {
+  const allVideos = visualAssets.length > 0 && visualAssets.every((asset) => asset.type === 'video');
+  if (audioAssets.length === 0 && allVideos) {
+    return visualAssets.length === 1 ? 'direct_video' : MERGE_MODEL;
+  }
+  return COMPOSE_MODEL;
+}
+
+function renderDiagnostics(
+  visualAssets: ExportAsset[],
+  audioAssets: ExportAsset[],
+  renderer: string,
+  settings: ExportSettings
+) {
+  let cursorMs = 0;
+  const visualTimings = visualAssets.map((asset) => {
+    const duration = assetDuration(asset);
+    const timestamp = assetStartMs(asset, cursorMs);
+    cursorMs = Math.max(cursorMs, timestamp + duration);
+    return {
+      assetId: asset.id,
+      type: asset.type,
+      orderIndex: asset.order_index,
+      startMs: timestamp,
+      durationMs: duration,
+      hasUrl: Boolean(asset.url),
+    };
+  });
+
+  const audioTimings = audioAssets.map((asset) => ({
+    assetId: asset.id,
+    type: asset.type,
+    subtype: asset.subtype,
+    orderIndex: asset.order_index,
+    startMs: getNumber(asset.metadata?.start_ms, 0),
+    durationMs: asset.duration_ms ?? getNumber(asset.metadata?.duration_ms, cursorMs || 5000),
+    hasUrl: Boolean(asset.url),
+  }));
+
+  return {
+    renderer,
+    resolution: settings.resolution ?? '1920x1080',
+    fps: settings.fps ?? 30,
+    includeAudio: settings.includeAudio !== false,
+    visualCount: visualAssets.length,
+    audioCount: audioAssets.length,
+    visualTypes: visualAssets.map((asset) => asset.type),
+    audioTypes: audioAssets.map((asset) => asset.subtype ?? asset.type),
+    visualTimings,
+    audioTimings,
+  };
+}
+
+function falInputValidationFailures(visualAssets: ExportAsset[], audioAssets: ExportAsset[]): ShotFailure[] {
+  const failures: ShotFailure[] = [];
+  let cursorMs = 0;
+
+  for (const asset of visualAssets) {
+    const duration = assetDuration(asset);
+    const timestamp = assetStartMs(asset, cursorMs);
+    if (asset.type !== 'image' && asset.type !== 'video') {
+      failures.push({ assetId: asset.id, orderIndex: asset.order_index, reason: `Unsupported fal visual asset type: ${asset.type}` });
+    }
+    if (!asset.url) {
+      failures.push({ assetId: asset.id, orderIndex: asset.order_index, reason: 'Fal visual asset is missing a URL' });
+    }
+    if (!Number.isFinite(duration) || duration <= 0) {
+      failures.push({ assetId: asset.id, orderIndex: asset.order_index, reason: 'Fal visual asset duration must be greater than 0ms' });
+    }
+    if (!Number.isFinite(timestamp) || timestamp < 0) {
+      failures.push({ assetId: asset.id, orderIndex: asset.order_index, reason: 'Fal visual asset timestamp must be a non-negative number' });
+    }
+    cursorMs = Math.max(cursorMs, timestamp + duration);
+  }
+
+  for (const asset of audioAssets) {
+    const duration = asset.duration_ms ?? getNumber(asset.metadata?.duration_ms, cursorMs || 5000);
+    const timestamp = getNumber(asset.metadata?.start_ms, 0);
+    if (asset.type !== 'audio') {
+      failures.push({ assetId: asset.id, orderIndex: asset.order_index, reason: `Unsupported fal audio asset type: ${asset.type}` });
+    }
+    if (!asset.url) {
+      failures.push({ assetId: asset.id, orderIndex: asset.order_index, reason: 'Fal audio asset is missing a URL' });
+    }
+    if (!Number.isFinite(duration) || duration <= 0) {
+      failures.push({ assetId: asset.id, orderIndex: asset.order_index, reason: 'Fal audio asset duration must be greater than 0ms' });
+    }
+    if (!Number.isFinite(timestamp) || timestamp < 0) {
+      failures.push({ assetId: asset.id, orderIndex: asset.order_index, reason: 'Fal audio asset timestamp must be a non-negative number' });
+    }
+  }
+
+  return failures;
 }
 
 export function extractVideoUrl(obj: unknown): string | null {
@@ -269,12 +376,8 @@ async function preflightAssets(assets: ExportAsset[]) {
   return { usable, failures };
 }
 
-export function buildFalTracks(visualAssets: ExportAsset[], audioAssets: ExportAsset[]) {
-  const tracks: Array<{
-    id: string;
-    type: 'video' | 'audio' | 'image';
-    keyframes: Array<{ timestamp: number; duration: number; url: string }>;
-  }> = [];
+export function buildFalTracks(visualAssets: ExportAsset[], audioAssets: ExportAsset[]): FalTrack[] {
+  const tracks: FalTrack[] = [];
   let cursorMs = 0;
 
   visualAssets.forEach((asset, index) => {
@@ -358,13 +461,15 @@ async function renderWithFal(
   const { resolution = '1920x1080', fps = 30 } = settings;
   const { width, height } = parseResolution(resolution);
   const allVideos = visuals.every((asset) => asset.type === 'video');
+  const renderer = chooseFalRenderer(visuals, audioAssets);
+  const diagnostics = renderDiagnostics(visuals, audioAssets, renderer, settings);
 
   if (audioAssets.length === 0 && allVideos) {
     if (visuals.length === 1) {
       await updateJobPayload(
         supabaseAdmin,
         jobId,
-        { stage: 'downloading_assets', renderer: 'direct_video', shotFailures },
+        { stage: 'downloading_assets', renderer: 'direct_video', renderDiagnostics: diagnostics, shotFailures },
         80
       );
       return { url: visuals[0].url, renderer: 'direct_video', requestId: null as string | null };
@@ -381,8 +486,15 @@ async function renderWithFal(
     await updateJobPayload(
       supabaseAdmin,
       jobId,
-      { stage: 'provider_processing', renderer: MERGE_MODEL, visualTracks: visuals.length, shotFailures },
-      65
+      {
+        stage: 'provider_processing',
+        renderer: MERGE_MODEL,
+        renderDiagnostics: diagnostics,
+        visualTracks: visuals.length,
+        shotFailures,
+      },
+      65,
+      { provider: 'fal_remote', provider_status: 'processing' }
     );
     const result = await runFalForVideoUrl(MERGE_MODEL, mergeInput, falKey);
     return { url: result.url, renderer: MERGE_MODEL, requestId: result.requestId };
@@ -394,11 +506,13 @@ async function renderWithFal(
     {
       stage: 'provider_processing',
       renderer: COMPOSE_MODEL,
+      renderDiagnostics: diagnostics,
       visualTracks: visuals.length,
       audioTracks: audioAssets.length,
       shotFailures,
     },
-    45
+    45,
+    { provider: 'fal_remote', provider_status: 'processing' }
   );
 
   const result = await runFalForVideoUrl(COMPOSE_MODEL, { tracks: buildFalTracks(visuals, audioAssets) }, falKey);
@@ -440,6 +554,26 @@ function extractRenderId(render: unknown): string {
   return String(record.id ?? record.render_id ?? record.renderId ?? data.id ?? '');
 }
 
+async function loadEditframeApi() {
+  const override = (globalThis as {
+    __WZRD_EDITFRAME_API__?: {
+      Client: new (key: string) => unknown;
+      createRender: (client: unknown, payload: Record<string, unknown>) => Promise<unknown>;
+      getRenderProgress: (client: unknown, id: string) => Promise<AsyncIterable<{ progress?: number }>>;
+      downloadRender: (client: unknown, id: string) => Promise<Response>;
+    };
+  }).__WZRD_EDITFRAME_API__;
+  if (override) return override;
+  return await import('https://esm.sh/@editframe/api');
+}
+
+function describeEditframeFallbackFailure(message: string) {
+  if (/download/i.test(message)) {
+    return `Fal render failed; Editframe fallback download failed: ${message}`;
+  }
+  return `Fal render failed; Editframe fallback failed: ${message}`;
+}
+
 async function createEditframeRender(
   assets: ExportAsset[],
   settings: ExportSettings,
@@ -450,7 +584,7 @@ async function createEditframeRender(
     throw new Error('EDITFRAME_API_KEY is not configured');
   }
 
-  const { Client, createRender } = await import('https://esm.sh/@editframe/api');
+  const { Client, createRender } = await loadEditframeApi();
   const { width, height } = parseResolution(settings.resolution);
   const composition = buildEditframeCompositionHtml(assets.map(exportAssetToEditframeAsset), {
     width,
@@ -597,7 +731,7 @@ export async function finalizeEditframeRender(
     throw new Error('Export job has no Editframe render id');
   }
 
-  const { Client, downloadRender } = await import('https://esm.sh/@editframe/api');
+  const { Client, downloadRender } = await loadEditframeApi();
   const client = new Client(editframeKey);
   const response = await downloadRender(client, renderId);
   if (!response.ok) {
@@ -658,9 +792,12 @@ async function renderWithEditframeFallback(
   falRequestId?: string
 ): Promise<ProcessAssetsResult> {
   const editframeKey = Deno.env.get('EDITFRAME_API_KEY');
+  const fallbackVisuals = assets.filter((asset) => asset.type !== 'audio');
+  const fallbackAudio = assets.filter((asset) => asset.type === 'audio');
   const fallbackBasePayload = {
     stage: 'fallback_processing',
     renderer: EDITFRAME_RENDERER,
+    renderDiagnostics: renderDiagnostics(fallbackVisuals, fallbackAudio, EDITFRAME_RENDERER, settings),
     fallbackReason: fallbackUsed ? 'fal_failed' : 'editframe_selected',
     falError,
     ...(falRequestId ? { falRequestId } : {}),
@@ -679,9 +816,10 @@ async function renderWithEditframeFallback(
       provider: fallbackUsed ? 'fal_remote' : 'editframe_remote',
       provider_status: 'failed',
       fallback_used: fallbackUsed,
+      ...(falRequestId ? { provider_job_id: falRequestId } : {}),
     });
     throw new ExportProcessingError(
-      `${falError}. Editframe fallback unavailable: EDITFRAME_API_KEY is not configured`,
+      `Fal render failed; Editframe fallback unavailable: EDITFRAME_API_KEY is not configured. Fal error: ${falError}`,
       payload,
       shotFailures
     );
@@ -694,8 +832,7 @@ async function renderWithEditframeFallback(
   });
 
   try {
-    const { Client, getRenderProgress, downloadRender } =
-      await import('https://esm.sh/@editframe/api');
+    const { Client, getRenderProgress, downloadRender } = await loadEditframeApi();
     const { renderId, composition } = await createEditframeRender(assets, settings, jobId);
     const client = new Client(editframeKey);
 
@@ -767,7 +904,11 @@ async function renderWithEditframeFallback(
       provider_status: 'failed',
       fallback_used: fallbackUsed,
     });
-    throw new ExportProcessingError(`FAL failed: ${falError}. Editframe fallback failed: ${message}`, payload, shotFailures);
+    throw new ExportProcessingError(
+      `${describeEditframeFallbackFailure(message)}. Fal error: ${falError}`,
+      payload,
+      shotFailures
+    );
   }
 }
 
@@ -822,6 +963,27 @@ export async function processAssetsRemote(
       shotFailures,
       false
     );
+  }
+
+  const plannedRenderer = chooseFalRenderer(visuals, audioAssets);
+  const diagnostics = renderDiagnostics(visuals, audioAssets, plannedRenderer, settings);
+  const validationFailures = falInputValidationFailures(visuals, audioAssets);
+  if (validationFailures.length > 0) {
+    const combinedFailures = [...shotFailures, ...validationFailures];
+    const payload = {
+      stage: 'failed',
+      renderer: 'fal_input_validation',
+      targetRenderer: plannedRenderer,
+      renderDiagnostics: diagnostics,
+      shotFailures: combinedFailures,
+      failedShotCount: combinedFailures.length,
+    };
+    await updateJobPayload(supabaseAdmin, jobId, payload, 20, {
+      provider: 'fal_remote',
+      provider_status: 'failed',
+      fallback_used: false,
+    });
+    throw new ExportProcessingError('Fal input validation failed before provider submission', payload, combinedFailures);
   }
 
   try {
@@ -880,13 +1042,19 @@ export async function processAssetsRemote(
       {
         stage: 'fallback_processing',
         renderer: EDITFRAME_RENDERER,
+        renderDiagnostics: diagnostics,
         fallbackReason: 'fal_failed',
         falError: falMessage,
         ...(falRequestId ? { falRequestId } : {}),
         shotFailures,
         failedShotCount: shotFailures.length,
       },
-      50
+      50,
+      {
+        provider: 'fal_remote',
+        provider_status: 'failed',
+        ...(falRequestId ? { provider_job_id: falRequestId } : {}),
+      }
     );
 
     return renderWithEditframeFallback(

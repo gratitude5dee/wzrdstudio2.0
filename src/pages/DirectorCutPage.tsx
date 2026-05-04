@@ -1,12 +1,13 @@
 import { useEffect } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { AlertTriangle, CheckCircle2, Circle, Film, Loader2, Play, RefreshCw, Scissors, TriangleAlert, Video } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Circle, Copy, Film, Loader2, Play, RefreshCw, Scissors, TriangleAlert, Video } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import AppHeader from '@/components/AppHeader';
 import { supabaseService } from '@/services/supabaseService';
 import { useAppStore } from '@/store/appStore';
-import { useDirectorCut, STAGE_LABELS, type DirectorCutStage } from '@/hooks/useDirectorCut';
+import { useDirectorCut, STAGE_LABELS, type DirectorCutJobState, type DirectorCutStage } from '@/hooks/useDirectorCut';
 import { cn } from '@/lib/utils';
 import { appRoutes } from '@/lib/routes';
 import { DIRECTORS_CUT_CREDITS } from '@/lib/constants/credits';
@@ -87,6 +88,40 @@ const StageIndicator = ({ currentStage }: { currentStage: DirectorCutStage }) =>
   );
 };
 
+const DebugRow = ({ label, value }: { label: string; value: string | number | null | undefined }) => {
+  if (value === null || value === undefined || value === '') return null;
+  return (
+    <div className="flex min-w-0 justify-between gap-3 border-t border-rose-300/10 py-1.5 text-xs">
+      <span className="shrink-0 text-rose-200/55">{label}</span>
+      <span className="min-w-0 break-words text-right font-mono text-rose-100/85">{String(value)}</span>
+    </div>
+  );
+};
+
+const buildDirectorCutDebugDetails = (job: DirectorCutJobState) =>
+  JSON.stringify(
+    {
+      jobId: job.jobId,
+      status: job.status,
+      progress: job.progress,
+      provider: job.provider,
+      providerStatus: job.providerStatus,
+      providerJobId: job.providerJobId,
+      stage: job.debugSummary?.stage ?? job.stage,
+      renderer: job.renderer,
+      falRequestId: job.falRequestId,
+      falError: job.falError,
+      fallbackUsed: job.fallbackUsed,
+      fallbackReason: job.fallbackReason,
+      fallbackStatus: job.fallbackStatus,
+      fallbackError: job.fallbackError,
+      failedShotCount: job.failedShotCount,
+      shotFailures: job.shotFailures ?? [],
+    },
+    null,
+    2
+  );
+
 const DirectorCutPage = () => {
   const { projectId } = useParams<{ projectId?: string }>();
   const navigate = useNavigate();
@@ -125,9 +160,27 @@ const DirectorCutPage = () => {
   const progressValue = job?.progress ?? 0;
   const isWorking = isSyncing || isStarting || isPolling || job?.status === 'processing';
   const providerReason =
-    (job?.providerPayload?.fallbackReason as string | undefined) ||
-    (job?.providerPayload?.falError as string | undefined) ||
+    job?.fallbackError ||
+    job?.falError ||
+    job?.fallbackReason ||
     null;
+  const setupError =
+    job?.fallbackStatus === 'unavailable' &&
+    /EDITFRAME_API_KEY|FAL_KEY/i.test(`${job.fallbackError ?? ''} ${job.error ?? ''}`);
+
+  const copyDebugDetails = async () => {
+    if (!job) return;
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error('Clipboard is not available');
+      }
+      await navigator.clipboard.writeText(buildDirectorCutDebugDetails(job));
+      toast.success("Director's Cut debug details copied");
+    } catch (copyError) {
+      const message = copyError instanceof Error ? copyError.message : 'Failed to copy debug details';
+      toast.error(message);
+    }
+  };
 
   return (
     <div className="flex h-screen flex-col bg-[#0A0D16]">
@@ -235,6 +288,52 @@ const DirectorCutPage = () => {
                     {providerReason && (
                       <p className="mt-1 text-xs text-rose-200/70">Reason: {providerReason}</p>
                     )}
+                    {setupError && (
+                      <div className="mt-3 border-l-2 border-amber-300/60 pl-3 text-xs text-amber-100/85">
+                        Editframe fallback is not configured for this Supabase function. Add the missing provider secret,
+                        then retry the export with the same synced assets.
+                      </div>
+                    )}
+                    {job && (
+                      <div className="mt-3 max-w-3xl">
+                        <div className="mb-1 flex items-center justify-between gap-3">
+                          <p className="text-xs font-medium uppercase tracking-[0.14em] text-rose-100/70">
+                            Render diagnostics
+                          </p>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-xs text-rose-100 hover:bg-rose-500/20"
+                            onClick={() => void copyDebugDetails()}
+                          >
+                            <Copy className="mr-1.5 h-3.5 w-3.5" />
+                            Copy Debug Details
+                          </Button>
+                        </div>
+                        <DebugRow label="Renderer" value={job.renderer} />
+                        <DebugRow label="Stage" value={job.debugSummary?.stage ?? job.stage} />
+                        <DebugRow label="Fal request" value={job.falRequestId} />
+                        <DebugRow label="Provider job" value={job.providerJobId} />
+                        <DebugRow label="Fallback status" value={job.fallbackStatus} />
+                        <DebugRow label="Fallback error" value={job.fallbackError} />
+                        <DebugRow label="Fal error" value={job.falError} />
+                        <DebugRow label="Failed shots" value={job.failedShotCount} />
+                      </div>
+                    )}
+                    {job?.shotFailures && job.shotFailures.length > 0 && (
+                      <div className="mt-3">
+                        <p className="text-xs font-medium uppercase tracking-[0.14em] text-rose-100/70">
+                          Shot failures
+                        </p>
+                        <ul className="mt-1 space-y-1">
+                          {job.shotFailures.map((failure) => (
+                            <li key={`${failure.assetId}-${failure.orderIndex}`} className="text-xs text-rose-100/70">
+                              Shot #{failure.orderIndex + 1}: {failure.reason}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -250,7 +349,7 @@ const DirectorCutPage = () => {
                   <Button
                     size="sm"
                     className="bg-rose-500 text-white hover:bg-rose-400"
-                    onClick={() => startDirectorCut()}
+                    onClick={() => startDirectorCut({ reuseSyncedAssets: true })}
                     disabled={isWorking}
                   >
                     Retry Export

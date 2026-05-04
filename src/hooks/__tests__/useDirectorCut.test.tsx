@@ -308,6 +308,81 @@ describe('useDirectorCut', () => {
     );
   });
 
+  it('normalizes failed polling diagnostics from fal and Editframe fallback', async () => {
+    invokeMock.mockImplementation(async (_name: string, args: { body: { action: string } }) => {
+      const action = args.body.action;
+      if (action === 'sync') {
+        return {
+          data: {
+            summary: {
+              totalShots: 1,
+              syncedAssets: 1,
+              readyVideos: 0,
+              fallbackImages: 1,
+              missingShots: 0,
+            },
+          },
+          error: null,
+        };
+      }
+
+      if (action === 'create') {
+        return {
+          data: { jobId: 'job-failed', progress: 5, provider: 'fal_remote', providerStatus: 'queued' },
+          error: null,
+        };
+      }
+
+      if (action === 'status') {
+        return {
+          data: {
+            status: 'failed',
+            progress: 50,
+            error: 'Fal render failed; Editframe fallback failed: render rejected. Fal error: bad source',
+            provider: 'editframe_remote',
+            providerStatus: 'failed',
+            providerJobId: 'editframe-render-1',
+            fallbackUsed: true,
+            providerPayload: {
+              stage: 'failed',
+              renderer: 'editframe/render-api',
+              falRequestId: 'fal-request-1',
+              falError: 'bad source',
+              fallbackReason: 'fal_failed',
+              fallbackStatus: 'failed',
+              fallbackError: 'render rejected',
+              failedShotCount: 1,
+              shotFailures: [
+                { assetId: 'asset-1', orderIndex: 0, reason: 'URL range preflight failed (403)' },
+              ],
+            },
+          },
+          error: null,
+        };
+      }
+
+      return { data: {}, error: null };
+    });
+
+    const { result } = renderHook(() => useDirectorCut('project-1'));
+
+    await act(async () => {
+      await result.current.startDirectorCut();
+    });
+
+    expect(result.current.job?.status).toBe('failed');
+    expect(result.current.job?.renderer).toBe('editframe/render-api');
+    expect(result.current.job?.falRequestId).toBe('fal-request-1');
+    expect(result.current.job?.providerJobId).toBe('editframe-render-1');
+    expect(result.current.job?.falError).toBe('bad source');
+    expect(result.current.job?.fallbackStatus).toBe('failed');
+    expect(result.current.job?.fallbackError).toBe('render rejected');
+    expect(result.current.job?.failedShotCount).toBe(1);
+    expect(result.current.job?.shotFailures).toHaveLength(1);
+    expect(result.current.error).toContain('Editframe fallback failed');
+    expect(toastMock.error).toHaveBeenCalledWith(expect.stringContaining('Editframe fallback failed'));
+  });
+
   it('does not start when no synced assets', async () => {
     invokeMock.mockImplementation(async (_name: string, args: { body: { action: string } }) => {
       if (args.body.action === 'sync') {
@@ -337,5 +412,57 @@ describe('useDirectorCut', () => {
     expect(result.current.error).toBe(
       "No timeline assets available. Add shots before starting Director's Cut."
     );
+  });
+
+  it('can retry using already synced assets without another sync call', async () => {
+    invokeMock.mockImplementation(async (_name: string, args: { body: { action: string } }) => {
+      if (args.body.action === 'sync') {
+        return {
+          data: {
+            summary: {
+              totalShots: 1,
+              syncedAssets: 1,
+              readyVideos: 1,
+              fallbackImages: 0,
+              missingShots: 0,
+            },
+          },
+          error: null,
+        };
+      }
+      if (args.body.action === 'retry') {
+        return {
+          data: { jobId: 'retry-job', progress: 5, provider: 'fal_remote', providerStatus: 'queued' },
+          error: null,
+        };
+      }
+      if (args.body.action === 'status') {
+        return {
+          data: { status: 'processing', progress: 20, providerPayload: { stage: 'provider_processing' } },
+          error: null,
+        };
+      }
+      return { data: {}, error: null };
+    });
+
+    const { result } = renderHook(() => useDirectorCut('project-1'));
+
+    await act(async () => {
+      await result.current.syncAssets();
+    });
+
+    invokeMock.mockClear();
+
+    await act(async () => {
+      await result.current.startDirectorCut({ reuseSyncedAssets: true });
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith('director-cut', {
+      body: { action: 'retry', projectId: 'project-1' },
+    });
+    expect(invokeMock).not.toHaveBeenCalledWith('director-cut', {
+      body: { action: 'sync', projectId: 'project-1' },
+    });
+    expect(result.current.job?.jobId).toBe('retry-job');
   });
 });
