@@ -175,16 +175,21 @@ export type Database = {
           description: string
           enabled: boolean
           endpoint_id: string
+          family: string | null
           id: string
           is_default: boolean
           kanvas_modes: string[]
+          license: string | null
           media_type: string
+          model_updated_at: string | null
+          model_url: string | null
           name: string
           payload_keys: string[]
           pricing: Json
           pricing_text: string
           provider: string
           provider_label: string
+          published_at: string | null
           raw_api_example: string
           raw_payload: Json
           raw_source_block: string
@@ -192,10 +197,13 @@ export type Database = {
           sort_rank: number
           studio_surfaces: string[]
           supports: string[]
+          tags: string[]
+          tier: string | null
           time_label: string
           transport_type: string
           ui_group: string
           updated_at: string
+          vendor: string | null
           workflow_type: string
         }
         Insert: {
@@ -209,16 +217,21 @@ export type Database = {
           description?: string
           enabled?: boolean
           endpoint_id?: string
+          family?: string | null
           id: string
           is_default?: boolean
           kanvas_modes?: string[]
+          license?: string | null
           media_type?: string
+          model_updated_at?: string | null
+          model_url?: string | null
           name?: string
           payload_keys?: string[]
           pricing?: Json
           pricing_text?: string
           provider?: string
           provider_label?: string
+          published_at?: string | null
           raw_api_example?: string
           raw_payload?: Json
           raw_source_block?: string
@@ -226,10 +239,13 @@ export type Database = {
           sort_rank?: number
           studio_surfaces?: string[]
           supports?: string[]
+          tags?: string[]
+          tier?: string | null
           time_label?: string
           transport_type?: string
           ui_group?: string
           updated_at?: string
+          vendor?: string | null
           workflow_type?: string
         }
         Update: {
@@ -243,16 +259,21 @@ export type Database = {
           description?: string
           enabled?: boolean
           endpoint_id?: string
+          family?: string | null
           id?: string
           is_default?: boolean
           kanvas_modes?: string[]
+          license?: string | null
           media_type?: string
+          model_updated_at?: string | null
+          model_url?: string | null
           name?: string
           payload_keys?: string[]
           pricing?: Json
           pricing_text?: string
           provider?: string
           provider_label?: string
+          published_at?: string | null
           raw_api_example?: string
           raw_payload?: Json
           raw_source_block?: string
@@ -260,10 +281,13 @@ export type Database = {
           sort_rank?: number
           studio_surfaces?: string[]
           supports?: string[]
+          tags?: string[]
+          tier?: string | null
           time_label?: string
           transport_type?: string
           ui_group?: string
           updated_at?: string
+          vendor?: string | null
           workflow_type?: string
         }
         Relationships: []
