@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Loader2, PanelLeft, PanelRight, Monitor } from 'lucide-react';
 import { useAppStore } from '@/store/appStore';
@@ -21,6 +21,8 @@ import type { Asset } from '@/components/studio/panels/AssetsGalleryPanel';
 import type { NodeDefinition, EdgeDefinition } from '@/types/computeFlow';
 import { v4 as uuidv4 } from 'uuid';
 import { useStudioGraphActions, type StudioNodeType, type StudioNodeSeedOptions } from '@/hooks/studio/useStudioGraphActions';
+import { useRegisterVoiceActions } from '@/voice/VoiceAgentProvider';
+import type { VoiceActionRegistration } from '@/voice/actions/registry';
 
 const StudioPage = () => {
   const { projectId } = useParams<{ projectId?: string }>();
@@ -131,6 +133,71 @@ const StudioPage = () => {
     },
     [addNode, scheduleSave]
   );
+
+  const voiceActions = useMemo<VoiceActionRegistration[]>(
+    () => [
+      {
+        name: 'studio_create_node',
+        scope: 'studio',
+        confirmation: {
+          risk: 'write',
+          message: 'This will add a node to the Studio graph. Should I continue?',
+        },
+        handler: (input) => {
+          const payload = input as {
+            type?: StudioNodeType;
+            x?: number;
+            y?: number;
+            seed?: StudioNodeSeedOptions;
+          };
+          if (!payload.type) {
+            return {
+              ok: false,
+              status: 'invalid_input',
+              message: 'Tell me which Studio node type to create.',
+              errorCode: 'studio_node_type_missing',
+            };
+          }
+          handleAddNode(
+            payload.type,
+            typeof payload.x === 'number' && typeof payload.y === 'number'
+              ? { x: payload.x, y: payload.y }
+              : payload.seed,
+          );
+          return {
+            ok: true,
+            status: 'completed',
+            message: `${payload.type} node added.`,
+          };
+        },
+      },
+      {
+        name: 'studio_select_node',
+        scope: 'studio',
+        handler: (input) => {
+          const payload = input as { nodeId?: string | null };
+          if (!payload.nodeId) {
+            return {
+              ok: false,
+              status: 'invalid_input',
+              message: 'Tell me which node to select.',
+              errorCode: 'studio_node_id_missing',
+            };
+          }
+          setSelectedNodeId(payload.nodeId);
+          return {
+            ok: true,
+            status: 'completed',
+            message: 'Studio node selected.',
+            data: { selectedNodeId: payload.nodeId },
+          };
+        },
+      },
+    ],
+    [handleAddNode],
+  );
+
+  useRegisterVoiceActions(voiceActions);
 
   return (
     <div className="h-screen flex flex-col bg-[#0a0a0a] text-white">

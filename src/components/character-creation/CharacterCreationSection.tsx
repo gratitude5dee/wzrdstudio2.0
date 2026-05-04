@@ -6,6 +6,7 @@ import { listBlueprints } from '@/services/characterBlueprintService';
 import { CharacterGallery } from './CharacterGallery';
 import { CharacterBuilder } from './CharacterBuilder';
 import { CharacterDetail } from './CharacterDetail';
+import { CharacterCreationVoiceBridge } from './CharacterCreationVoiceBridge';
 
 // ---------------------------------------------------------------------------
 // CharacterCreationSection — Top-level component for the Kanvas studio tab
@@ -44,6 +45,7 @@ export function CharacterCreationSection() {
 
   return (
     <div className="mx-auto w-full max-w-[1200px] px-4 md:px-0 pb-16 md:pb-0">
+      <CharacterCreationVoiceBridge />
       <AnimatePresence mode="wait">
         {mode === 'gallery' && (
           <motion.div key="gallery" {...sectionFade}>

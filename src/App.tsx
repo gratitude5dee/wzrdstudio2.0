@@ -18,6 +18,7 @@ import { SidebarProvider } from "@/contexts/SidebarContext";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { appRoutes } from "@/lib/routes";
 import { InsufficientCreditsDialog } from "@/components/billing/InsufficientCreditsDialog";
+import { VoiceAgentProvider } from "@/voice/VoiceAgentProvider";
 
 // Retry a dynamic import once; if it still fails (typically a stale chunk hash
 // after a redeploy/HMR), force a single hard reload so the browser fetches the
@@ -139,6 +140,7 @@ const App = () => {
           <TooltipProvider>
             <BrowserRouter>
             <AuthProvider>
+              <VoiceAgentProvider>
               <SidebarProvider>
               <CursorLoadingProvider>
                 {!bypassAuthForTests ? (
@@ -367,6 +369,7 @@ const App = () => {
                 </Suspense>
               </CursorLoadingProvider>
               </SidebarProvider>
+              </VoiceAgentProvider>
             </AuthProvider>
           </BrowserRouter>
         </TooltipProvider>

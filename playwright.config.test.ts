@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const originalBaseUrl = process.env.PLAYWRIGHT_BASE_URL;
 const originalCi = process.env.CI;
+const originalPort = process.env.PLAYWRIGHT_PORT;
 
 const loadConfig = async () => {
   vi.resetModules();
@@ -19,6 +20,12 @@ afterEach(() => {
     delete process.env.CI;
   } else {
     process.env.CI = originalCi;
+  }
+
+  if (originalPort === undefined) {
+    delete process.env.PLAYWRIGHT_PORT;
+  } else {
+    process.env.PLAYWRIGHT_PORT = originalPort;
   }
 });
 
@@ -43,5 +50,16 @@ describe('playwright config', () => {
 
     expect(config.use?.baseURL).toBe('https://preview.example.com');
     expect(config.webServer?.reuseExistingServer).toBe(false);
+  });
+
+  it('honors a local port override for isolated e2e runs', async () => {
+    delete process.env.PLAYWRIGHT_BASE_URL;
+    process.env.PLAYWRIGHT_PORT = '8091';
+
+    const config = await loadConfig();
+
+    expect(config.use?.baseURL).toBe('http://127.0.0.1:8091');
+    expect(config.webServer?.url).toBe('http://127.0.0.1:8091');
+    expect(config.webServer?.command).toContain('--port 8091');
   });
 });

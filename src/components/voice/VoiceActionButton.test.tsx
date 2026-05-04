@@ -1,0 +1,61 @@
+import React from 'react';
+import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+
+import { VoiceActionButton } from './VoiceActionButton';
+
+describe('VoiceActionButton', () => {
+  it('starts and stops push-to-talk on pointer press and release', () => {
+    const onPressStart = vi.fn();
+    const onPressEnd = vi.fn();
+
+    render(
+      <VoiceActionButton
+        status="idle"
+        onPressStart={onPressStart}
+        onPressEnd={onPressEnd}
+      />,
+    );
+
+    const button = screen.getByRole('button', { name: /hold to speak/i });
+    fireEvent.pointerDown(button);
+    fireEvent.pointerUp(button);
+
+    expect(onPressStart).toHaveBeenCalledTimes(1);
+    expect(onPressEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it('supports keyboard push-to-talk and exposes the status label', () => {
+    const onPressStart = vi.fn();
+    const onPressEnd = vi.fn();
+
+    render(
+      <VoiceActionButton
+        status="listening"
+        onPressStart={onPressStart}
+        onPressEnd={onPressEnd}
+      />,
+    );
+
+    const button = screen.getByRole('button', { name: /hold to speak/i });
+    fireEvent.keyDown(button, { key: ' ' });
+    fireEvent.keyUp(button, { key: ' ' });
+
+    expect(onPressStart).toHaveBeenCalledTimes(1);
+    expect(onPressEnd).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('Listening')).toBeInTheDocument();
+  });
+
+  it('shows errors without disabling the rest of the app surface', () => {
+    render(
+      <VoiceActionButton
+        status="error"
+        errorMessage="Microphone permission denied"
+        onPressStart={vi.fn()}
+        onPressEnd={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Microphone permission denied')).toBeInTheDocument();
+  });
+});

@@ -23,6 +23,7 @@ serve(async (req) => {
       source_image_url,
       edit_prompt,
       style_reference_url,
+      preferred_model,
     } = await req.json();
 
     if (!edit_prompt) {
@@ -37,7 +38,7 @@ serve(async (req) => {
       styleRefUrl: style_reference_url ?? null,
       characterRefUrl: source_image_url ?? null,
       textPrompt: edit_prompt,
-      refModelId: 'fal-ai/flux-pro/kontext',
+      refModelId: preferred_model ?? 'gmi/nanobanana-2',
       defaultModelId: 'gmi/seedream-5-lite',
       textToImageLadder: ['gmi/nanobanana-2', 'gmi/seedream-5-lite'],
     });
@@ -47,17 +48,46 @@ serve(async (req) => {
     let editedImageUrl: string | null = null;
 
     if (plan.resolved_mode === 'reference_conditioned' && source_image_url) {
-      const result = await fal.subscribe('fal-ai/flux-pro/kontext', {
-        input: {
-          image_url: source_image_url,
+      if (plan.resolved_model.startsWith('gmi/')) {
+        const gmiModel = plan.resolved_model.replace(/^gmi\//, '');
+        const queue = await executeGmiQueueModel(gmiModel, {
           prompt: edit_prompt,
-          guidance_scale: 3.5,
-          num_inference_steps: 28,
+          image_url: source_image_url,
+          reference_image_url: style_reference_url ?? undefined,
           output_format: 'jpeg',
-        },
-        logs: true,
-      });
-      editedImageUrl = (result as any)?.images?.[0]?.url ?? null;
+          max_images: 1,
+          watermark: false,
+        });
+        if (queue.success && queue.requestId) {
+          for (let i = 0; i < 60; i++) {
+            await new Promise((r) => setTimeout(r, 3000));
+            const s = await pollGmiQueueStatus(queue.requestId);
+            if (s.success && s.data?.status === 'success') {
+              editedImageUrl = s.data.outcome?.media_urls?.[0]?.url
+                ?? s.data.outcome?.thumbnail_image_url
+                ?? null;
+              break;
+            }
+            if (s.success && (s.data?.status === 'failed' || s.data?.status === 'cancelled')) {
+              break;
+            }
+          }
+        }
+      }
+
+      if (!editedImageUrl) {
+        const result = await fal.subscribe('fal-ai/flux-pro/kontext', {
+          input: {
+            image_url: source_image_url,
+            prompt: edit_prompt,
+            guidance_scale: 3.5,
+            num_inference_steps: 28,
+            output_format: 'jpeg',
+          },
+          logs: true,
+        });
+        editedImageUrl = (result as any)?.images?.[0]?.url ?? null;
+      }
     } else {
       // Text-to-image fallback (no source image) — route through GMI ladder
       const gmiModel = plan.resolved_model.replace(/^gmi\//, '');

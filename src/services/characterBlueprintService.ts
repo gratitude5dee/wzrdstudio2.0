@@ -372,6 +372,60 @@ export async function addBlueprintImage(input: {
   return rowToImage(data);
 }
 
+export async function editBlueprintImage(input: {
+  blueprint: CharacterBlueprint;
+  editPrompt: string;
+  styleReferenceUrl?: string;
+}): Promise<{ blueprint: CharacterBlueprint; image: CharacterBlueprintImage; editedImageUrl: string }> {
+  const prompt = input.editPrompt.trim();
+  if (!prompt) {
+    throw new Error('Describe the character edit before generating.');
+  }
+
+  const sourceImageUrl = input.blueprint.imageUrl ?? input.blueprint.referenceImageUrls[0];
+  if (!sourceImageUrl) {
+    throw new Error('Generate or add a character image before editing.');
+  }
+
+  const { data, error } = await supabase.functions.invoke('edit-character-image', {
+    body: {
+      character_id: input.blueprint.id,
+      source_image_url: sourceImageUrl,
+      edit_prompt: prompt,
+      style_reference_url: input.styleReferenceUrl,
+      preferred_model: 'gmi/nanobanana-2',
+    },
+  });
+
+  if (error) {
+    throw new Error(error.message || 'Failed to edit character image.');
+  }
+
+  const editedImageUrl = (data as { edited_image_url?: string } | null)?.edited_image_url;
+  if (!editedImageUrl) {
+    throw new Error('Character image edit did not return an image URL.');
+  }
+
+  const updatedBlueprint = await updateBlueprintRecord(input.blueprint.id, {
+    imageUrl: editedImageUrl,
+    thumbnailUrl: editedImageUrl,
+  });
+
+  const image = await addBlueprintImage({
+    blueprintId: input.blueprint.id,
+    imageUrl: editedImageUrl,
+    label: `Voice edit: ${prompt.slice(0, 80)}`,
+    isPrimary: true,
+    sortOrder: updatedBlueprint.referenceImageUrls.length,
+  });
+
+  return {
+    blueprint: attachReferenceSummary(updatedBlueprint, [image]),
+    image,
+    editedImageUrl,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // @Mention search — prefix match on slug
 // ---------------------------------------------------------------------------

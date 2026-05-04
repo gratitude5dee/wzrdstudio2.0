@@ -120,6 +120,8 @@ import { useUserTier, type UserTier } from "@/hooks/useUserTier";
 import { useCharacterCreationStore } from "@/lib/stores/character-creation-store";
 import { appRoutes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
+import { useRegisterVoiceActions } from "@/voice/VoiceAgentProvider";
+import type { VoiceActionRegistration } from "@/voice/actions/registry";
 
 const ACCEPTED_TYPES: Record<KanvasAssetType, string> = {
   image: "image/*",
@@ -1356,6 +1358,75 @@ export default function KanvasPage() {
       void handleGenerate();
     }
   }
+
+  function applyVoicePrompt(nextStudio: KanvasStudio, prompt?: string | null) {
+    if (!prompt?.trim()) return;
+    if (nextStudio === "image") {
+      setImagePrompt(prompt);
+    } else if (nextStudio === "video") {
+      setVideoPrompt(prompt);
+    } else if (nextStudio === "cinema") {
+      setCinemaPrompt(prompt);
+    } else if (nextStudio === "lipsync") {
+      setLipsyncPrompt(prompt);
+    }
+    onMentionChange(prompt);
+  }
+
+  const voiceActions = useMemo<VoiceActionRegistration[]>(
+    () => [
+      {
+        name: "kanvas_set_studio",
+        scope: "kanvas",
+        handler: (input) => {
+          const payload = input as { studio?: KanvasStudio; prompt?: string | null };
+          const nextStudio = normalizeStudioParam(payload.studio);
+          setStudio(nextStudio);
+          applyVoicePrompt(nextStudio, payload.prompt);
+          return {
+            ok: true,
+            status: "completed",
+            message: `Kanvas ${KANVAS_STUDIO_META[nextStudio].label} is open.`,
+            data: { studio: nextStudio },
+          };
+        },
+      },
+      {
+        name: "kanvas_generate",
+        scope: "kanvas",
+        confirmation: {
+          risk: "generation",
+          message: "This will spend credits to start a Kanvas generation. Should I continue?",
+        },
+        handler: async (input) => {
+          const payload = input as { studio?: KanvasStudio; prompt?: string | null };
+          const requestedStudio = payload.studio ? normalizeStudioParam(payload.studio) : studio;
+          applyVoicePrompt(requestedStudio, payload.prompt);
+
+          if (requestedStudio !== studio) {
+            setStudio(requestedStudio);
+            return {
+              ok: true,
+              status: "completed",
+              message: `Switched to ${KANVAS_STUDIO_META[requestedStudio].label}. Confirm generation after the studio loads.`,
+              data: { studio: requestedStudio },
+            };
+          }
+
+          await handleGenerate();
+          return {
+            ok: true,
+            status: "completed",
+            message: "Kanvas generation started.",
+            data: { studio },
+          };
+        },
+      },
+    ],
+    [studio, searchParams, setSearchParams, onMentionChange, currentStudioJobs, currentModel],
+  );
+
+  useRegisterVoiceActions(voiceActions);
 
   const imageAssets = assets.filter((asset) => asset.asset_type === "image");
   const videoAssets = assets.filter((asset) => asset.asset_type === "video");
