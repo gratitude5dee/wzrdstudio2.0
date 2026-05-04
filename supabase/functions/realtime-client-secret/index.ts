@@ -31,7 +31,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        expires_after: { seconds: 600 },
+        expires_after: { anchor: "created_at", seconds: 600 },
         session: {
           type: "realtime",
           model,
