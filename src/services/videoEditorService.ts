@@ -388,7 +388,7 @@ export const videoEditorService = {
   },
 
   async deleteAudioTrack(trackId: string): Promise<void> {
-    const { error } = await supabase.from('audio_tracks').delete().eq('id', trackId);
+    const { error } = await db.from('audio_tracks').delete().eq('id', trackId);
     if (error) {
       console.error('Failed to delete audio track', error);
     }
