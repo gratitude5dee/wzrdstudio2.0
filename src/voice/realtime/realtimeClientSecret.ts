@@ -1,6 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 
-type SupabaseInvoke = typeof supabase.functions.invoke;
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 
 export function extractRealtimeClientSecret(payload: unknown): string | null {
   if (!payload || typeof payload !== 'object') return null;
@@ -21,16 +22,49 @@ export function extractRealtimeClientSecret(payload: unknown): string | null {
   return null;
 }
 
-export async function fetchRealtimeClientSecret(
-  invoke: SupabaseInvoke = supabase.functions.invoke.bind(supabase.functions),
-): Promise<string> {
-  const { data, error } = await invoke('realtime-client-secret');
+/**
+ * Fetches an ephemeral OpenAI Realtime client secret via the
+ * `realtime-client-secret` Edge Function.
+ *
+ * Uses an explicit `fetch` instead of `supabase.functions.invoke` so we
+ * control the Authorization header and can surface real error messages
+ * instead of a generic "Failed to send a request to the Edge Function".
+ */
+export async function fetchRealtimeClientSecret(): Promise<string> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData?.session?.access_token;
 
-  if (error) {
-    throw new Error(error.message || 'Failed to create Realtime client secret.');
+  if (!accessToken) {
+    throw new Error('Please sign in to use voice features.');
   }
 
-  const secret = extractRealtimeClientSecret(data);
+  const url = `${SUPABASE_URL}/functions/v1/realtime-client-secret`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+      apikey: SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({}),
+  });
+
+  if (!response.ok) {
+    let message = `Voice service error (${response.status})`;
+    try {
+      const body = await response.json();
+      if (body?.error) {
+        message = typeof body.error === 'string' ? body.error : JSON.stringify(body.error);
+      }
+    } catch {
+      // ignore parse failures
+    }
+    throw new Error(message);
+  }
+
+  const payload = await response.json();
+  const secret = extractRealtimeClientSecret(payload);
   if (!secret) {
     throw new Error('Realtime client secret response did not include an ephemeral key.');
   }

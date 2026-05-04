@@ -78,7 +78,7 @@ export function IPVaultVoiceBridge({
             return invalid('I need a valid Story license profile.');
           }
           await onUpdateRights({ licenseProfile });
-          return completed(`Set license to ${licenseProfile.replaceAll('_', ' ')}.`);
+          return completed(`Set license to ${licenseProfile.replace(/_/g, ' ')}.`);
         },
       },
       {
