@@ -109,7 +109,7 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
 
     try {
       const apiKey = await fetchRealtimeClientSecret();
-      const model = import.meta.env.VITE_WZRD_REALTIME_MODEL ?? 'gpt-realtime';
+      const model = import.meta.env.VITE_WZRD_REALTIME_MODEL ?? 'gpt-4o-realtime-preview-2025-06-03';
       const voice = import.meta.env.VITE_WZRD_REALTIME_VOICE ?? 'marin';
 
       const transport = new WebRTCTransport();
