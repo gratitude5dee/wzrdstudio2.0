@@ -15,7 +15,7 @@
         "@fal-ai/client": "^1.2.3",
         "@fal-ai/serverless-client": "^0.15.0",
         "@hookform/resolvers": "^3.9.0",
-        "@openai/agents": "^0.0.5",
+        "@openai/agents": "^0.8.5",
         "@radix-ui/react-accordion": "^1.2.0",
         "@radix-ui/react-alert-dialog": "^1.1.1",
         "@radix-ui/react-aspect-ratio": "^1.1.0",
@@ -397,15 +397,13 @@
 
     "@nodelib/fs.walk": ["@nodelib/fs.walk@1.2.8", "", { "dependencies": { "@nodelib/fs.scandir": "2.1.5", "fastq": "^1.6.0" } }, "sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg=="],
 
-    "@openai/agents": ["@openai/agents@0.0.5", "https://europe-west4-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/@openai/agents/-/agents-0.0.5.tgz", { "dependencies": { "@openai/agents-core": "0.0.5", "@openai/agents-openai": "0.0.5", "@openai/agents-realtime": "0.0.5", "debug": "^4.4.0", "openai": "^5.0.1" } }, "sha512-baR5yTS+0D/mzomxBjvuxMkx9TshedJiY9qVvrMyqngIo1t6sB8d+aUYDnlLx/Pu3Q7TSqbW+xiowXSZD+ycZA=="],
+    "@openai/agents": ["@openai/agents@0.8.5", "https://europe-west4-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/@openai/agents/-/agents-0.8.5.tgz", { "dependencies": { "@openai/agents-core": "0.8.5", "@openai/agents-openai": "0.8.5", "@openai/agents-realtime": "0.8.5", "debug": "^4.4.0", "openai": "^6.26.0" }, "peerDependencies": { "zod": "^4.0.0" } }, "sha512-OFA7XVV1qXE8lzatvQj080KdSArt8utBExFXRfD5B/R7KT0D+AVaKwg6nLoW3Gxb30vRkIUQf+MaW/Wz+gO3Yg=="],
 
-    "@openai/agents-core": ["@openai/agents-core@0.0.5", "https://europe-west4-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/@openai/agents-core/-/agents-core-0.0.5.tgz", { "dependencies": { "@openai/zod": "npm:zod@^3.25.40", "debug": "^4.4.0", "openai": "^5.0.1" }, "optionalDependencies": { "@modelcontextprotocol/sdk": "^1.12.0" }, "peerDependencies": { "zod": "^3.25.40" }, "optionalPeers": ["zod"] }, "sha512-cyxeqN0NkYseAwtKGhaIHa5+h4tENjTLBpA3flqpeAJkeoVy6c38gx7iUNFQBoKZbt1xDIvKItY8dP40F00QkQ=="],
+    "@openai/agents-core": ["@openai/agents-core@0.8.5", "https://europe-west4-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/@openai/agents-core/-/agents-core-0.8.5.tgz", { "dependencies": { "debug": "^4.4.0", "openai": "^6.26.0" }, "optionalDependencies": { "@modelcontextprotocol/sdk": "^1.26.0" }, "peerDependencies": { "zod": "^4.0.0" }, "optionalPeers": ["zod"] }, "sha512-qs9mmN+D+UmqEZo3qrvhhIIXIOgSvJPic0v4a+ruq+eYgcQMk3PY8lLcsdQwJit6zf2Wyfv1q2cX5m3jzWZpKw=="],
 
-    "@openai/agents-openai": ["@openai/agents-openai@0.0.5", "https://europe-west4-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/@openai/agents-openai/-/agents-openai-0.0.5.tgz", { "dependencies": { "@openai/agents-core": "0.0.5", "@openai/zod": "npm:zod@^3.25.40", "debug": "^4.4.0", "openai": "^5.0.1" } }, "sha512-z++6eI3XpfrYamN2+t2ZwXZzAKkim0fdMiRgCxs4zd4f5DR8Yhe/9wsV4CW41yQmZfMAdaLEk3pHRe/X0IRU+w=="],
+    "@openai/agents-openai": ["@openai/agents-openai@0.8.5", "https://europe-west4-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/@openai/agents-openai/-/agents-openai-0.8.5.tgz", { "dependencies": { "@openai/agents-core": "0.8.5", "debug": "^4.4.0", "openai": "^6.26.0" }, "peerDependencies": { "zod": "^4.0.0" } }, "sha512-cGYmyiVy8ecgf2Vch0L/ekeNo3xuZsuWnRsxyv+w9ai9dgxUifdEQ6G3dtsjMLtmXVHRVGoO7mVBr+tKcilntw=="],
 
-    "@openai/agents-realtime": ["@openai/agents-realtime@0.0.5", "https://europe-west4-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/@openai/agents-realtime/-/agents-realtime-0.0.5.tgz", { "dependencies": { "@openai/agents-core": "0.0.5", "@openai/zod": "npm:zod@^3.25.40", "@types/ws": "^8.18.1", "debug": "^4.4.0", "ws": "^8.18.1" } }, "sha512-RmID+/VnDCS5T8w/RFCP771Nqm2Ypbk5z/y0oRL3usjr7alVxibn45oWgSmDfBd09k+t168wMaO5K22s62nBGQ=="],
-
-    "@openai/zod": ["zod@3.25.75", "", {}, "sha512-OhpzAmVzabPOL6C3A3gpAifqr9MqihV/Msx3gor2b2kviCgcb+HM9SEOpMWwwNp9MRunWnhtAKUoo0AHhjyPPg=="],
+    "@openai/agents-realtime": ["@openai/agents-realtime@0.8.5", "https://europe-west4-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/@openai/agents-realtime/-/agents-realtime-0.8.5.tgz", { "dependencies": { "@openai/agents-core": "0.8.5", "@types/ws": "^8.18.1", "debug": "^4.4.0", "ws": "^8.18.1" }, "peerDependencies": { "zod": "^4.0.0" } }, "sha512-JqKVsR33OvKtTxRp5Ylhw8WfNvJ49ZIhlhMZlSVKqwR2Ks6JuxqFJ0zM9p7JIbTQDSlAZnmnZJv1qlItaildiQ=="],
 
     "@opentelemetry/api": ["@opentelemetry/api@1.9.1", "https://europe-west4-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/@opentelemetry/api/-/api-1.9.1.tgz", {}, "sha512-gLyJlPHPZYdAk1JENA9LeHejZe1Ti77/pTeFm/nMXmQH/HFZlcS/O2XJB+L8fkbrNSqhdtlvjBVjxwUYanNH5Q=="],
 
@@ -2163,7 +2161,7 @@
 
     "open": ["open@10.1.1", "", { "dependencies": { "default-browser": "^5.2.1", "define-lazy-prop": "^3.0.0", "is-inside-container": "^1.0.0", "is-wsl": "^3.1.0" } }, "sha512-zy1wx4+P3PfhXSEPJNtZmJXfhkkIaxU1VauWIrDZw1O7uJRDRJtKr9n3Ic4NgbA16KyOxOXO2ng9gYwCdXuSXA=="],
 
-    "openai": ["openai@5.23.2", "https://europe-west4-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/openai/-/openai-5.23.2.tgz", { "peerDependencies": { "ws": "^8.18.0", "zod": "^3.23.8" }, "optionalPeers": ["ws", "zod"], "bin": { "openai": "bin/cli" } }, "sha512-MQBzmTulj+MM5O8SKEk/gL8a7s5mktS9zUtAkU257WjvobGc9nKcBuVwjyEEcb9SI8a8Y2G/mzn3vm9n1Jlleg=="],
+    "openai": ["openai@6.36.0", "https://europe-west4-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/openai/-/openai-6.36.0.tgz", { "peerDependencies": { "ws": "^8.18.0", "zod": "^3.25 || ^4.0" }, "optionalPeers": ["ws", "zod"], "bin": { "openai": "bin/cli" } }, "sha512-Has2YbIusMq9wQEierFsgf9c783dy1y9arX459LmphNacEkkM5yxi2RIyXP0LmkOroQyW19iTwALHL8Yf26UKA=="],
 
     "openapi-fetch": ["openapi-fetch@0.13.8", "", { "dependencies": { "openapi-typescript-helpers": "^0.0.15" } }, "sha512-yJ4QKRyNxE44baQ9mY5+r/kAzZ8yXMemtNAOFwOzRXJscdjSxxzWSNlyBAr+o5JjkUw9Lc3W7OIoca0cY3PYnQ=="],
 
