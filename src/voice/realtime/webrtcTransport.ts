@@ -28,15 +28,8 @@ export interface RealtimeToolDefinition {
 }
 
 export interface RealtimeSessionConfig {
-  type?: 'realtime';
-  model?: string;
   modalities?: string[];
-  output_modalities?: string[];
   voice?: string;
-  audio?: {
-    input?: Record<string, unknown>;
-    output?: Record<string, unknown>;
-  };
   instructions: string;
   tools: RealtimeToolDefinition[];
   tool_choice?: 'auto' | 'none' | 'required' | string;
