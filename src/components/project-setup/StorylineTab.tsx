@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { supabaseService } from '@/services/supabaseService';
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,20 @@ interface StorylineTabProps {
   updateProjectData: (data: Partial<ProjectData>) => void;
 }
 
+interface StreamingScene {
+  id?: string;
+  title?: string | null;
+  description?: string | null;
+}
+
+interface StreamingCharacter {
+  id?: string;
+  name?: string | null;
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : 'Unknown error';
+}
 
 const StorylineTab = ({ projectData, updateProjectData }: StorylineTabProps) => {
   const [characterCount, setCharacterCount] = useState(0);
@@ -36,9 +50,10 @@ const StorylineTab = ({ projectData, updateProjectData }: StorylineTabProps) => 
   // Streaming state
   const [streamingStory, setStreamingStory] = useState('');
   const [streamingStatus, setStreamingStatus] = useState<'idle' | 'creating' | 'generating' | 'scenes' | 'characters' | 'complete' | 'failed'>('idle');
-  const [streamingScenes, setStreamingScenes] = useState<any[]>([]);
-  const [streamingCharacters, setStreamingCharacters] = useState<any[]>([]);
+  const [streamingScenes, setStreamingScenes] = useState<StreamingScene[]>([]);
+  const [streamingCharacters, setStreamingCharacters] = useState<StreamingCharacter[]>([]);
   const [generationError, setGenerationError] = useState<string | undefined>();
+  const lastVoiceNarrationAtRef = useRef(0);
   
   // Determine the project ID to use (URL param takes precedence)
   const currentProjectId = params.id || contextProjectId;
@@ -46,6 +61,22 @@ const StorylineTab = ({ projectData, updateProjectData }: StorylineTabProps) => 
   // Ref to avoid stale closure in realtime callback
   const selectedStorylineRef = useRef(selectedStoryline);
   useEffect(() => { selectedStorylineRef.current = selectedStoryline; }, [selectedStoryline]);
+
+  const narrateStreamingUpdate = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const now = Date.now();
+    if (now - lastVoiceNarrationAtRef.current < 7000) return;
+    lastVoiceNarrationAtRef.current = now;
+    window.dispatchEvent(
+      new CustomEvent('wzrd:voice-oob-narrate', {
+        detail: {
+          topic: 'storyline_stream',
+          text: trimmed.length > 260 ? `${trimmed.slice(0, 257)}...` : trimmed,
+        },
+      }),
+    );
+  }, []);
 
   // Fetch storylines when component mounts or when project ID changes
   useEffect(() => {
@@ -106,6 +137,9 @@ const StorylineTab = ({ projectData, updateProjectData }: StorylineTabProps) => 
           const newStoryline = payload.new as Storyline;
           
           setStreamingStory(newStoryline.full_story || '');
+          if (newStoryline.full_story) {
+            narrateStreamingUpdate(newStoryline.full_story);
+          }
           
           // Map DB status to progress status
           if (newStoryline.status === 'generating' && newStoryline.full_story) {
@@ -150,8 +184,10 @@ const StorylineTab = ({ projectData, updateProjectData }: StorylineTabProps) => 
         },
         (payload) => {
           console.log('New scene received:', payload);
-          setStreamingScenes(prev => [...prev, payload.new]);
+          const scene = payload.new as StreamingScene;
+          setStreamingScenes(prev => [...prev, scene]);
           setStreamingStatus('scenes');
+          narrateStreamingUpdate(`Scene added: ${scene.title || scene.description || 'new scene'}`);
         }
       )
       .subscribe();
@@ -169,8 +205,10 @@ const StorylineTab = ({ projectData, updateProjectData }: StorylineTabProps) => 
         },
         (payload) => {
           console.log('New character received:', payload);
-          setStreamingCharacters(prev => [...prev, payload.new]);
+          const character = payload.new as StreamingCharacter;
+          setStreamingCharacters(prev => [...prev, character]);
           setStreamingStatus('characters');
+          narrateStreamingUpdate(`Character added: ${character.name || 'new character'}`);
         }
       )
       .subscribe();
@@ -180,7 +218,7 @@ const StorylineTab = ({ projectData, updateProjectData }: StorylineTabProps) => 
       supabase.removeChannel(scenesChannel);
       supabase.removeChannel(charactersChannel);
     };
-  }, [currentProjectId]);
+  }, [currentProjectId, narrateStreamingUpdate]);
 
   const fetchStorylines = async () => {
     if (!currentProjectId) return;
@@ -204,8 +242,8 @@ const StorylineTab = ({ projectData, updateProjectData }: StorylineTabProps) => 
 
       setAlternativeStorylines(alternativesData || []);
       
-    } catch (error: any) {
-      toast.error(`Failed to load storylines: ${error.message}`);
+    } catch (error) {
+      toast.error(`Failed to load storylines: ${getErrorMessage(error)}`);
     } finally {
       setIsLoading(false);
     }
@@ -234,8 +272,8 @@ const StorylineTab = ({ projectData, updateProjectData }: StorylineTabProps) => 
 
       toast.success("Storyline selected");
 
-    } catch (error: any) {
-      toast.error(`Failed to select storyline: ${error.message}`);
+    } catch (error) {
+      toast.error(`Failed to select storyline: ${getErrorMessage(error)}`);
       
       // Revert UI changes on error
       setSelectedStoryline(previousSelected);
@@ -315,10 +353,11 @@ const StorylineTab = ({ projectData, updateProjectData }: StorylineTabProps) => 
         }
         throw new Error(errorMsg);
       }
-    } catch (error: any) {
+    } catch (error) {
+      const message = getErrorMessage(error);
       setStreamingStatus('failed');
-      setGenerationError(error.message);
-      toast.error(error.message);
+      setGenerationError(message);
+      toast.error(message);
       setIsGenerating(false);
     }
     // Note: isGenerating is set to false via realtime subscription when complete/failed

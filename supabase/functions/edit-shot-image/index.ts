@@ -6,6 +6,29 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const NANO_BANANA_FAST_EDIT_ALIAS = 'nano_banana_fast_edit';
+const DEFAULT_NANO_BANANA_FAST_EDIT_MODEL = 'fal-ai/nano-banana-2/edit';
+
+function resolveModelAlias(modelAlias?: string | null, preferredModel?: string | null) {
+  if (preferredModel && preferredModel !== NANO_BANANA_FAST_EDIT_ALIAS) {
+    return preferredModel;
+  }
+  if (!modelAlias || modelAlias === NANO_BANANA_FAST_EDIT_ALIAS) {
+    return Deno.env.get('NANO_BANANA_FAST_EDIT_MODEL') || DEFAULT_NANO_BANANA_FAST_EDIT_MODEL;
+  }
+  return modelAlias;
+}
+
+function asStructuredPrompt(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -13,14 +36,45 @@ serve(async (req) => {
   }
 
   try {
-    const { shot_id, image_url, edit_prompt, original_prompt } = await req.json();
+    const {
+      shot_id,
+      image_url,
+      edit_prompt,
+      original_prompt,
+      model_alias,
+      preferred_model,
+      structured_prompt,
+    } = await req.json();
 
     if (!shot_id || !image_url || !edit_prompt) {
       throw new Error('Missing required parameters');
     }
 
+    const structuredPrompt = asStructuredPrompt(structured_prompt);
+    const promptText =
+      typeof structuredPrompt?.edit_prompt === 'string'
+        ? structuredPrompt.edit_prompt
+        : edit_prompt;
+    const preserve = asStringArray(structuredPrompt?.preserve);
+    const avoid = asStringArray(structuredPrompt?.avoid);
+    const aspectRatio =
+      typeof structuredPrompt?.aspect_ratio === 'string'
+        ? structuredPrompt.aspect_ratio
+        : 'auto';
+    const resolvedModel = resolveModelAlias(model_alias, preferred_model);
+    const endpointModel = resolvedModel.startsWith('fal-ai/')
+      ? resolvedModel
+      : DEFAULT_NANO_BANANA_FAST_EDIT_MODEL;
+    const providerPrompt = [
+      promptText,
+      original_prompt ? `Original context: ${original_prompt}` : null,
+      preserve.length ? `Preserve: ${preserve.join(', ')}` : null,
+      avoid.length ? `Avoid: ${avoid.join(', ')}` : null,
+    ].filter(Boolean).join('\n');
+
     console.log('Editing image for shot:', shot_id);
-    console.log('Edit prompt:', edit_prompt);
+    console.log('Edit model:', endpointModel);
+    console.log('Edit prompt:', providerPrompt);
 
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -35,21 +89,18 @@ serve(async (req) => {
       throw new Error('FAL_KEY not configured');
     }
 
-    // Call FAL.ai image editing endpoint
-    // Using flux-pro or similar model with image-to-image capabilities
-    const falResponse = await fetch('https://fal.run/fal-ai/flux-pro/v1.1', {
+    const falResponse = await fetch(`https://fal.run/${endpointModel}`, {
       method: 'POST',
       headers: {
         'Authorization': `Key ${falKey}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        prompt: `${edit_prompt}. Original context: ${original_prompt}`,
-        image_url: image_url,
-        num_inference_steps: 30,
-        guidance_scale: 7.5,
+        prompt: providerPrompt,
+        image_urls: [image_url],
+        aspect_ratio: aspectRatio,
         num_images: 1,
-        enable_safety_checker: true
+        output_format: 'png',
       })
     });
 
@@ -83,7 +134,10 @@ serve(async (req) => {
     history.push({
       url: image_url,
       type: 'pre-edit',
-      edit_prompt: edit_prompt,
+      edit_prompt: promptText,
+      model_alias: model_alias ?? null,
+      resolved_model: endpointModel,
+      structured_prompt: structuredPrompt,
       timestamp: new Date().toISOString()
     });
 
@@ -106,7 +160,10 @@ serve(async (req) => {
       JSON.stringify({
         success: true,
         image_url: editedImageUrl,
-        history_length: history.length
+        history_length: history.length,
+        model_alias: model_alias ?? null,
+        resolved_model: endpointModel,
+        structured_prompt: structuredPrompt,
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Plus, Loader2, AlertCircle, Film, Sparkles, CircleStop, Scissors } from 'lucide-react';
@@ -13,7 +13,7 @@ import { AddSceneButton } from '@/components/timeline/AddSceneButton';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAppStore } from '@/store/appStore';
-import { ProjectDetails, SceneDetails, CharacterDetails, SidebarData } from '@/types/storyboardTypes';
+import { ProjectDetails, SceneDetails, CharacterDetails, SidebarData, ShotDetails } from '@/types/storyboardTypes';
 import { cn } from '@/lib/utils';
 import { useProjectAutoGenerate } from '@/hooks/useProjectAutoGenerate';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -25,12 +25,35 @@ import { ConfirmGenerateDialog } from '@/components/ui/ConfirmGenerateDialog';
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { PanelLeft } from 'lucide-react';
+import { useRegisterVoiceActions } from '@/voice/VoiceAgentProvider';
+import type { VoiceActionRegistration, VoiceActionResult } from '@/voice/actions/registry';
+import { scrollVoiceTargetIntoView, useVoiceSelection } from '@/voice/VoiceSelectionContext';
+import useSaveToProjectAssets from '@/hooks/useSaveToProjectAssets';
+import {
+  NANO_BANANA_FAST_EDIT_ALIAS,
+  resolveFrontendModelAlias,
+  type StructuredImageEditPrompt,
+} from '@/lib/modelAliases';
+
+function completed(message: string, data?: unknown): VoiceActionResult {
+  return { ok: true, status: 'completed', message, data };
+}
+
+function invalid(message: string, data?: unknown): VoiceActionResult {
+  return { ok: false, status: 'invalid_input', message, data };
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : 'Unknown error';
+}
 
 const StoryboardPage = () => {
   const { projectId } = useParams<{ projectId?: string }>();
   const navigate = useNavigate();
   const { setActiveProject } = useAppStore();
   const isMobile = useIsMobile();
+  const { selectedTargets, selectTarget, setExpandedShotId } = useVoiceSelection();
+  const { saveAsset } = useSaveToProjectAssets(projectId);
   
   const [scenes, setScenes] = useState<SceneDetails[]>([]);
   const [projectDetails, setProjectDetails] = useState<ProjectDetails | null>(null);
@@ -147,9 +170,10 @@ const StoryboardPage = () => {
         });
       }
 
-    } catch (error: any) {
+    } catch (error) {
+      const message = getErrorMessage(error);
       console.error("Error fetching storyboard data:", error);
-      toast.error(`Failed to load storyboard: ${error.message}`);
+      toast.error(`Failed to load storyboard: ${message}`);
       setProjectDetails(null);
       setScenes([]);
       setCharacters([]);
@@ -259,7 +283,7 @@ const StoryboardPage = () => {
     try {
       const { error } = await supabase
         .from('scenes')
-        .update(updates as any)
+        .update(updates)
         .eq('id', sceneId);
       if (error) throw error;
 
@@ -274,9 +298,10 @@ const StoryboardPage = () => {
         sceneWeather: updates.weather ?? prev.sceneWeather,
       } : null);
 
-    } catch (error: any) {
+    } catch (error) {
+      const message = getErrorMessage(error);
       console.error("Error updating scene:", error);
-      toast.error(`Failed to update scene: ${error.message}`);
+      toast.error(`Failed to update scene: ${message}`);
     }
   };
 
@@ -294,9 +319,10 @@ const StoryboardPage = () => {
         projectTitle: updates.title ?? prev.projectTitle,
         projectDescription: updates.description ?? prev.projectDescription,
       } : null);
-    } catch (error: any) {
+    } catch (error) {
+      const message = getErrorMessage(error);
       console.error("Error updating project:", error);
-      toast.error(`Failed to update project: ${error.message}`);
+      toast.error(`Failed to update project: ${message}`);
     }
   };
 
@@ -315,14 +341,15 @@ const StoryboardPage = () => {
         setScenes(prev => [...prev, data as SceneDetails]);
         toast.success(`Scene ${newSceneNumber} added.`);
       }
-    } catch (error: any) {
+    } catch (error) {
+      const message = getErrorMessage(error);
       console.error("Error adding scene:", error);
-      toast.error(`Failed to add scene: ${error.message}`);
+      toast.error(`Failed to add scene: ${message}`);
     }
   };
 
   // Function to handle selecting a different scene
-  const handleSelectScene = (scene: SceneDetails) => {
+  const handleSelectScene = useCallback((scene: SceneDetails) => {
     setSelectedScene(scene);
     // Update sidebar data when scene changes
     setSidebarData(prev => projectDetails ? ({
@@ -335,7 +362,361 @@ const StoryboardPage = () => {
       videoStyle: projectDetails.video_style ?? null,
       characters: characters
     }) : null);
-  };
+  }, [characters, projectDetails]);
+
+  const fetchVoiceShots = useCallback(async () => {
+    if (!projectId || scenes.length === 0) return [];
+    const sceneIds = scenes.map((scene) => scene.id);
+    const { data, error } = await supabase
+      .from('shots')
+      .select('*')
+      .in('scene_id', sceneIds)
+      .order('shot_number', { ascending: true });
+    if (error) throw error;
+    return (data || []) as ShotDetails[];
+  }, [projectId, scenes]);
+
+  const selectShotForVoice = useCallback(
+    async (input: {
+      shotId?: string;
+      shotNumber?: number;
+      sceneId?: string;
+      sceneNumber?: number;
+      open?: boolean;
+    }) => {
+      const shots = await fetchVoiceShots();
+      const sceneById = new Map(scenes.map((scene) => [scene.id, scene]));
+      const targetScene =
+        (input.sceneId ? sceneById.get(input.sceneId) : undefined) ??
+        (typeof input.sceneNumber === 'number'
+          ? scenes.find((scene) => scene.scene_number === input.sceneNumber)
+          : undefined) ??
+        (selectedTargets.scene?.id ? sceneById.get(selectedTargets.scene.id) : undefined) ??
+        selectedScene ??
+        undefined;
+
+      let matches = shots;
+      if (input.shotId) {
+        matches = shots.filter((shot) => shot.id === input.shotId);
+      } else if (typeof input.shotNumber === 'number') {
+        matches = shots.filter((shot) => shot.shot_number === input.shotNumber);
+        if (targetScene) {
+          matches = matches.filter((shot) => shot.scene_id === targetScene.id);
+        }
+      } else if (selectedTargets.shot?.id) {
+        matches = shots.filter((shot) => shot.id === selectedTargets.shot?.id);
+      }
+
+      if (matches.length === 0) {
+        return {
+          result: invalid('Which shot number should I use?', {
+            selectedSceneNumber: targetScene?.scene_number ?? null,
+          }),
+          shot: null,
+          scene: null,
+        };
+      }
+
+      if (!input.shotId && typeof input.shotNumber === 'number' && matches.length > 1 && !targetScene) {
+        return {
+          result: invalid('That shot number appears in more than one scene. Which scene number?', {
+            shotNumber: input.shotNumber,
+            matchingSceneNumbers: matches
+              .map((shot) => sceneById.get(shot.scene_id)?.scene_number)
+              .filter((value): value is number => typeof value === 'number'),
+          }),
+          shot: null,
+          scene: null,
+        };
+      }
+
+      const shot = matches[0];
+      const scene = sceneById.get(shot.scene_id) ?? null;
+      if (scene) {
+        handleSelectScene(scene);
+      }
+
+      selectTarget({
+        type: 'shot',
+        id: shot.id,
+        label: `Shot ${shot.shot_number}`,
+        projectId,
+        sceneId: shot.scene_id,
+        sceneNumber: scene?.scene_number ?? null,
+        shotNumber: shot.shot_number,
+        sourceImageUrl: shot.image_url ?? null,
+      });
+
+      if (input.open) {
+        setExpandedShotId(shot.id);
+      }
+      scrollVoiceTargetIntoView(`[data-shot-id="${shot.id}"]`);
+
+      return {
+        result: completed(`Shot ${shot.shot_number} is selected.`, {
+          shotId: shot.id,
+          shotNumber: shot.shot_number,
+          sceneNumber: scene?.scene_number ?? null,
+        }),
+        shot,
+        scene,
+      };
+    },
+    [fetchVoiceShots, handleSelectScene, projectId, scenes, selectTarget, selectedScene, selectedTargets.scene?.id, selectedTargets.shot?.id, setExpandedShotId],
+  );
+
+  const voiceActions = useMemo<VoiceActionRegistration[]>(
+    () => [
+      {
+        name: 'get_app_context',
+        scope: 'timeline',
+        handler: () =>
+          completed('Timeline context loaded.', {
+            route: window.location.pathname,
+            projectId,
+            selectedScene: selectedScene
+              ? { id: selectedScene.id, sceneNumber: selectedScene.scene_number, title: selectedScene.title }
+              : null,
+            selectedShot: selectedTargets.shot ?? null,
+            generationStatus: {
+              projectPhase: projectAutoGenState.phase,
+              projectProgress: projectAutoGenState.progress,
+              nextPhase: projectNextPhase,
+              isProjectAutoGenerating,
+            },
+            availableActions: [
+              'timeline_select_shot',
+              'timeline_open_shot',
+              'timeline_update_shot_prompt',
+              'timeline_generate_shot_image',
+              'timeline_generate_all_images',
+              'timeline_edit_shot_image',
+              'timeline_start_directors_cut',
+              'asset_store_save_current',
+            ],
+          }),
+      },
+      {
+        name: 'timeline_select_shot',
+        scope: 'timeline',
+        handler: async (input) => {
+          const payload = input as { shotId?: string; shotNumber?: number; sceneId?: string; sceneNumber?: number };
+          const { result } = await selectShotForVoice(payload);
+          return result;
+        },
+      },
+      {
+        name: 'timeline_open_shot',
+        scope: 'timeline',
+        handler: async (input) => {
+          const payload = input as { shotId?: string; shotNumber?: number; sceneId?: string; sceneNumber?: number };
+          const { result } = await selectShotForVoice({ ...payload, open: true });
+          return result.ok
+            ? completed('Shot card is open.', result.data)
+            : result;
+        },
+      },
+      {
+        name: 'timeline_update_shot_prompt',
+        scope: 'timeline',
+        handler: async (input) => {
+          const payload = input as {
+            shotId?: string;
+            shotNumber?: number;
+            sceneId?: string;
+            sceneNumber?: number;
+            prompt_idea?: string;
+            visual_prompt?: string;
+            dialogue?: string;
+            sound_effects?: string;
+          };
+          const { result, shot } = await selectShotForVoice(payload);
+          if (!shot) return result;
+
+          const updates = {
+            prompt_idea: payload.prompt_idea,
+            visual_prompt: payload.visual_prompt,
+            dialogue: payload.dialogue,
+            sound_effects: payload.sound_effects,
+          };
+          const compactUpdates = Object.fromEntries(
+            Object.entries(updates).filter(([, value]) => typeof value === 'string'),
+          );
+          if (Object.keys(compactUpdates).length === 0) {
+            return invalid('Tell me the shot prompt text to update.');
+          }
+
+          const { error } = await supabase.from('shots').update(compactUpdates).eq('id', shot.id);
+          if (error) throw error;
+          return completed(`Shot ${shot.shot_number} updated.`, { shotId: shot.id, updates: compactUpdates });
+        },
+      },
+      {
+        name: 'timeline_generate_shot_image',
+        scope: 'timeline',
+        confirmation: {
+          risk: 'generation',
+          message: 'This will spend credits. Should I continue?',
+        },
+        handler: async (input) => {
+          const payload = input as { shotId?: string; shotNumber?: number; sceneId?: string; sceneNumber?: number };
+          const { result, shot } = await selectShotForVoice(payload);
+          if (!shot) return result;
+
+          if (!shot.visual_prompt) {
+            const { error: promptError } = await supabase.functions.invoke('generate-visual-prompt', {
+              body: { shot_id: shot.id },
+            });
+            if (promptError) throw promptError;
+          }
+
+          const { error } = await supabase.functions.invoke('generate-shot-image', {
+            body: { shot_id: shot.id, image_model: selectedImageModel || undefined },
+          });
+          if (error) throw error;
+
+          return completed(`Image generation started for shot ${shot.shot_number}.`, { shotId: shot.id });
+        },
+      },
+      {
+        name: 'timeline_generate_all_images',
+        scope: 'timeline',
+        confirmation: {
+          risk: 'generation',
+          message: 'This will spend credits. Should I continue?',
+        },
+        handler: async () => {
+          if (projectNextPhase !== 'images') {
+            return completed('All missing images are already handled. The next available phase is video generation.', {
+              nextPhase: projectNextPhase,
+            });
+          }
+          await startProjectAutoGenerate({ imageModelId: selectedImageModel, videoModelId: selectedVideoModel });
+          return completed('Generating all missing shot images.', {
+            projectId,
+            pendingProjectGenerationCount,
+          });
+        },
+      },
+      {
+        name: 'timeline_edit_shot_image',
+        scope: 'timeline',
+        confirmation: {
+          risk: 'generation',
+          message: 'This will spend credits. Should I continue?',
+        },
+        handler: async (input) => {
+          const payload = input as {
+            shotId?: string;
+            shotNumber?: number;
+            sceneId?: string;
+            sceneNumber?: number;
+            edit_prompt?: string;
+            preserve?: string[];
+            avoid?: string[];
+            aspect_ratio?: string;
+          };
+          const editPrompt = payload.edit_prompt?.trim();
+          if (!editPrompt) return invalid('Tell me how to edit the shot image.');
+          const { result, shot } = await selectShotForVoice(payload);
+          if (!shot) return result;
+          if (!shot.image_url) return invalid('Generate this shot image before editing it.');
+
+          const editPayload: StructuredImageEditPrompt = {
+            target_type: 'shot',
+            target_id: shot.id,
+            source_image_url: shot.image_url,
+            edit_prompt: editPrompt,
+            model_alias: NANO_BANANA_FAST_EDIT_ALIAS,
+            preserve: payload.preserve ?? ['composition', 'main subject', 'camera angle', 'continuity'],
+            avoid: payload.avoid ?? ['distortion', 'extra limbs', 'identity drift', 'text artifacts'],
+            aspect_ratio: payload.aspect_ratio ?? 'auto',
+          };
+
+          const { data, error } = await supabase.functions.invoke('edit-shot-image', {
+            body: {
+              shot_id: shot.id,
+              image_url: shot.image_url,
+              edit_prompt: JSON.stringify(editPayload),
+              original_prompt: shot.visual_prompt,
+              model_alias: NANO_BANANA_FAST_EDIT_ALIAS,
+              preferred_model: resolveFrontendModelAlias(NANO_BANANA_FAST_EDIT_ALIAS),
+              structured_prompt: editPayload,
+            },
+          });
+          if (error) throw error;
+
+          return completed(`Shot ${shot.shot_number} image edit is ready.`, {
+            shotId: shot.id,
+            editPayload,
+            imageUrl: data?.image_url ?? null,
+          });
+        },
+      },
+      {
+        name: 'timeline_start_directors_cut',
+        scope: 'timeline',
+        confirmation: {
+          risk: 'generation',
+          message: 'This will spend credits. Should I continue?',
+        },
+        handler: async () => {
+          if (!projectId) return invalid('I need an active project before starting Director\'s Cut.');
+          navigate(appRoutes.projects.directorsCut(projectId));
+          return completed('Director\'s Cut is open.', { path: appRoutes.projects.directorsCut(projectId) });
+        },
+      },
+      {
+        name: 'asset_store_save_current',
+        scope: 'timeline',
+        handler: async (input) => {
+          const payload = input as { shotId?: string; shotNumber?: number; sceneId?: string; sceneNumber?: number };
+          const { result, shot } = await selectShotForVoice(payload);
+          if (!shot) return result;
+
+          const url = shot.video_status === 'completed' && shot.video_url ? shot.video_url : shot.image_url;
+          const type = shot.video_status === 'completed' && shot.video_url ? 'video' : 'image';
+          if (!url) return invalid('There is no generated output on the selected shot to save yet.');
+
+          const saved = await saveAsset({
+            url,
+            type,
+            prompt: shot.visual_prompt || shot.prompt_idea || undefined,
+            model: type === 'image' ? selectedImageModel : selectedVideoModel,
+            name: `Scene ${selectedScene?.scene_number ?? 'selected'} Shot ${shot.shot_number}`,
+            metadata: {
+              source: 'voice_timeline',
+              shotId: shot.id,
+              sceneId: shot.scene_id,
+              shotNumber: shot.shot_number,
+            },
+          });
+
+          if (!saved) return invalid('I could not save that output to the Asset Store.');
+          navigate(appRoutes.assets);
+          return completed('Saved to Asset Store.', { assetId: saved.id, path: appRoutes.assets });
+        },
+      },
+    ],
+    [
+      isProjectAutoGenerating,
+      navigate,
+      pendingProjectGenerationCount,
+      projectAutoGenState.phase,
+      projectAutoGenState.progress,
+      projectId,
+      projectNextPhase,
+      saveAsset,
+      selectShotForVoice,
+      selectedImageModel,
+      selectedScene,
+      selectedTargets.shot,
+      selectedVideoModel,
+      startProjectAutoGenerate,
+    ],
+  );
+
+  useRegisterVoiceActions(voiceActions);
 
   // Function to handle deleting a scene
   const handleDeleteScene = async (sceneId: string) => {
@@ -375,9 +756,10 @@ const StoryboardPage = () => {
       }
       
       toast.success('Scene deleted');
-    } catch (error: any) {
+    } catch (error) {
+      const message = getErrorMessage(error);
       console.error("Error deleting scene:", error);
-      toast.error(`Failed to delete scene: ${error.message}`);
+      toast.error(`Failed to delete scene: ${message}`);
       throw error; // Re-throw so ShotsRow can handle it
     }
   };

@@ -35,6 +35,7 @@ export interface GlobalVoiceActionOptions {
   navigate: (path: string) => void;
   getLocationPath: () => string;
   getCurrentProjectId: () => string | null;
+  getAvailableActionNames?: () => string[];
 }
 
 function buildKanvasPath(studio?: string, prompt?: string | null): string {
@@ -107,6 +108,7 @@ export function createGlobalVoiceActions(options: GlobalVoiceActionOptions): Voi
         completed('Current app context loaded.', {
           locationPath: options.getLocationPath(),
           currentProjectId: options.getCurrentProjectId(),
+          availableActions: options.getAvailableActionNames?.() ?? [],
         }),
     },
     {

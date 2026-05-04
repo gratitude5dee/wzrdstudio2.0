@@ -20,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { useVoiceSelection } from '@/voice/VoiceSelectionContext';
 
 interface SettingsTabProps {
   projectData: ProjectData;
@@ -44,6 +45,10 @@ const ALL_VIDEO_STYLES: { value: VideoStyleOption; label: string; description: s
   { value: 'vintage', label: 'Vintage', description: 'Aged film grain, warm tones, vignette' },
 ];
 
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : 'Unknown error';
+}
+
 const SettingsTab = ({ projectData, updateProjectData }: SettingsTabProps) => {
   const { projectId, generationCompletedSignal } = useProjectContext();
   const [selectedAspectRatio, setSelectedAspectRatio] = useState<AspectRatioOption>(
@@ -56,6 +61,7 @@ const SettingsTab = ({ projectData, updateProjectData }: SettingsTabProps) => {
   const [isLoadingCharacters, setIsLoadingCharacters] = useState(true);
   const [isAddingCharacter, setIsAddingCharacter] = useState(false);
   const [showAllStyles, setShowAllStyles] = useState(false);
+  const { isSelected, selectTarget } = useVoiceSelection();
 
   // Fetch characters when projectId changes or after generation completes
   useEffect(() => {
@@ -72,7 +78,7 @@ const SettingsTab = ({ projectData, updateProjectData }: SettingsTabProps) => {
 
         console.log(`Found ${characters?.length || 0} characters for project`);
         setCharacters(characters || []);
-      } catch (error: any) {
+      } catch (error) {
         console.error("Error fetching characters:", error);
         toast.error("Failed to load characters");
         setCharacters([]);
@@ -194,9 +200,10 @@ const SettingsTab = ({ projectData, updateProjectData }: SettingsTabProps) => {
 
       setCharacters([...characters, newChar]);
       toast.success(`Added ${newName}`);
-    } catch (error: any) {
+    } catch (error) {
+      const message = getErrorMessage(error);
       console.error("Error adding character:", error);
-      toast.error("Failed to add character");
+      toast.error(message || "Failed to add character");
     } finally {
       setIsAddingCharacter(false);
     }
@@ -208,7 +215,7 @@ const SettingsTab = ({ projectData, updateProjectData }: SettingsTabProps) => {
       await supabaseService.characters.delete(characterId);
       setCharacters(characters.filter(c => c.id !== characterId));
       toast.success("Character deleted");
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error deleting character:", error);
       toast.error("Failed to delete character");
     }
@@ -274,7 +281,7 @@ const SettingsTab = ({ projectData, updateProjectData }: SettingsTabProps) => {
             <div className="grid grid-cols-4 gap-3">
               {(['none', 'cinematic', 'scribble', 'film-noir'] as VideoStyleOption[]).map(style => {
                 let imgSrc = '';
-                let altText = style.charAt(0).toUpperCase() + style.slice(1);
+                const altText = style.charAt(0).toUpperCase() + style.slice(1);
                 if (style === 'cinematic') imgSrc = '/lovable-uploads/96cbbf8f-bdb1-4d37-9c62-da1306d5fb96.png';
                 if (style === 'scribble') imgSrc = '/lovable-uploads/4e20f36a-2bff-48d8-b07b-257334e35506.png';
                 if (style === 'film-noir') imgSrc = '/lovable-uploads/96cbbf8f-bdb1-4d37-9c62-da1306d5fb96.png';
@@ -418,6 +425,16 @@ const SettingsTab = ({ projectData, updateProjectData }: SettingsTabProps) => {
               character={char}
               onDelete={handleDeleteCharacter}
               styleReferenceUrl={projectData.styleReferenceUrl}
+              isVoiceSelected={isSelected('character', char.id)}
+              onSelect={(character) =>
+                selectTarget({
+                  type: 'character',
+                  id: character.id,
+                  label: character.name,
+                  projectId,
+                  sourceImageUrl: character.image_url ?? null,
+                })
+              }
             />
           ))}
 

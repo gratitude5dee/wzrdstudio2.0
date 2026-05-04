@@ -7,6 +7,7 @@ import { Loader2, Wand2, RotateCcw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Character } from './types';
+import { NANO_BANANA_FAST_EDIT_ALIAS, resolveFrontendModelAlias } from '@/lib/modelAliases';
 
 interface CharacterEditDialogProps {
   character: Character;
@@ -39,6 +40,8 @@ export const CharacterEditDialog: React.FC<CharacterEditDialogProps> = ({
           source_image_url: character.image_url,
           edit_prompt: editPrompt,
           style_reference_url: styleReferenceUrl,
+          model_alias: NANO_BANANA_FAST_EDIT_ALIAS,
+          preferred_model: resolveFrontendModelAlias(NANO_BANANA_FAST_EDIT_ALIAS),
         },
       });
 
@@ -48,9 +51,9 @@ export const CharacterEditDialog: React.FC<CharacterEditDialogProps> = ({
         setPreviewUrl(data.edited_image_url);
         toast.success('Edit applied! Review the changes.');
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Edit error:', err);
-      toast.error(err.message || 'Failed to edit image');
+      toast.error(err instanceof Error ? err.message : 'Failed to edit image');
     } finally {
       setIsEditing(false);
     }
@@ -69,7 +72,7 @@ export const CharacterEditDialog: React.FC<CharacterEditDialogProps> = ({
 
       toast.success('Changes saved!');
       onOpenChange(false);
-    } catch (err: any) {
+    } catch (err) {
       console.error('Save error:', err);
       toast.error('Failed to save changes');
     }

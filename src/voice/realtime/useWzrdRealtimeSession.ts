@@ -19,6 +19,12 @@ interface UseWzrdRealtimeSessionOptions {
   registry: VoiceActionRegistry;
 }
 
+interface RealtimeFunctionCall {
+  call_id: string;
+  name: string;
+  arguments: string;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -45,6 +51,32 @@ function normalizeVoiceError(event: RealtimeEvent): string {
   return 'Voice session error.';
 }
 
+function isErrorEvent(event: RealtimeEvent): boolean {
+  return event.type === 'error' || event.type.endsWith('_error') || event.type.endsWith('.error');
+}
+
+function getString(value: unknown): string | null {
+  return typeof value === 'string' ? value : null;
+}
+
+function getFunctionCallsFromResponseDone(event: RealtimeEvent): RealtimeFunctionCall[] {
+  const response = event.response as { output?: unknown[] } | undefined;
+  if (!response || !Array.isArray(response.output)) return [];
+
+  return response.output.flatMap((item): RealtimeFunctionCall[] => {
+    if (!item || typeof item !== 'object') return [];
+    const output = item as Record<string, unknown>;
+    if (output.type !== 'function_call') return [];
+
+    const callId = getString(output.call_id);
+    const name = getString(output.name);
+    const args = getString(output.arguments);
+    if (!callId || !name) return [];
+
+    return [{ call_id: callId, name, arguments: args ?? '{}' }];
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
@@ -53,6 +85,7 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
   const transportRef = useRef<WebRTCTransport | null>(null);
   const [status, setStatus] = useState<VoiceSessionStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const processedToolCallsRef = useRef<Set<string>>(new Set());
 
   // Stable ref to registry so data channel handler always has the latest
   const registryRef = useRef(registry);
@@ -76,38 +109,24 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
 
     try {
       const apiKey = await fetchRealtimeClientSecret();
-      const model = import.meta.env.VITE_WZRD_REALTIME_MODEL ?? 'gpt-4o-realtime-preview-2025-06-03';
-      const voice = import.meta.env.VITE_WZRD_REALTIME_VOICE ?? 'ash';
+      const model = import.meta.env.VITE_WZRD_REALTIME_MODEL ?? 'gpt-realtime';
+      const voice = import.meta.env.VITE_WZRD_REALTIME_VOICE ?? 'marin';
 
       const transport = new WebRTCTransport();
-
-      // --- Wire event handlers BEFORE connecting ---
-
-      // Audio playback events
-      transport.on('response.audio.delta', () => setStatus('speaking'));
-      transport.on('response.audio_transcript.delta', () => setStatus('speaking'));
-      transport.on('response.audio.done', () => {
-        // Will get response.done shortly after
-      });
-      transport.on('response.done', () => setStatus('connected'));
-
-      // Tool call handling
-      transport.on('response.function_call_arguments.done', async (event) => {
-        const callId = event.call_id as string;
-        const fnName = event.name as string;
-        const argsStr = event.arguments as string;
+      const executeToolCall = async (call: RealtimeFunctionCall) => {
+        if (processedToolCallsRef.current.has(call.call_id)) return;
+        processedToolCallsRef.current.add(call.call_id);
 
         setStatus('thinking');
 
         try {
           let args: Record<string, unknown> = {};
           try {
-            args = JSON.parse(argsStr);
+            args = JSON.parse(call.arguments);
           } catch { /* empty args */ }
 
-          // The tool is always execute_worldstudio_action; extract the inner action
           let result: unknown;
-          if (fnName === 'execute_worldstudio_action') {
+          if (call.name === 'execute_worldstudio_action') {
             const actionName = args.name as string;
             const input = (args.input as Record<string, unknown>) ?? {};
             const confirmed = args.confirmed as boolean | undefined;
@@ -117,20 +136,18 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
               { confirmed: confirmed ?? undefined },
             );
           } else {
-            result = { ok: false, status: 'invalid_input', message: `Unknown tool: ${fnName}` };
+            result = { ok: false, status: 'invalid_input', message: `Unknown tool: ${call.name}` };
           }
 
-          // Send tool result back
           transport.send({
             type: 'conversation.item.create',
             item: {
               type: 'function_call_output',
-              call_id: callId,
+              call_id: call.call_id,
               output: JSON.stringify(result),
             },
           });
 
-          // Trigger model to respond after receiving tool output
           transport.send({ type: 'response.create' });
         } catch (err) {
           console.error('[Voice] tool execution error:', err);
@@ -138,7 +155,7 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
             type: 'conversation.item.create',
             item: {
               type: 'function_call_output',
-              call_id: callId,
+              call_id: call.call_id,
               output: JSON.stringify({
                 ok: false,
                 status: 'error',
@@ -148,6 +165,32 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
           });
           transport.send({ type: 'response.create' });
         }
+      };
+
+      // --- Wire event handlers BEFORE connecting ---
+
+      // Audio playback events
+      transport.on('response.audio.delta', () => setStatus('speaking'));
+      transport.on('response.audio_transcript.delta', () => setStatus('speaking'));
+      transport.on('response.audio.done', () => {
+        // Will get response.done shortly after
+      });
+      transport.on('response.done', (event) => {
+        const toolCalls = getFunctionCallsFromResponseDone(event);
+        if (toolCalls.length > 0) {
+          void Promise.all(toolCalls.map(executeToolCall));
+          return;
+        }
+        setStatus('connected');
+      });
+
+      // Tool call handling
+      transport.on('response.function_call_arguments.done', async (event) => {
+        await executeToolCall({
+          call_id: event.call_id as string,
+          name: event.name as string,
+          arguments: (event.arguments as string | undefined) ?? '{}',
+        });
       });
 
       // Error handling
@@ -158,6 +201,15 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
         }
         const msg = normalizeVoiceError(event);
         console.warn('[Voice] session error:', msg, event);
+        setStatus('error');
+        setErrorMessage(msg);
+      });
+
+      transport.on('*', (event) => {
+        if (!isErrorEvent(event) || event.type === 'error') return;
+        if (isBenignError(event)) return;
+        const msg = normalizeVoiceError(event);
+        console.warn('[Voice] realtime error event:', msg, event);
         setStatus('error');
         setErrorMessage(msg);
       });
@@ -180,11 +232,28 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
         apiKey,
         model,
         sessionConfig: {
-          modalities: ['text', 'audio'],
-          voice,
+          type: 'realtime',
+          model,
+          output_modalities: ['audio'],
+          audio: {
+            input: {
+              format: {
+                type: 'audio/pcm',
+                rate: 24000,
+              },
+              turn_detection: null,
+            },
+            output: {
+              format: {
+                type: 'audio/pcm',
+              },
+              voice,
+            },
+          },
           instructions: getVoiceInstructions(),
           tools: getVoiceToolDefinitions(registryRef.current),
-          turn_detection: { type: 'server_vad' },
+          tool_choice: 'auto',
+          turn_detection: null,
           input_audio_transcription: { model: 'gpt-4o-mini-transcribe' },
         },
       });
@@ -198,11 +267,12 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
       setErrorMessage(msg);
       throw error;
     }
-  }, [disconnect]);
+  }, []);
 
   const pushToTalkStart = useCallback(async () => {
     const transport = transportRef.current ?? (await connect());
     transport.interrupt();
+    transport.send({ type: 'output_audio_buffer.clear' });
     transport.send({ type: 'input_audio_buffer.clear' });
     setStatus('listening');
   }, [connect]);
@@ -227,6 +297,27 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [disconnect]);
+
+  useEffect(() => {
+    const handleNarration = (event: Event) => {
+      const customEvent = event as CustomEvent<{ text?: string; topic?: string }>;
+      const text = customEvent.detail?.text?.trim();
+      const transport = transportRef.current;
+      if (!text || !transport || transport.status !== 'connected') return;
+
+      transport.sendOutOfBandAudio(
+        [
+          'Read this project update as one concise spoken highlight.',
+          'Do not ask a question.',
+          `Update: ${text}`,
+        ].join('\n'),
+        { topic: customEvent.detail?.topic ?? 'storyline_stream' },
+      );
+    };
+
+    window.addEventListener('wzrd:voice-oob-narrate', handleNarration);
+    return () => window.removeEventListener('wzrd:voice-oob-narrate', handleNarration);
+  }, []);
 
   return {
     status,

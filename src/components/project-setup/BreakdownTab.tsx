@@ -10,6 +10,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { supabaseService } from '@/services/supabaseService';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useVoiceSelection } from '@/voice/VoiceSelectionContext';
+import { cn } from '@/lib/utils';
 
 interface BreakdownTabProps {
   projectData: ProjectData;
@@ -41,11 +43,15 @@ const SceneCard = ({
   index,
   onEdit,
   onDelete,
+  isVoiceSelected,
+  onSelect,
 }: {
   scene: Scene;
   index: number;
   onEdit: (scene: Scene) => void;
   onDelete: (sceneId: string) => void;
+  isVoiceSelected?: boolean;
+  onSelect?: (scene: Scene) => void;
 }) => (
   <motion.div
     layout
@@ -55,7 +61,14 @@ const SceneCard = ({
     initial="hidden"
     animate="visible"
     exit="exit"
-    className="bg-[#111319] rounded-lg border border-zinc-800 p-4 mb-4"
+    data-voice-scene-id={scene.id}
+    onClick={() => onSelect?.(scene)}
+    className={cn(
+      'bg-[#111319] rounded-lg border border-zinc-800 p-4 mb-4 transition-all duration-300',
+      onSelect && 'cursor-pointer',
+      isVoiceSelected &&
+        'border-[#f97316]/70 ring-2 ring-[#f97316]/45 shadow-[0_0_0_4px_rgba(249,115,22,0.1),0_0_34px_rgba(249,115,22,0.22)]',
+    )}
   >
     <div className="flex justify-between items-start mb-3">
       <h3 className="text-lg font-bold">{scene.title}</h3>
@@ -116,6 +129,7 @@ const BreakdownTab = ({ projectData, updateProjectData }: BreakdownTabProps) => 
   const [showNoScenesAlert, setShowNoScenesAlert] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const { projectId, isGenerating } = useProjectContext();
+  const { isSelected, selectTarget } = useVoiceSelection();
 
   // Function to fetch scenes
   const fetchScenes = async () => {
@@ -316,7 +330,23 @@ const BreakdownTab = ({ projectData, updateProjectData }: BreakdownTabProps) => 
             <div className="space-y-6">
               <AnimatePresence mode="popLayout">
                 {fetchedScenes.map((scene, index) => (
-                  <SceneCard key={scene.id} scene={scene} index={index} onEdit={handleEditScene} onDelete={handleDeleteScene} />
+                  <SceneCard
+                    key={scene.id}
+                    scene={scene}
+                    index={index}
+                    onEdit={handleEditScene}
+                    onDelete={handleDeleteScene}
+                    isVoiceSelected={isSelected('scene', scene.id) || isSelected('location', scene.id)}
+                    onSelect={(selectedScene) =>
+                      selectTarget({
+                        type: 'scene',
+                        id: selectedScene.id,
+                        label: selectedScene.title,
+                        projectId,
+                        sceneNumber: selectedScene.number,
+                      })
+                    }
+                  />
                 ))}
               </AnimatePresence>
               <motion.div 

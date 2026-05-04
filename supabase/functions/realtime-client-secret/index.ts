@@ -27,8 +27,8 @@ serve(async (req) => {
       return errorResponse("OPENAI_API_KEY is not configured", 500);
     }
 
-    const model = Deno.env.get("WZRD_REALTIME_MODEL") || "gpt-4o-realtime-preview-2025-06-03";
-    const voice = Deno.env.get("WZRD_REALTIME_VOICE") || "ash";
+    const model = Deno.env.get("WZRD_REALTIME_MODEL") || "gpt-realtime";
+    const voice = Deno.env.get("WZRD_REALTIME_VOICE") || "marin";
 
     const response = await fetch(OPENAI_REALTIME_CLIENT_SECRETS_URL, {
       method: "POST",

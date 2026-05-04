@@ -20,6 +20,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { getShotImageCredits, getShotVideoCredits } from '@/lib/constants/credits';
 import { useProjectSettingsStore } from '@/store/projectSettingsStore';
 import { ConfirmGenerateDialog } from '@/components/ui/ConfirmGenerateDialog';
+import { useVoiceSelection } from '@/voice/VoiceSelectionContext';
 
 interface ShotConnection {
   id: string;
@@ -83,6 +84,7 @@ const placeholderCopy: Record<ShotStreamStatus, string> = {
 
 const ShotsRow = ({ sceneId, sceneNumber, projectId, onSceneDelete, isSelected = false }: ShotsRowProps) => {
   const { settings: projectSettings } = useProjectSettingsStore();
+  const { selectedTargets, expandedShotId, setExpandedShotId, selectTarget } = useVoiceSelection();
   const selectedImageModel = projectSettings?.baseImageModel;
   const [showConfirmGenerate, setShowConfirmGenerate] = useState(false);
   const selectedVideoModel = projectSettings?.baseVideoModel;
@@ -267,7 +269,9 @@ const ShotsRow = ({ sceneId, sceneNumber, projectId, onSceneDelete, isSelected =
         try {
           const fetched = await supabaseService.shots.listByScene(sceneId);
           setShots(fetched as ShotDetails[]);
-        } catch {}
+        } catch {
+          // Keep the optimistic list if the refresh also fails.
+        }
       } finally {
         setIsSavingOrder(false);
       }
@@ -785,6 +789,18 @@ const ShotsRow = ({ sceneId, sceneNumber, projectId, onSceneDelete, isSelected =
                       exit={{ opacity: 0, scale: 0.8 }}
                       transition={{ duration: 0.2, delay: index * 0.05 }}
                       data-shot-id={shot.id}
+                      onClick={() =>
+                        selectTarget({
+                          type: 'shot',
+                          id: shot.id,
+                          label: `Shot ${shot.shot_number}`,
+                          projectId,
+                          sceneId,
+                          sceneNumber,
+                          shotNumber: shot.shot_number,
+                          sourceImageUrl: shot.image_url ?? null,
+                        })
+                      }
                     >
                       <ShotCard
                         shot={shot}
@@ -792,7 +808,9 @@ const ShotsRow = ({ sceneId, sceneNumber, projectId, onSceneDelete, isSelected =
                         onDelete={() => handleDeleteShot(shot.id)}
                         onConnectionPointClick={handleConnectionPointClick}
                         connectedPoints={getConnectedPoints(shot.id)}
-                        isSelected={false}
+                        isSelected={selectedTargets.shot?.id === shot.id}
+                        isExpanded={expandedShotId === shot.id}
+                        onExpandedChange={(expanded) => setExpandedShotId(expanded ? shot.id : null)}
                       />
                     </motion.div>
                   ))}

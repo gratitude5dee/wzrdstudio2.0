@@ -13,6 +13,7 @@ import {
   type VoiceActionRegistry,
 } from './actions/registry';
 import { useWzrdRealtimeSession } from './realtime/useWzrdRealtimeSession';
+import { VoiceSelectionProvider } from './VoiceSelectionContext';
 
 declare global {
   interface Window {
@@ -70,8 +71,10 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
         navigate,
         getLocationPath: () => `${location.pathname}${location.search}`,
         getCurrentProjectId: () => getProjectIdFromPath(location.pathname),
+        getAvailableActionNames: () =>
+          Array.from(new Set(registry.list().map((registration) => registration.name))).sort(),
       }),
-    [location.pathname, location.search, navigate],
+    [location.pathname, location.search, navigate, registry],
   );
 
   useEffect(() => {
@@ -99,6 +102,7 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
 
   return (
     <VoiceAgentContext.Provider value={registry}>
+      <VoiceSelectionProvider>
       {children}
       {showVoiceControl ? (
         <VoiceActionButton
@@ -109,6 +113,7 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
           onDisconnect={voiceSession.disconnect}
         />
       ) : null}
+      </VoiceSelectionProvider>
     </VoiceAgentContext.Provider>
   );
 }

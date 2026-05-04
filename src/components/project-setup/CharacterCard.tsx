@@ -23,6 +23,8 @@ interface CharacterCardProps {
   character: Character;
   onDelete: (characterId: string) => void;
   styleReferenceUrl?: string;
+  isVoiceSelected?: boolean;
+  onSelect?: (character: Character) => void;
 }
 
 const STATUS_BADGE: Record<string, { icon: React.ReactNode; label: string; className: string }> = {
@@ -52,6 +54,8 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
   character,
   onDelete,
   styleReferenceUrl,
+  isVoiceSelected = false,
+  onSelect,
 }) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -117,9 +121,9 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
       if (data?.success) {
         toast.success('Character image generated!');
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Generate error:', err);
-      toast.error(err.message || 'Failed to generate image');
+      toast.error(err instanceof Error ? err.message : 'Failed to generate image');
     } finally {
       setIsGenerating(false);
     }
@@ -159,8 +163,18 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
         transition={{ duration: 0.2 }}
       >
         <Card
-          className="relative bg-[#18191E] border border-zinc-700/60 w-56 aspect-[3/4] flex flex-col overflow-hidden transition-all duration-300 group hover:border-zinc-600 hover:shadow-lg hover:shadow-black/20"
+          data-voice-character-id={character.id}
+          onClick={() => onSelect?.(character)}
+          className={cn(
+            'relative bg-[#18191E] border border-zinc-700/60 w-56 aspect-[3/4] flex flex-col overflow-hidden transition-all duration-300 group hover:border-zinc-600 hover:shadow-lg hover:shadow-black/20',
+            onSelect && 'cursor-pointer',
+            isVoiceSelected &&
+              'border-[#f97316]/70 ring-2 ring-[#f97316]/50 shadow-[0_0_0_4px_rgba(249,115,22,0.12),0_0_34px_rgba(249,115,22,0.28)]',
+          )}
         >
+          {isVoiceSelected && (
+            <div className="pointer-events-none absolute inset-0 z-20 rounded-[inherit] border border-[#fed7aa]/40" />
+          )}
           {/* Status Badge */}
           {badge && (
             <div className={cn(

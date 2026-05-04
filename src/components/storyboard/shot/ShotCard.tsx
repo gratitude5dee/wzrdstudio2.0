@@ -22,6 +22,8 @@ interface ShotCardProps {
   onConnectionPointClick?: (shotId: string, point: 'left' | 'right') => void;
   connectedPoints?: { left: boolean; right: boolean };
   isSelected?: boolean;
+  isExpanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
 }
 
 export const ShotCard: React.FC<ShotCardProps> = ({ 
@@ -30,7 +32,9 @@ export const ShotCard: React.FC<ShotCardProps> = ({
   onDelete, 
   onConnectionPointClick,
   connectedPoints = { left: false, right: false },
-  isSelected = false
+  isSelected = false,
+  isExpanded: controlledExpanded,
+  onExpandedChange,
 }) => {
   const {
     // State
@@ -74,8 +78,15 @@ export const ShotCard: React.FC<ShotCardProps> = ({
   } = useShotCardState(shot, onUpdate);
 
   // Create additional state for expanded view and editing mode
-  const [isExpanded, setIsExpanded] = React.useState(false);
+  const [internalExpanded, setInternalExpanded] = React.useState(false);
   const [isEditing, setIsEditing] = React.useState(false);
+  const isExpanded = controlledExpanded ?? internalExpanded;
+  const setIsExpanded = (expanded: boolean) => {
+    if (controlledExpanded === undefined) {
+      setInternalExpanded(expanded);
+    }
+    onExpandedChange?.(expanded);
+  };
 
   const { handleGenerateVisualPrompt, handleGenerateImage } = useAIGeneration({
     shotId: shot.id,
@@ -154,8 +165,8 @@ export const ShotCard: React.FC<ShotCardProps> = ({
       className={cn(
         "relative flex flex-col rounded-2xl backdrop-blur-xl w-[280px] min-h-[320px] group",
         "shot-card-glass transition-all duration-300",
-        isSelected 
-          ? 'border-2 border-[#f97316]/40 shadow-[0_0_0_4px_rgba(249,115,22,0.08),0_8px_32px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.04)]' 
+        isSelected
+          ? 'border-2 border-[#f97316]/60 ring-2 ring-[#f97316]/45 shadow-[0_0_0_4px_rgba(249,115,22,0.12),0_0_34px_rgba(249,115,22,0.24),0_8px_32px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.04)]'
           : 'border border-white/[0.08] hover:border-white/[0.15]',
         "shadow-[0_4px_24px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.03)]",
         "hover:-translate-y-1 hover:shadow-[0_8px_32px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.05)]",

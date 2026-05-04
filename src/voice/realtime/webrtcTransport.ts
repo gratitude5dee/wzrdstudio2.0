@@ -28,11 +28,19 @@ export interface RealtimeToolDefinition {
 }
 
 export interface RealtimeSessionConfig {
-  modalities: string[];
-  voice: string;
+  type?: 'realtime';
+  model?: string;
+  modalities?: string[];
+  output_modalities?: string[];
+  voice?: string;
+  audio?: {
+    input?: Record<string, unknown>;
+    output?: Record<string, unknown>;
+  };
   instructions: string;
   tools: RealtimeToolDefinition[];
-  turn_detection: Record<string, unknown>;
+  tool_choice?: 'auto' | 'none' | 'required' | string;
+  turn_detection?: Record<string, unknown> | null;
   input_audio_transcription?: Record<string, unknown>;
 }
 
@@ -81,6 +89,18 @@ export class WebRTCTransport {
       return;
     }
     this.dc.send(JSON.stringify(event));
+  }
+
+  sendOutOfBandAudio(instructions: string, metadata: Record<string, unknown> = {}): void {
+    this.send({
+      type: 'response.create',
+      response: {
+        conversation: 'none',
+        metadata,
+        output_modalities: ['audio'],
+        instructions,
+      },
+    });
   }
 
   /** Connect to the OpenAI Realtime API via WebRTC. */
@@ -207,10 +227,36 @@ export class WebRTCTransport {
   }
 
   private emit(event: RealtimeEvent): void {
-    const handlers = this.listeners.get(event.type);
-    if (handlers) {
-      handlers.forEach((h) => h(event));
-    }
+    const eventTypes = new Set([event.type, ...getRealtimeEventAliases(event.type)]);
+    eventTypes.forEach((eventType) => {
+      const handlers = this.listeners.get(eventType);
+      if (handlers) {
+        handlers.forEach((h) => h(event));
+      }
+    });
     this.wildcardListeners.forEach((h) => h(event));
+  }
+}
+
+function getRealtimeEventAliases(type: string): string[] {
+  switch (type) {
+    case 'response.output_audio.delta':
+      return ['response.audio.delta'];
+    case 'response.output_audio.done':
+      return ['response.audio.done'];
+    case 'response.output_audio_transcript.delta':
+      return ['response.audio_transcript.delta'];
+    case 'response.output_audio_transcript.done':
+      return ['response.audio_transcript.done'];
+    case 'response.audio.delta':
+      return ['response.output_audio.delta'];
+    case 'response.audio.done':
+      return ['response.output_audio.done'];
+    case 'response.audio_transcript.delta':
+      return ['response.output_audio_transcript.delta'];
+    case 'response.audio_transcript.done':
+      return ['response.output_audio_transcript.done'];
+    default:
+      return [];
   }
 }

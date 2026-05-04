@@ -22,6 +22,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { getShotVideoCredits, getShotImageCredits } from '@/lib/constants/credits';
 import { useProjectSettingsStore } from '@/store/projectSettingsStore';
+import { NANO_BANANA_FAST_EDIT_ALIAS, resolveFrontendModelAlias } from '@/lib/modelAliases';
 
 interface ShotImageActionsProps {
   shotId: string;
@@ -73,7 +74,9 @@ export function ShotImageActions({
           shot_id: shotId,
           image_url: imageUrl,
           edit_prompt: editPrompt,
-          original_prompt: visualPrompt
+          original_prompt: visualPrompt,
+          model_alias: NANO_BANANA_FAST_EDIT_ALIAS,
+          preferred_model: resolveFrontendModelAlias(NANO_BANANA_FAST_EDIT_ALIAS),
         }
       });
 
