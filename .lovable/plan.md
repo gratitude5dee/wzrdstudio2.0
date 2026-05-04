@@ -1,40 +1,61 @@
-Plan to fix the persistent voice error:
+Do I know what the issue is? Yes.
 
-1. Replace the voice client-secret call with an explicit authenticated fetch
-   - Update `src/voice/realtime/realtimeClientSecret.ts` so it no longer relies on `supabase.functions.invoke('realtime-client-secret')` for this path.
-   - Read the active Supabase session with `supabase.auth.getSession()`.
-   - If no access token exists, throw a clear `Please sign in again to use voice.` message instead of the generic Supabase `Failed to send a request to the Edge Function`.
-   - Call `https://<supabase-project>.supabase.co/functions/v1/realtime-client-secret` directly with:
-     - `Authorization: Bearer <access_token>`
-     - `apikey: <publishable key>`
-     - `Content-Type: application/json`
-   - Parse the error body on non-2xx responses so the UI shows the real cause, e.g. missing auth, OpenAI model access, or invalid OpenAI key.
+The Voice failure is currently not reaching the Supabase Edge Function at all. The browser network trace shows this request:
 
-2. Harden Edge Function CORS for current Supabase JS/browser headers
-   - Update the shared CORS allow-list in `supabase/functions/_shared/response.ts` to include the additional Supabase client headers used by newer SDKs:
-     - `x-supabase-client-platform`
-     - `x-supabase-client-platform-version`
-     - `x-supabase-client-runtime`
-     - `x-supabase-client-runtime-version`
-   - This prevents browser preflight failures from surfacing as `FunctionsFetchError`.
+```text
+POST undefined/functions/v1/realtime-client-secret
+Status: 200
+Response Body: <!DOCTYPE html>...
+```
 
-3. Improve the voice hook’s error reporting
-   - In `useWzrdRealtimeSession`, preserve the detailed error from `fetchRealtimeClientSecret()`.
-   - Avoid replacing it with the generic `Voice connection failed` fallback unless the thrown value is truly unknown.
+Because `src/voice/realtime/realtimeClientSecret.ts` reads `import.meta.env.VITE_SUPABASE_URL` and `import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY` directly, those values are becoming `undefined` in the preview bundle. The resulting URL is a relative path containing `undefined/functions/v1/...`, so the Vite/Lovable app serves `index.html` with HTTP 200. The voice code then calls `response.json()` on HTML, causing:
 
-4. Update tests for the new explicit fetch behavior
-   - Adjust `realtimeClientSecret.test.ts` so it verifies:
-     - no session produces the clear sign-in message
-     - fetch is called with `Authorization`, `apikey`, and JSON headers
-     - HTTP error responses surface their real message
-     - valid `ek_...` responses still extract correctly
+```text
+Failed to execute 'json' on 'Response': Unexpected token '<', "<!DOCTYPE "... is not valid JSON
+```
 
-5. Deploy and verify the Edge Function
-   - Deploy `realtime-client-secret` after the CORS/shared response update.
-   - Test the deployed function directly.
-   - If the authenticated call reaches OpenAI but fails, the remaining issue will be upstream OpenAI access/configuration rather than the app’s request path.
+Plan to resolve:
 
-Notes:
-- I do not expect any new API keys to be required; `OPENAI_API_KEY` is already configured.
-- The current error text is the Supabase client’s network/preflight error, not the actual Edge Function response. The fix above should either make voice connect or reveal the true backend/OpenAI error in the UI.
-- I also noticed the preview is reporting unrelated TypeScript build errors. If those continue blocking deployment after this voice patch, I’ll keep the voice fix focused and only make the smallest necessary compile fixes related to the files touched by this change.
+1. Fix Supabase config usage in the Voice client-secret fetcher
+   - Update `src/voice/realtime/realtimeClientSecret.ts` to import the centralized `SUPABASE_URL` and `SUPABASE_ANON_KEY` from `src/integrations/supabase/config.ts`.
+   - This preserves the existing hardcoded public fallback values already used elsewhere in the app.
+   - The request URL should become:
+
+   ```text
+   https://ixkkrousepsiorwlaycp.supabase.co/functions/v1/realtime-client-secret
+   ```
+
+2. Harden JSON parsing so HTML/invalid responses do not crash Voice
+   - Add a small response parser that checks `Content-Type` before calling `.json()`.
+   - If the server returns HTML or plain text, throw a clear error such as:
+
+   ```text
+   Voice service returned a non-JSON response from <url>
+   ```
+
+   - This prevents the current unhandled promise rejection and keeps the UI in the controlled `Voice unavailable` state.
+
+3. Improve error messages around Edge Function failures
+   - Keep surfacing real JSON error payloads from the Edge Function.
+   - Include status code and a concise message for non-OK responses.
+   - Avoid exposing secrets or raw auth tokens.
+
+4. Update/add tests for the regression
+   - Adjust `src/voice/realtime/realtimeClientSecret.test.ts` to verify the fetch URL uses the centralized Supabase URL instead of `undefined`.
+   - Add coverage for a `200 text/html` response so it throws a friendly controlled error rather than crashing on `response.json()`.
+   - Keep existing tests for missing session, real Edge Function errors, and missing ephemeral key.
+
+5. Re-test the Voice path after implementation
+   - Confirm the browser network request goes to the Supabase function domain, not `undefined/functions/v1/...`.
+   - Confirm the JSON parse runtime error disappears.
+   - If a separate OpenAI `service_unavailable` appears after the URL fix, treat that as a downstream Realtime API availability/retry issue and handle it separately with better retry/backoff messaging.
+
+I will implement this directly after approval.
+
+<lov-actions>
+  <lov-open-history>View History</lov-open-history>
+</lov-actions>
+
+<lov-actions>
+<lov-link url="https://docs.lovable.dev/tips-tricks/troubleshooting">Troubleshooting docs</lov-link>
+</lov-actions>
