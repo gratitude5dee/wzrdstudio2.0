@@ -53,7 +53,13 @@ function stopStream(stream: MediaStream | null) {
  * object forwarded from the Realtime API.
  */
 function normalizeVoiceError(raw: unknown): string {
-  if (raw instanceof Error) return raw.message;
+  if (raw instanceof Error) {
+    const msg = raw.message;
+    if (msg.includes('Failed to parse SessionDescription') || msg.includes('Expect line: v=')) {
+      return 'Voice connection failed — the Realtime API rejected the WebRTC session. Please try again.';
+    }
+    return msg;
+  }
   if (typeof raw === 'string') return raw;
 
   if (raw && typeof raw === 'object') {
