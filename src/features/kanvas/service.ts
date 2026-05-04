@@ -2,8 +2,7 @@ import { supabase as typedSupabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { extractInsufficientCreditsError, type InsufficientCreditsPayload } from "@/lib/billing-errors";
 
-// generation_jobs table has columns not yet in generated types; cast to any for queries.
-const supabase = typedSupabase as any;
+const supabase = typedSupabase;
 import { assetService } from "@/services/assetService";
 import { normalizeKanvasJobRow } from "@/features/kanvas/helpers";
 import type {
@@ -102,6 +101,11 @@ function normalizeModel(item: unknown): KanvasModel | null {
   const id = asString(record.id);
   const name = asString(record.name);
   const description = asString(record.description);
+  const provider = asString(record.provider) ?? undefined;
+  const providerLabel = asString(record.providerLabel) ?? undefined;
+  const endpointId = asString(record.endpointId) ?? undefined;
+  const isDefault = asBoolean(record.isDefault) ?? undefined;
+  const defaultRank = asNumber(record.defaultRank) ?? undefined;
   const studio = asString(record.studio);
   const mode = asString(record.mode);
   const mediaType = asString(record.mediaType);
@@ -146,6 +150,11 @@ function normalizeModel(item: unknown): KanvasModel | null {
     id,
     name,
     description,
+    provider,
+    providerLabel,
+    endpointId,
+    isDefault,
+    defaultRank,
     studio,
     mode: mode as KanvasModel["mode"],
     mediaType,

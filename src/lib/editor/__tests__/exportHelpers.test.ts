@@ -34,6 +34,7 @@ describe('extractVideoUrl', () => {
 describe('processAssetsRemote', () => {
   const originalFetch = globalThis.fetch;
   const updates: Array<Record<string, unknown>> = [];
+  const uploadMock = vi.fn(async () => ({ error: null }));
 
   const supabaseAdmin = {
     from: () => ({
@@ -46,7 +47,7 @@ describe('processAssetsRemote', () => {
     }),
     storage: {
       from: () => ({
-        upload: vi.fn(async () => ({ error: null })),
+        upload: uploadMock,
         getPublicUrl: () => ({ data: { publicUrl: 'https://storage.example.com/final.mp4' } }),
       }),
     },
@@ -54,6 +55,7 @@ describe('processAssetsRemote', () => {
 
   beforeEach(() => {
     updates.length = 0;
+    uploadMock.mockClear();
     (globalThis as unknown as { Deno: unknown }).Deno = {
       env: {
         get: (key: string) => key === 'FAL_KEY' ? 'fal-key' : undefined,
@@ -121,7 +123,8 @@ describe('processAssetsRemote', () => {
       assets,
       'job-1',
       'final-exports',
-      { includeAudio: false }
+      { includeAudio: false },
+      'user-1'
     );
 
     const composeRequest = requests.find((request) => request.url.includes('compose'));
@@ -130,6 +133,11 @@ describe('processAssetsRemote', () => {
     expect(result.publicUrl).toBe('https://storage.example.com/final.mp4');
     expect(tracks).toHaveLength(14);
     expect(requests.some((request) => request.url.includes('merge-videos'))).toBe(false);
+    expect(uploadMock).toHaveBeenCalledWith(
+      expect.stringMatching(/^user-1\/project-1\/job-1\/final_export_\d+\.mp4$/),
+      expect.any(Uint8Array),
+      { contentType: 'video/mp4', upsert: true }
+    );
   });
 
   it('uses fal merge-videos for pure sequential video timelines', async () => {

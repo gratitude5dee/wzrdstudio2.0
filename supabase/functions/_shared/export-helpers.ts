@@ -430,9 +430,11 @@ async function uploadFinalVideo(
   projectId: string,
   jobId: string,
   exportBucket: string,
-  bytes: Uint8Array
+  bytes: Uint8Array,
+  ownerId?: string | null
 ) {
-  const outputPath = `${projectId}/${jobId}/final_export_${Date.now()}.mp4`;
+  const ownerPrefix = ownerId || projectId;
+  const outputPath = `${ownerPrefix}/${projectId}/${jobId}/final_export_${Date.now()}.mp4`;
   const { error: uploadError } = await supabaseAdmin.storage
     .from(exportBucket)
     .upload(outputPath, bytes, { contentType: 'video/mp4', upsert: true });
@@ -738,7 +740,7 @@ export async function finalizeEditframeRender(
     throw new Error(`Editframe download failed (${response.status})`);
   }
   const bytes = new Uint8Array(await response.arrayBuffer());
-  const publicUrl = await uploadFinalVideo(supabaseAdmin, job.project_id, job.id, exportBucket, bytes);
+  const publicUrl = await uploadFinalVideo(supabaseAdmin, job.project_id, job.id, exportBucket, bytes, job.user_id);
   const providerPayload = {
     ...(job.provider_payload ?? {}),
     stage: 'completed',
@@ -789,7 +791,8 @@ async function renderWithEditframeFallback(
   falError: string,
   shotFailures: ShotFailure[],
   fallbackUsed = true,
-  falRequestId?: string
+  falRequestId?: string,
+  ownerId?: string | null
 ): Promise<ProcessAssetsResult> {
   const editframeKey = Deno.env.get('EDITFRAME_API_KEY');
   const fallbackVisuals = assets.filter((asset) => asset.type !== 'audio');
@@ -875,7 +878,7 @@ async function renderWithEditframeFallback(
       { ...fallbackBasePayload, editframeRenderId: renderId, stage: 'uploading_final_video' },
       90
     );
-    const publicUrl = await uploadFinalVideo(supabaseAdmin, projectId, jobId, exportBucket, bytes);
+    const publicUrl = await uploadFinalVideo(supabaseAdmin, projectId, jobId, exportBucket, bytes, ownerId);
     const providerPayload = {
       ...fallbackBasePayload,
       editframeRenderId: renderId,
@@ -921,7 +924,8 @@ export async function processAssetsRemote(
   assets: ExportAsset[],
   jobId: string,
   exportBucket: string,
-  settings: ExportSettings = {}
+  settings: ExportSettings = {},
+  ownerId?: string | null
 ): Promise<ProcessAssetsResult> {
   const sorted = [...assets].sort((a, b) => a.order_index - b.order_index);
   const initialVisualCount = sorted.filter((a) => a.type === 'image' || a.type === 'video').length;
@@ -961,7 +965,9 @@ export async function processAssetsRemote(
       settings,
       'Editframe selected by export settings',
       shotFailures,
-      false
+      false,
+      undefined,
+      ownerId
     );
   }
 
@@ -1012,7 +1018,7 @@ export async function processAssetsRemote(
       { ...providerPayload, stage: 'uploading_final_video' },
       90
     );
-    const publicUrl = await uploadFinalVideo(supabaseAdmin, projectId, jobId, exportBucket, bytes);
+    const publicUrl = await uploadFinalVideo(supabaseAdmin, projectId, jobId, exportBucket, bytes, ownerId);
     const completedPayload = {
       ...providerPayload,
       stage: 'completed',
@@ -1067,7 +1073,8 @@ export async function processAssetsRemote(
       falMessage,
       shotFailures,
       true,
-      falRequestId
+      falRequestId,
+      ownerId
     );
   }
 }

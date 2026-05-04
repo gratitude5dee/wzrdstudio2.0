@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, startTransition, useEffect, useMemo, useRef, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 
 function safeTimeAgo(dateStr: string | null | undefined): string {
@@ -109,14 +109,12 @@ import type {
   KanvasMode,
   KanvasStudio,
 } from "@/features/kanvas/types";
-import { WorldviewSection } from "@/components/worldview";
-import { CharacterCreationSection } from "@/components/character-creation";
 import { KanvasSidebar } from "@/components/kanvas/KanvasSidebar";
-import { VideoStudioSection } from "@/components/kanvas/VideoStudioSection";
-import ImageStudioSection from "@/components/kanvas/ImageStudioSection";
-import EditStudioSection from "@/components/kanvas/EditStudioSection";
-import LipsyncStudioSection from "@/components/kanvas/LipsyncStudioSection";
-import CinemaStudioSection from "@/components/kanvas/CinemaStudioSection";
+import {
+  isFalKanvasModel,
+  isGmiKanvasModel,
+  sortKanvasModelsFalFirst,
+} from "@/features/kanvas/modelProvider";
 import { MentionDropdown } from "@/components/character-creation/MentionDropdown";
 import { useCharacterMention } from "@/hooks/useCharacterMention";
 import { useUserTier, type UserTier } from "@/hooks/useUserTier";
@@ -129,6 +127,24 @@ const ACCEPTED_TYPES: Record<KanvasAssetType, string> = {
   video: "video/*",
   audio: "audio/*",
 };
+
+const ImageStudioSection = lazy(() => import("@/components/kanvas/ImageStudioSection"));
+const EditStudioSection = lazy(() => import("@/components/kanvas/EditStudioSection"));
+const LipsyncStudioSection = lazy(() => import("@/components/kanvas/LipsyncStudioSection"));
+const CinemaStudioSection = lazy(() => import("@/components/kanvas/CinemaStudioSection"));
+const VideoStudioSection = lazy(() =>
+  import("@/components/kanvas/VideoStudioSection").then((module) => ({
+    default: module.VideoStudioSection,
+  }))
+);
+const WorldviewSection = lazy(() =>
+  import("@/components/worldview").then((module) => ({ default: module.WorldviewSection }))
+);
+const CharacterCreationSection = lazy(() =>
+  import("@/components/character-creation").then((module) => ({
+    default: module.CharacterCreationSection,
+  }))
+);
 
 const STUDIO_ICONS: Record<KanvasStudio, typeof ImageIcon> = {
   image: ImageIcon,
@@ -226,23 +242,21 @@ function hasSettings(values: Record<string, unknown>): boolean {
 function pickPreferredKanvasModel(
   models: KanvasModel[],
   selectedModelId: string,
-  preferredProvider: "gmi-cloud" | "fal-ai",
+  _preferredProvider: "gmi-cloud" | "fal-ai",
 ): KanvasModel | null {
+  const sortedModels = sortKanvasModelsFalFirst(models);
   if (selectedModelId) {
-    const explicit = models.find((model) => model.id === selectedModelId);
+    const explicit = sortedModels.find((model) => model.id === selectedModelId);
     if (explicit) {
       return explicit;
     }
   }
 
-  const preferredModel =
-    preferredProvider === "fal-ai"
-      ? models.find((model) => model.id.startsWith("fal-ai/"))
-      : models.find((model) => model.id.startsWith("gmi/"));
-  const gmiDefault = models.find((model) => model.id.startsWith("gmi/"));
-  const falDefault = models.find((model) => model.id.startsWith("fal-ai/"));
+  const falDefault = sortedModels.find(isFalKanvasModel);
+  const catalogDefault = sortedModels.find((model) => model.isDefault);
+  const gmiDefault = sortedModels.find(isGmiKanvasModel);
 
-  return preferredModel ?? gmiDefault ?? falDefault ?? models[0] ?? null;
+  return falDefault ?? catalogDefault ?? gmiDefault ?? sortedModels[0] ?? null;
 }
 
 function StudioNavButton({
@@ -785,6 +799,7 @@ export default function KanvasPage() {
   const [creditsDialogOpen, setCreditsDialogOpen] = useState(false);
   const [creditsInfo, setCreditsInfo] = useState<{ required: number; available: number } | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [kanvasSetupError, setKanvasSetupError] = useState<string | null>(null);
   const [uploadingByType, setUploadingByType] = useState<Record<KanvasAssetType, boolean>>({
     image: false,
     video: false,
@@ -825,7 +840,6 @@ export default function KanvasPage() {
   const [lipsyncModelId, setLipsyncModelId] = useState("");
   const [lipsyncSettings, setLipsyncSettings] = useState<Record<string, unknown>>({});
 
-  const studioModels = modelsByStudio[studio] ?? [];
   const imageMode = imageReferenceIds.length > 0 ? "image-to-image" : "text-to-image";
   const videoReferenceAsset = useMemo(
     () =>
@@ -866,7 +880,7 @@ export default function KanvasPage() {
     [modelsByStudio.cinema]
   );
   const currentEditModels = useMemo(
-    () => modelsByStudio.edit ?? [],
+    () => sortKanvasModelsFalFirst((modelsByStudio.edit ?? []).filter(isFalKanvasModel)),
     [modelsByStudio.edit]
   );
   const currentLipsyncModels = useMemo(
@@ -890,6 +904,10 @@ export default function KanvasPage() {
     () => pickPreferredKanvasModel(currentLipsyncModels, lipsyncModelId, defaultProvider),
     [currentLipsyncModels, defaultProvider, lipsyncModelId]
   );
+  const currentEditModel = useMemo(
+    () => pickPreferredKanvasModel(currentEditModels, "", "fal-ai"),
+    [currentEditModels]
+  );
 
   const currentModel =
     studio === "image"
@@ -898,6 +916,8 @@ export default function KanvasPage() {
         ? currentVideoModel
         : studio === "cinema"
           ? currentCinemaModel
+          : studio === "edit"
+            ? currentEditModel
           : currentLipsyncModel;
 
   const currentStudioJobs = useMemo(
@@ -931,20 +951,21 @@ export default function KanvasPage() {
         if (assetsResult.status === "rejected") console.warn("Failed to load assets:", assetsResult.reason);
         if (jobsResult.status === "rejected") console.warn("Failed to load jobs:", jobsResult.reason);
 
-        const modelGroups = modelResults.map((r, i) => {
-          if (r.status === "fulfilled") return r.value;
-          console.warn(`Failed to load models for ${studioKeys[i]}:`, r.reason);
-          return [] as KanvasModel[];
+        const nextModelsByStudio: Partial<Record<KanvasStudio, KanvasModel[]>> = {};
+        modelResults.forEach((r, i) => {
+          const studioKey = studioKeys[i];
+          if (!studioKey) return;
+          if (r.status === "fulfilled") {
+            nextModelsByStudio[studioKey] = r.value;
+          } else {
+            console.warn(`Failed to load models for ${studioKey}:`, r.reason);
+            nextModelsByStudio[studioKey] = [];
+          }
         });
 
         setAssets(loadedAssets);
         setJobs(loadedJobs);
-        setModelsByStudio({
-          image: modelGroups[0],
-          video: modelGroups[1],
-          lipsync: modelGroups[2],
-          cinema: modelGroups[3],
-        });
+        setModelsByStudio(nextModelsByStudio);
       } catch (error) {
         if (!cancelled) {
           toast.error(
@@ -1259,6 +1280,7 @@ export default function KanvasPage() {
   async function handleGenerate() {
     try {
       const request = buildCurrentRequest();
+      setKanvasSetupError(null);
       setSubmitting(true);
       const job = await submitKanvasJob(request);
       setJobs((current) => mergeJobs(current, [job]));
@@ -1274,7 +1296,13 @@ export default function KanvasPage() {
         });
         setCreditsDialogOpen(true);
       } else {
-        toast.error(error instanceof Error ? error.message : "Generation failed");
+        const message = error instanceof Error ? error.message : "Generation failed";
+        if (/FAL_KEY/i.test(message) && isFalKanvasModel(currentModel)) {
+          setKanvasSetupError(
+            "Fal is selected for this Kanvas section, but the Supabase Edge Function is missing FAL_KEY. Add FAL_KEY as a Supabase secret, then retry."
+          );
+        }
+        toast.error(message);
       }
     } finally {
       setSubmitting(false);
@@ -1441,7 +1469,25 @@ export default function KanvasPage() {
           </header>
 
           <div className="mx-auto max-w-[1600px] px-3 py-2 pb-20 md:pb-12 md:px-4">
+            {kanvasSetupError && (
+              <div className="mb-3 rounded-2xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+                {kanvasSetupError}
+              </div>
+            )}
+            {currentModel && (
+              <span className="sr-only">Selected Kanvas model: {currentModel.name}</span>
+            )}
             <div className="min-w-0">
+            <Suspense
+              fallback={
+                <div className="flex min-h-[420px] items-center justify-center rounded-3xl border border-white/10 bg-white/[0.03]">
+                  <div className="text-center">
+                    <Loader2 className="mx-auto mb-3 h-6 w-6 animate-spin text-orange-400" />
+                    <p className="text-sm font-semibold text-white">Loading {KANVAS_STUDIO_META[studio].label}</p>
+                  </div>
+                </div>
+              }
+            >
             {studio === "image" ? (
               <ImageStudioSection
                 prompt={imagePrompt}
@@ -1562,6 +1608,7 @@ export default function KanvasPage() {
                 characterMentions={allCharacterMentions}
               />
             ) : null}
+            </Suspense>
             </div>
           </div>
 

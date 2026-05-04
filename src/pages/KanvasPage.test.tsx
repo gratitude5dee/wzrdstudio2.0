@@ -58,6 +58,43 @@ const baseModels: Record<string, KanvasModel[]> = {
       aliases: [],
     },
   ],
+  edit: [
+    {
+      id: "gmi/gpt-image-2",
+      name: "GPT Image 2 Edit",
+      description: "Non-Fal edit model",
+      studio: "edit",
+      mode: "image-to-image",
+      mediaType: "image",
+      workflowType: "image-edit",
+      uiGroup: "advanced",
+      credits: 5,
+      requiresAssets: ["image"],
+      supportsPrompt: true,
+      controls: [],
+      defaults: {},
+      aliases: [],
+    },
+    {
+      id: "fal-ai/nano-banana-pro/edit",
+      name: "Nano Banana Edit",
+      description: "Fal edit model",
+      provider: "fal-ai",
+      providerLabel: "Fal",
+      endpointId: "fal-ai/nano-banana-pro/edit",
+      studio: "edit",
+      mode: "image-to-image",
+      mediaType: "image",
+      workflowType: "image-edit",
+      uiGroup: "advanced",
+      credits: 8,
+      requiresAssets: ["image"],
+      supportsPrompt: true,
+      controls: [],
+      defaults: {},
+      aliases: [],
+    },
+  ],
   video: [
     {
       id: "gmi/kling-v3-omni",
@@ -179,6 +216,9 @@ const baseModels: Record<string, KanvasModel[]> = {
       id: "veed/fabric-1.0",
       name: "VEED Fabric 1.0",
       description: "Talking head",
+      provider: "fal-ai",
+      providerLabel: "Fal",
+      endpointId: "veed/fabric-1.0",
       studio: "lipsync",
       mode: "talking-head",
       mediaType: "video",
@@ -223,6 +263,53 @@ vi.mock("@/features/kanvas/service", () => ({
   uploadKanvasAsset: vi.fn(async () => {
     throw new Error("not used");
   }),
+}));
+
+vi.mock("@/components/kanvas/EditStudioSection", () => ({
+  default: ({ models }: { models: KanvasModel[] }) => (
+    <section>
+      <h1>TRANSFORM YOUR IMAGES</h1>
+      {models.map((model) => (
+        <p key={model.id}>{model.name}</p>
+      ))}
+    </section>
+  ),
+}));
+
+vi.mock("@/components/kanvas/VideoStudioSection", () => ({
+  VideoStudioSection: ({
+    currentModel,
+    models,
+  }: {
+    currentModel: KanvasModel | null;
+    models: KanvasModel[];
+  }) => (
+    <section>
+      <button type="button">Create Video</button>
+      <p>{currentModel?.name ?? "No model"}</p>
+      {models.map((model) => (
+        <span key={model.id}>{model.name}</span>
+      ))}
+    </section>
+  ),
+}));
+
+vi.mock("@/components/kanvas/LipsyncStudioSection", () => ({
+  default: ({
+    currentModel,
+    models,
+  }: {
+    currentModel: KanvasModel | null;
+    models: KanvasModel[];
+  }) => (
+    <section>
+      <button type="button">Talking Head</button>
+      <p>{currentModel?.name ?? "No model"}</p>
+      {models.map((model) => (
+        <span key={model.id}>{model.name}</span>
+      ))}
+    </section>
+  ),
 }));
 
 vi.mock("@/hooks/useUserTier", () => ({
@@ -272,15 +359,15 @@ describe("KanvasPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("defaults free users to the GMI image model", async () => {
+  it("defaults free users to the Fal image model", async () => {
     renderPage("/kanvas");
 
     await waitFor(() => {
-      expect(screen.getAllByText("Seedream 5 Lite")[0]).toBeInTheDocument();
+      expect(screen.getAllByText("Nano Banana Pro")[0]).toBeInTheDocument();
     });
   });
 
-  it("keeps paid users on the GMI image default unless they switch", async () => {
+  it("keeps paid users on the Fal image default unless they switch", async () => {
     mockedUseUserTier.mockReturnValue({
       tier: "pro",
       isFree: false,
@@ -296,7 +383,7 @@ describe("KanvasPage", () => {
     });
   });
 
-  it("defaults free users to the GMI video model on the video studio route", async () => {
+  it("defaults free users to the Fal video model on the video studio route", async () => {
     renderPage("/kanvas?studio=video");
 
     expect(
@@ -304,8 +391,19 @@ describe("KanvasPage", () => {
     ).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(screen.getAllByText("Kling V3 Omni")[0]).toBeInTheDocument();
+      expect(screen.getAllByText("Sora 2")[0]).toBeInTheDocument();
     });
+  });
+
+  it("loads edit models into the edit bucket and filters it to Fal-compatible options", async () => {
+    renderPage("/kanvas?studio=edit");
+
+    expect(await screen.findByText(/TRANSFORM YOUR/i)).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Nano Banana Edit")[0]).toBeInTheDocument();
+    });
+    expect(screen.queryByText("GPT Image 2 Edit")).not.toBeInTheDocument();
   });
 
   it("respects the studio query param and switches studios from the shell nav", async () => {
@@ -320,6 +418,9 @@ describe("KanvasPage", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /talking head/i })).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(screen.getAllByText("VEED Fabric 1.0")[0]).toBeInTheDocument();
     });
   });
 });

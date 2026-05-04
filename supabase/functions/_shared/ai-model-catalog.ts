@@ -585,6 +585,7 @@ export function toKanvasCatalogModel(
     aliases: model.aliases,
     endpointId: model.endpointId,
     provider: model.provider,
+    providerLabel: model.providerLabel,
     isDefault: model.isDefault,
     defaultRank: model.defaultRank,
   };

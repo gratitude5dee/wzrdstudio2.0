@@ -34,6 +34,11 @@ export interface KanvasModel {
   id: string;
   name: string;
   description: string;
+  provider?: string;
+  providerLabel?: string;
+  endpointId?: string;
+  isDefault?: boolean;
+  defaultRank?: number;
   studio: KanvasStudio;
   mode: KanvasMode;
   mediaType: KanvasMediaType;

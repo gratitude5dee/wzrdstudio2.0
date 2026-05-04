@@ -238,7 +238,8 @@ serve(async (req) => {
         assets,
         job.id,
         EXPORT_BUCKET,
-        settings
+        settings,
+        user.id
       );
       const { publicUrl, shotFailures } = result;
 

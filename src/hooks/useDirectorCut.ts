@@ -7,10 +7,25 @@ const POLL_INTERVAL_MS = 2000;
 export interface DirectorCutSummary {
   totalShots: number;
   syncedAssets: number;
+  visualAssets: number;
+  readyShots: number;
   readyVideos: number;
   fallbackImages: number;
   missingShots: number;
+  missingShotDetails: DirectorCutMissingShotDetail[];
   audioAssets: number;
+  canExport: boolean;
+  blockingReason: string | null;
+}
+
+export interface DirectorCutMissingShotDetail {
+  shotId: string;
+  sceneId: string | null;
+  sceneNumber: number | null;
+  shotNumber: number | null;
+  reason: string;
+  imageStatus?: string | null;
+  videoStatus?: string | null;
 }
 
 /**
@@ -108,6 +123,100 @@ const normalizeShotFailures = (value: unknown): ShotFailureInfo[] => {
     })
     .filter((failure): failure is ShotFailureInfo => Boolean(failure));
 };
+
+const normalizeMissingShotDetails = (value: unknown): DirectorCutMissingShotDetail[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const record = item as Record<string, unknown>;
+      const shotId = asString(record.shotId);
+      const sceneId = asString(record.sceneId);
+      const sceneNumber = asNumber(record.sceneNumber);
+      const shotNumber = asNumber(record.shotNumber);
+      const reason = asString(record.reason) ?? 'Missing shot image or video';
+      if (!shotId) return null;
+      return {
+        shotId,
+        sceneId,
+        sceneNumber,
+        shotNumber,
+        reason,
+        imageStatus: asString(record.imageStatus),
+        videoStatus: asString(record.videoStatus),
+      };
+    })
+    .filter((detail): detail is DirectorCutMissingShotDetail => Boolean(detail));
+};
+
+const normalizeDirectorCutSummary = (value: unknown): DirectorCutSummary => {
+  const record = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+  const readyVideos = asNumber(record.readyVideos) ?? 0;
+  const fallbackImages = asNumber(record.fallbackImages) ?? 0;
+  const visualAssets = asNumber(record.visualAssets) ?? readyVideos + fallbackImages;
+  const missingShots = asNumber(record.missingShots) ?? 0;
+  const totalShots = asNumber(record.totalShots) ?? 0;
+  const blockingReason =
+    asString(record.blockingReason) ??
+    (totalShots === 0
+      ? "No ordered shots are available for Director's Cut."
+      : missingShots > 0
+        ? `${missingShots} ordered ${missingShots === 1 ? 'shot is' : 'shots are'} missing an image or video. Generate all visuals before starting Director's Cut.`
+        : visualAssets === 0
+          ? "No shot image or video assets are available for Director's Cut."
+          : null);
+  const canExport =
+    typeof record.canExport === 'boolean'
+      ? record.canExport
+      : totalShots > 0 && visualAssets > 0 && missingShots === 0;
+
+  return {
+    totalShots,
+    syncedAssets: asNumber(record.syncedAssets) ?? 0,
+    visualAssets,
+    readyShots: asNumber(record.readyShots) ?? visualAssets,
+    readyVideos,
+    fallbackImages,
+    missingShots,
+    missingShotDetails: normalizeMissingShotDetails(record.missingShotDetails),
+    audioAssets: asNumber(record.audioAssets) ?? 0,
+    canExport,
+    blockingReason: canExport ? null : blockingReason,
+  };
+};
+
+async function extractDirectorCutFunctionError(
+  error: unknown,
+  fallback: string
+): Promise<{ message: string; summary?: DirectorCutSummary }> {
+  const record = error && typeof error === 'object' ? (error as Record<string, unknown>) : {};
+  const response =
+    record.context instanceof Response
+      ? record.context
+      : record.response instanceof Response
+        ? record.response
+        : null;
+
+  if (response) {
+    try {
+      const body = (await response.clone().json()) as Record<string, unknown>;
+      const message = asString(body.message) ?? asString(body.error) ?? fallback;
+      return {
+        message,
+        summary: body.summary ? normalizeDirectorCutSummary(body.summary) : undefined,
+      };
+    } catch {
+      // Fall through to the generic message extraction below.
+    }
+  }
+
+  return {
+    message:
+      error instanceof Error && error.message
+        ? error.message
+        : asString(record.message) ?? asString(record.error) ?? fallback,
+  };
+}
 
 const buildDebugSummary = (payload: Record<string, unknown>, providerJobId?: string | null): DirectorCutDebugSummary => ({
   renderer: asString(payload.renderer),
@@ -249,17 +358,12 @@ export function useDirectorCut(projectId: string | undefined) {
       });
 
       if (invokeError) {
-        throw new Error(invokeError.message || 'Failed to sync timeline assets');
+        const details = await extractDirectorCutFunctionError(invokeError, 'Failed to sync timeline assets');
+        if (details.summary) setSummary(details.summary);
+        throw new Error(details.message);
       }
 
-      const nextSummary: DirectorCutSummary = {
-        totalShots: data?.summary?.totalShots ?? 0,
-        syncedAssets: data?.summary?.syncedAssets ?? 0,
-        readyVideos: data?.summary?.readyVideos ?? 0,
-        fallbackImages: data?.summary?.fallbackImages ?? 0,
-        missingShots: data?.summary?.missingShots ?? 0,
-        audioAssets: data?.summary?.audioAssets ?? 0,
-      };
+      const nextSummary = normalizeDirectorCutSummary(data?.summary);
 
       setSummary(nextSummary);
       toast.success("Timeline assets synced for Director's Cut");
@@ -289,8 +393,11 @@ export function useDirectorCut(projectId: string | undefined) {
         return null;
       }
 
-      if (ensuredSummary.syncedAssets === 0) {
-        throw new Error("No timeline assets available. Add shots before starting Director's Cut.");
+      if (!ensuredSummary.canExport) {
+        throw new Error(
+          ensuredSummary.blockingReason ??
+            "Director's Cut is blocked until every ordered shot has an image or video."
+        );
       }
 
       const { data, error: invokeError } = await supabase.functions.invoke('director-cut', {
@@ -301,7 +408,9 @@ export function useDirectorCut(projectId: string | undefined) {
       });
 
       if (invokeError) {
-        throw new Error(invokeError.message || "Failed to start Director's Cut");
+        const details = await extractDirectorCutFunctionError(invokeError, "Failed to start Director's Cut");
+        if (details.summary) setSummary(details.summary);
+        throw new Error(details.message);
       }
 
       const jobId = data?.jobId as string | undefined;

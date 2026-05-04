@@ -203,14 +203,42 @@ const DirectorCutPage = () => {
             </Button>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-6">
+          <div className="grid gap-3 md:grid-cols-7">
             <StatCard label="Shots" value={summary?.totalShots ?? 0} />
+            <StatCard label="Ready Shots" value={summary?.readyShots ?? 0} tone="success" />
             <StatCard label="Synced Assets" value={summary?.syncedAssets ?? 0} />
             <StatCard label="Ready Videos" value={summary?.readyVideos ?? 0} tone="success" />
             <StatCard label="Image Fallbacks" value={summary?.fallbackImages ?? 0} tone="warn" />
             <StatCard label="Audio" value={summary?.audioAssets ?? 0} />
             <StatCard label="Missing" value={summary?.missingShots ?? 0} tone="warn" />
           </div>
+
+          {summary && !summary.canExport && (
+            <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-5">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" />
+                <div className="min-w-0">
+                  <p className="font-medium text-amber-100">Full-cut export is blocked</p>
+                  <p className="mt-1 text-sm text-amber-100/75">
+                    {summary.blockingReason ??
+                      "Generate an image or video for every ordered shot before starting Director's Cut."}
+                  </p>
+                  {summary.missingShotDetails.length > 0 && (
+                    <ul className="mt-3 grid gap-1 text-xs text-amber-100/65 sm:grid-cols-2">
+                      {summary.missingShotDetails.slice(0, 10).map((shot) => (
+                        <li key={shot.shotId}>
+                          Scene {shot.sceneNumber ?? 'n/a'}, shot {shot.shotNumber ?? 'n/a'}: {shot.reason}
+                        </li>
+                      ))}
+                      {summary.missingShotDetails.length > 10 && (
+                        <li>+{summary.missingShotDetails.length - 10} more missing shots</li>
+                      )}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="rounded-2xl border border-zinc-700/60 bg-zinc-900/60 p-5">
             <div className="flex flex-wrap gap-3">
@@ -234,7 +262,7 @@ const DirectorCutPage = () => {
 
               <Button
                 onClick={() => startDirectorCut()}
-                disabled={isWorking || !summary || summary.syncedAssets === 0}
+                disabled={isWorking || !summary?.canExport}
                 className="bg-gradient-to-r from-cyan-500 to-blue-500 text-white hover:from-cyan-400 hover:to-blue-400"
               >
                 {isWorking ? (
@@ -350,7 +378,7 @@ const DirectorCutPage = () => {
                     size="sm"
                     className="bg-rose-500 text-white hover:bg-rose-400"
                     onClick={() => startDirectorCut({ reuseSyncedAssets: true })}
-                    disabled={isWorking}
+                    disabled={isWorking || !summary?.canExport}
                   >
                     Retry Export
                   </Button>

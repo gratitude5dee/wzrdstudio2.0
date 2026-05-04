@@ -17,6 +17,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { KanvasAsset, KanvasAssetType, KanvasJob, KanvasModel } from "@/features/kanvas/types";
 import { getJobPrimaryUrl } from "@/features/kanvas/helpers";
+import { getKanvasModelProvider } from "@/features/kanvas/modelProvider";
 import { useUserTier, sortModelsForTier } from "@/hooks/useUserTier";
 
 /* ------------------------------------------------------------------ */
@@ -68,6 +69,7 @@ const USE_CASE_CARDS = [
 const ASPECT_RATIOS = ["1:1", "3:4", "4:3", "16:9", "9:16"] as const;
 
 const PROVIDER_GROUPS: { provider: string; icon: string; label: string }[] = [
+  { provider: "fal-ai", icon: "F", label: "Fal" },
   { provider: "gmi-cloud", icon: "✦", label: "GMI Cloud (Free)" },
   { provider: "google", icon: "G", label: "Google" },
   { provider: "black_forest_labs", icon: "B", label: "Black Forest Labs" },
@@ -80,8 +82,9 @@ const PROVIDER_GROUPS: { provider: string; icon: string; label: string }[] = [
 
 function getModelProvider(model: KanvasModel | undefined | null): string {
   if (!model) return "other";
+  const provider = getKanvasModelProvider(model);
+  if (provider !== "other") return provider;
   const id = model.id.toLowerCase();
-  if (id.startsWith("gmi/")) return "gmi-cloud";
   if (id.includes("nano-banana") || id.includes("gpt-image")) return id.includes("gpt") ? "openai" : "google";
   if (id.includes("flux")) return "black_forest_labs";
   if (id.includes("qwen")) return "alibaba";

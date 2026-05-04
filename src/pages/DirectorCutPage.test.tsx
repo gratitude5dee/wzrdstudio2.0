@@ -67,10 +67,15 @@ describe('DirectorCutPage', () => {
       summary: {
         totalShots: 1,
         syncedAssets: 1,
+        visualAssets: 1,
+        readyShots: 1,
         readyVideos: 0,
         fallbackImages: 1,
         missingShots: 0,
+        missingShotDetails: [],
         audioAssets: 0,
+        canExport: true,
+        blockingReason: null,
       },
       job: {
         jobId: 'job-failed',
@@ -128,5 +133,45 @@ describe('DirectorCutPage', () => {
     expect(screen.getAllByText('bad source').length).toBeGreaterThan(0);
     expect(screen.getByText('Shot #1: URL range preflight failed (403)')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /copy debug details/i })).toBeInTheDocument();
+  });
+
+  it('disables export and shows missing-shot preflight details', () => {
+    useDirectorCutMock.mockReturnValue({
+      summary: {
+        totalShots: 2,
+        syncedAssets: 1,
+        visualAssets: 1,
+        readyShots: 1,
+        readyVideos: 1,
+        fallbackImages: 0,
+        missingShots: 1,
+        missingShotDetails: [
+          {
+            shotId: 'shot-2',
+            sceneId: 'scene-1',
+            sceneNumber: 1,
+            shotNumber: 2,
+            reason: 'Missing shot image or video',
+          },
+        ],
+        audioAssets: 0,
+        canExport: false,
+        blockingReason:
+          "1 ordered shot is missing an image or video. Generate all visuals before starting Director's Cut.",
+      },
+      job: null,
+      error: null,
+      isSyncing: false,
+      isStarting: false,
+      isPolling: false,
+      syncAssets: vi.fn(async () => null),
+      startDirectorCut: vi.fn(async () => null),
+    });
+
+    renderPage();
+
+    expect(screen.getByText('Full-cut export is blocked')).toBeInTheDocument();
+    expect(screen.getByText(/Scene 1, shot 2: Missing shot image or video/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /start director/i })).toBeDisabled();
   });
 });

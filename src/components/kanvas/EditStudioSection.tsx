@@ -9,8 +9,8 @@ import { toast } from 'sonner';
 import { imageEditService } from '@/services/imageEditService';
 import type { ImageEditOperation } from '@/types/imageEdit';
 import type { KanvasAsset, KanvasJob, KanvasAssetType, KanvasModel } from '@/features/kanvas/types';
+import { isFalKanvasModel } from '@/features/kanvas/modelProvider';
 import EditCanvas, { type EditCanvasHandle } from './EditCanvas';
-import { useUserTier } from "@/hooks/useUserTier";
 
 /* ── Types ── */
 type EditFeature = 'inpaint' | 'removeBackground' | 'upscale' | 'relight' | 'stylize' | 'skinEnhance' | 'angles' | 'productPlacement';
@@ -29,6 +29,8 @@ interface EditModelItem {
   name: string;
   badge?: 'TOP' | 'NEW';
   credits: number;
+  provider?: string;
+  providerLabel?: string;
 }
 
 /* ── Data ── */
@@ -74,22 +76,20 @@ interface EditStudioProps {
 type CanvasTool = 'select' | 'draw' | 'eraser' | 'hand';
 
 export default function EditStudioSection({ assets, jobs, selectedJob, models, uploading, onUpload }: EditStudioProps) {
-  const { isFree } = useUserTier();
   const [selectedFeature, setSelectedFeature] = useState<EditFeature>('inpaint');
+  const [setupError, setSetupError] = useState<string | null>(null);
   const availableModels = useMemo<EditModelItem[]>(
     () =>
-      models.map((model) => ({
+      models.filter(isFalKanvasModel).map((model) => ({
         id: model.id,
         name: model.name,
         credits: model.credits,
+        provider: model.provider,
+        providerLabel: model.providerLabel,
       })),
     [models]
   );
-  const [selectedModelId, setSelectedModelId] = useState(
-    isFree
-      ? availableModels.find((model) => model.id.startsWith('gmi/'))?.id ?? availableModels[0]?.id ?? ''
-      : availableModels.find((model) => !model.id.startsWith('gmi/'))?.id ?? availableModels[0]?.id ?? ''
-  );
+  const [selectedModelId, setSelectedModelId] = useState(availableModels[0]?.id ?? '');
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [activeTool, setActiveTool] = useState<CanvasTool>('draw');
   const [inpaintPrompt, setInpaintPrompt] = useState('');
@@ -113,14 +113,8 @@ export default function EditStudioSection({ assets, jobs, selectedJob, models, u
     if (availableModels.some((model) => model.id === selectedModelId)) {
       return;
     }
-    const fallbackId =
-      (isFree
-        ? availableModels.find((model) => model.id.startsWith('gmi/'))?.id
-        : availableModels.find((model) => !model.id.startsWith('gmi/'))?.id) ??
-      availableModels[0]?.id ??
-      '';
-    setSelectedModelId(fallbackId);
-  }, [availableModels, isFree, selectedModelId]);
+    setSelectedModelId(availableModels[0]?.id ?? '');
+  }, [availableModels, selectedModelId]);
 
   const selectedAsset = useMemo(
     () => assets.find((a) => a.id === selectedAssetId) ?? null,
@@ -175,6 +169,7 @@ export default function EditStudioSection({ assets, jobs, selectedJob, models, u
     }
 
     setIsProcessing(true);
+    setSetupError(null);
     try {
       let maskDataUrl: string | undefined;
 
@@ -214,7 +209,13 @@ export default function EditStudioSection({ assets, jobs, selectedJob, models, u
         toast.error('No result returned');
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Operation failed');
+      const message = err instanceof Error ? err.message : 'Operation failed';
+      if (/FAL_KEY/i.test(message)) {
+        setSetupError(
+          'Edit Studio is Fal-backed. Add FAL_KEY as a Supabase Edge Function secret, then retry this edit.'
+        );
+      }
+      toast.error(message);
     } finally {
       setIsProcessing(false);
     }
@@ -334,6 +335,9 @@ export default function EditStudioSection({ assets, jobs, selectedJob, models, u
             {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
             {uploading ? 'Uploading…' : 'Upload to Start Editing'}
           </button>
+          <p className="mb-2 text-[10px] text-zinc-500">
+            {selectedModel ? `Fal edit model: ${selectedModel.name}` : 'No Fal edit models available'}
+          </p>
           <p className="text-[10px] text-zinc-600">Supports PNG, JPG, WebP up to 20MB</p>
         </div>
       </div>
@@ -698,6 +702,11 @@ export default function EditStudioSection({ assets, jobs, selectedJob, models, u
           )}
 
           <div className="bg-[#131313]/95 backdrop-blur-2xl border border-white/[0.06] rounded-2xl p-3 flex items-center gap-3 shadow-[0_10px_40px_rgba(0,0,0,0.5)]">
+            {setupError && (
+              <div className="absolute -top-14 left-3 right-3 rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">
+                {setupError}
+              </div>
+            )}
             {/* Active feature pill */}
             <div className="flex-none flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.06]">
               <activeFeature.icon className="h-3.5 w-3.5 text-[#f97316]" />

@@ -410,8 +410,51 @@ describe('useDirectorCut', () => {
     });
 
     expect(result.current.error).toBe(
-      "No timeline assets available. Add shots before starting Director's Cut."
+      "3 ordered shots are missing an image or video. Generate all visuals before starting Director's Cut."
     );
+    expect(invokeMock).not.toHaveBeenCalledWith('director-cut', {
+      body: { action: 'create', projectId: 'project-1' },
+    });
+  });
+
+  it('blocks audio-only synced assets before creating a job', async () => {
+    invokeMock.mockImplementation(async (_name: string, args: { body: { action: string } }) => {
+      if (args.body.action === 'sync') {
+        return {
+          data: {
+            summary: {
+              totalShots: 2,
+              syncedAssets: 1,
+              visualAssets: 0,
+              readyShots: 0,
+              readyVideos: 0,
+              fallbackImages: 0,
+              missingShots: 2,
+              audioAssets: 1,
+              canExport: false,
+              blockingReason:
+                "2 ordered shots are missing an image or video. Generate all visuals before starting Director's Cut.",
+            },
+          },
+          error: null,
+        };
+      }
+      return { data: {}, error: null };
+    });
+
+    const { result } = renderHook(() => useDirectorCut('project-1'));
+
+    await act(async () => {
+      const response = await result.current.startDirectorCut();
+      expect(response).toBeNull();
+    });
+
+    expect(result.current.error).toBe(
+      "2 ordered shots are missing an image or video. Generate all visuals before starting Director's Cut."
+    );
+    expect(invokeMock).not.toHaveBeenCalledWith('director-cut', {
+      body: { action: 'create', projectId: 'project-1' },
+    });
   });
 
   it('can retry using already synced assets without another sync call', async () => {
