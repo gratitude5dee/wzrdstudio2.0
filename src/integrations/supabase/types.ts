@@ -1264,7 +1264,6 @@ export type Database = {
       }
       character_blueprint_images: {
         Row: {
-          asset_id: string | null
           blueprint_id: string
           created_at: string
           generation_params: Json | null
@@ -1276,7 +1275,6 @@ export type Database = {
           variant: string | null
         }
         Insert: {
-          asset_id?: string | null
           blueprint_id: string
           created_at?: string
           generation_params?: Json | null
@@ -1288,7 +1286,6 @@ export type Database = {
           variant?: string | null
         }
         Update: {
-          asset_id?: string | null
           blueprint_id?: string
           created_at?: string
           generation_params?: Json | null
@@ -1307,13 +1304,6 @@ export type Database = {
             referencedRelation: "character_blueprints"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "character_blueprint_images_asset_id_fkey"
-            columns: ["asset_id"]
-            isOneToOne: false
-            referencedRelation: "project_assets"
-            referencedColumns: ["id"]
-          },
         ]
       }
       character_blueprints: {
@@ -1322,11 +1312,6 @@ export type Database = {
           created_at: string
           description: string | null
           face_details: Json | null
-          gmi_element_error: string | null
-          gmi_element_id: string | null
-          gmi_element_request_id: string | null
-          gmi_element_status: string | null
-          gmi_element_updated_at: string | null
           id: string
           image_url: string | null
           is_favorite: boolean | null
@@ -1351,11 +1336,6 @@ export type Database = {
           created_at?: string
           description?: string | null
           face_details?: Json | null
-          gmi_element_error?: string | null
-          gmi_element_id?: string | null
-          gmi_element_request_id?: string | null
-          gmi_element_status?: string | null
-          gmi_element_updated_at?: string | null
           id?: string
           image_url?: string | null
           is_favorite?: boolean | null
@@ -1380,11 +1360,6 @@ export type Database = {
           created_at?: string
           description?: string | null
           face_details?: Json | null
-          gmi_element_error?: string | null
-          gmi_element_id?: string | null
-          gmi_element_request_id?: string | null
-          gmi_element_status?: string | null
-          gmi_element_updated_at?: string | null
           id?: string
           image_url?: string | null
           is_favorite?: boolean | null
@@ -2321,192 +2296,6 @@ export type Database = {
         }
         Relationships: []
       }
-      billing_credit_packs: {
-        Row: {
-          created_at: string
-          credits: number
-          display_name: string
-          is_active: boolean
-          metadata: Json
-          pack_code: string
-          price_cents: number
-          sort_order: number
-          stripe_price_id: string | null
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          credits: number
-          display_name: string
-          is_active?: boolean
-          metadata?: Json
-          pack_code: string
-          price_cents: number
-          sort_order?: number
-          stripe_price_id?: string | null
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          credits?: number
-          display_name?: string
-          is_active?: boolean
-          metadata?: Json
-          pack_code?: string
-          price_cents?: number
-          sort_order?: number
-          stripe_price_id?: string | null
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      billing_checkout_sessions: {
-        Row: {
-          amount_cents: number
-          checkout_mode: string
-          created_at: string
-          credits: number
-          id: string
-          metadata: Json
-          pack_code: string | null
-          plan_code: string | null
-          status: string
-          stripe_customer_id: string | null
-          stripe_payment_intent_id: string | null
-          stripe_session_id: string | null
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          amount_cents?: number
-          checkout_mode: string
-          created_at?: string
-          credits?: number
-          id?: string
-          metadata?: Json
-          pack_code?: string | null
-          plan_code?: string | null
-          status?: string
-          stripe_customer_id?: string | null
-          stripe_payment_intent_id?: string | null
-          stripe_session_id?: string | null
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          amount_cents?: number
-          checkout_mode?: string
-          created_at?: string
-          credits?: number
-          id?: string
-          metadata?: Json
-          pack_code?: string | null
-          plan_code?: string | null
-          status?: string
-          stripe_customer_id?: string | null
-          stripe_payment_intent_id?: string | null
-          stripe_session_id?: string | null
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      billing_plans: {
-        Row: {
-          created_at: string
-          description: string | null
-          display_name: string
-          is_active: boolean
-          metadata: Json
-          monthly_price_cents: number
-          monthly_quota: number
-          plan_code: string
-          rollover_cap: number
-          sort_order: number
-          stripe_price_monthly_id: string | null
-          stripe_price_yearly_id: string | null
-          updated_at: string
-          yearly_price_cents: number | null
-        }
-        Insert: {
-          created_at?: string
-          description?: string | null
-          display_name: string
-          is_active?: boolean
-          metadata?: Json
-          monthly_price_cents?: number
-          monthly_quota?: number
-          plan_code: string
-          rollover_cap?: number
-          sort_order?: number
-          stripe_price_monthly_id?: string | null
-          stripe_price_yearly_id?: string | null
-          updated_at?: string
-          yearly_price_cents?: number | null
-        }
-        Update: {
-          created_at?: string
-          description?: string | null
-          display_name?: string
-          is_active?: boolean
-          metadata?: Json
-          monthly_price_cents?: number
-          monthly_quota?: number
-          plan_code?: string
-          rollover_cap?: number
-          sort_order?: number
-          stripe_price_monthly_id?: string | null
-          stripe_price_yearly_id?: string | null
-          updated_at?: string
-          yearly_price_cents?: number | null
-        }
-        Relationships: []
-      }
-      billing_subscriptions: {
-        Row: {
-          cancel_at_period_end: boolean
-          created_at: string
-          current_period_end: string | null
-          current_period_start: string | null
-          id: string
-          metadata: Json
-          plan_code: string
-          status: string
-          stripe_customer_id: string | null
-          stripe_subscription_id: string | null
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          cancel_at_period_end?: boolean
-          created_at?: string
-          current_period_end?: string | null
-          current_period_start?: string | null
-          id?: string
-          metadata?: Json
-          plan_code: string
-          status?: string
-          stripe_customer_id?: string | null
-          stripe_subscription_id?: string | null
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          cancel_at_period_end?: boolean
-          created_at?: string
-          current_period_end?: string | null
-          current_period_start?: string | null
-          id?: string
-          metadata?: Json
-          plan_code?: string
-          status?: string
-          stripe_customer_id?: string | null
-          stripe_subscription_id?: string | null
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       credit_transactions: {
         Row: {
           amount: number
@@ -2533,132 +2322,6 @@ export type Database = {
           metadata?: Json | null
           resource_type?: string
           transaction_type?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      credit_holds: {
-        Row: {
-          created_at: string
-          expires_at: string
-          id: string
-          idempotency_key: string
-          metadata: Json
-          reference_id: string | null
-          reference_type: string | null
-          reserved_amount: number
-          resource_type: string
-          status: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          expires_at?: string
-          id?: string
-          idempotency_key: string
-          metadata?: Json
-          reference_id?: string | null
-          reference_type?: string | null
-          reserved_amount: number
-          resource_type: string
-          status?: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          expires_at?: string
-          id?: string
-          idempotency_key?: string
-          metadata?: Json
-          reference_id?: string | null
-          reference_type?: string | null
-          reserved_amount?: number
-          resource_type?: string
-          status?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      credit_ledger: {
-        Row: {
-          balance_after: number
-          created_at: string
-          delta: number
-          entry_type: string
-          id: string
-          idempotency_key: string | null
-          metadata: Json
-          reference_id: string | null
-          reference_type: string | null
-          resource_type: string
-          user_id: string
-        }
-        Insert: {
-          balance_after: number
-          created_at?: string
-          delta: number
-          entry_type: string
-          id?: string
-          idempotency_key?: string | null
-          metadata?: Json
-          reference_id?: string | null
-          reference_type?: string | null
-          resource_type: string
-          user_id: string
-        }
-        Update: {
-          balance_after?: number
-          created_at?: string
-          delta?: number
-          entry_type?: string
-          id?: string
-          idempotency_key?: string | null
-          metadata?: Json
-          reference_id?: string | null
-          reference_type?: string | null
-          resource_type?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      credit_wallets: {
-        Row: {
-          created_at: string
-          metadata: Json
-          monthly_quota: number
-          monthly_remaining: number
-          plan_code: string
-          reset_at: string
-          rollover_remaining: number
-          topup_remaining: number
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          metadata?: Json
-          monthly_quota?: number
-          monthly_remaining?: number
-          plan_code?: string
-          reset_at?: string
-          rollover_remaining?: number
-          topup_remaining?: number
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          metadata?: Json
-          monthly_quota?: number
-          monthly_remaining?: number
-          plan_code?: string
-          reset_at?: string
-          rollover_remaining?: number
-          topup_remaining?: number
-          updated_at?: string
           user_id?: string
         }
         Relationships: []
@@ -3989,6 +3652,125 @@ export type Database = {
             columns: ["gig_id"]
             isOneToOne: false
             referencedRelation: "gigs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ip_vault_items: {
+        Row: {
+          asset_kind: string
+          commercial_rev_share: number | null
+          created_at: string
+          description: string | null
+          id: string
+          ip_id: string | null
+          ip_metadata_hash: string | null
+          ip_metadata_uri: string | null
+          license_profile: string
+          license_terms_ids: string[]
+          media_hash: string | null
+          media_type: string | null
+          media_url: string | null
+          metadata: Json
+          minting_fee_wip: number | null
+          nft_contract: string | null
+          nft_metadata_hash: string | null
+          nft_metadata_uri: string | null
+          parent_ip_ids: string[]
+          project_id: string | null
+          proof_packet: Json
+          registration_status: string
+          relationship_type: string
+          royalty_policy: string | null
+          source_id: string
+          source_type: string
+          story_explorer_url: string | null
+          story_network: string
+          thumbnail_url: string | null
+          title: string
+          token_id: string | null
+          tx_hash: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          asset_kind?: string
+          commercial_rev_share?: number | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          ip_id?: string | null
+          ip_metadata_hash?: string | null
+          ip_metadata_uri?: string | null
+          license_profile?: string
+          license_terms_ids?: string[]
+          media_hash?: string | null
+          media_type?: string | null
+          media_url?: string | null
+          metadata?: Json
+          minting_fee_wip?: number | null
+          nft_contract?: string | null
+          nft_metadata_hash?: string | null
+          nft_metadata_uri?: string | null
+          parent_ip_ids?: string[]
+          project_id?: string | null
+          proof_packet?: Json
+          registration_status?: string
+          relationship_type?: string
+          royalty_policy?: string | null
+          source_id: string
+          source_type: string
+          story_explorer_url?: string | null
+          story_network?: string
+          thumbnail_url?: string | null
+          title: string
+          token_id?: string | null
+          tx_hash?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          asset_kind?: string
+          commercial_rev_share?: number | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          ip_id?: string | null
+          ip_metadata_hash?: string | null
+          ip_metadata_uri?: string | null
+          license_profile?: string
+          license_terms_ids?: string[]
+          media_hash?: string | null
+          media_type?: string | null
+          media_url?: string | null
+          metadata?: Json
+          minting_fee_wip?: number | null
+          nft_contract?: string | null
+          nft_metadata_hash?: string | null
+          nft_metadata_uri?: string | null
+          parent_ip_ids?: string[]
+          project_id?: string | null
+          proof_packet?: Json
+          registration_status?: string
+          relationship_type?: string
+          royalty_policy?: string | null
+          source_id?: string
+          source_type?: string
+          story_explorer_url?: string | null
+          story_network?: string
+          thumbnail_url?: string | null
+          title?: string
+          token_id?: string | null
+          tx_hash?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ip_vault_items_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
         ]
@@ -10258,48 +10040,6 @@ export type Database = {
         }
         Returns: boolean
       }
-      credits_apply_monthly_refresh: {
-        Args: { p_user_id?: string }
-        Returns: Json
-      }
-      credits_cleanup_expired_holds: { Args: never; Returns: number }
-      credits_commit: {
-        Args: {
-          actual_amount?: number
-          hold_id: string
-          metadata?: Json
-        }
-        Returns: Json
-      }
-      credits_get_balance: { Args: never; Returns: Json }
-      credits_grant_topup: {
-        Args: {
-          external_ref?: string
-          metadata?: Json
-          p_pack_code: string
-          p_user_id: string
-        }
-        Returns: Json
-      }
-      credits_release: {
-        Args: {
-          hold_id: string
-          metadata?: Json
-          reason?: string
-        }
-        Returns: Json
-      }
-      credits_reserve: {
-        Args: {
-          idempotency_key?: string
-          metadata?: Json
-          reference_id?: string
-          reference_type?: string
-          requested_amount?: number
-          resource_type: string
-        }
-        Returns: Json
-      }
       bootstrap_wallet_user: {
         Args: { p_user_id: string; p_wallet_address: string }
         Returns: Json
@@ -10327,12 +10067,13 @@ export type Database = {
       }
       cleanup_expired_idempotency: { Args: never; Returns: undefined }
       cleanup_mrkt_decision_logs: { Args: never; Returns: undefined }
+      credits_get_balance: { Args: never; Returns: Json }
       deduct_credits: {
         Args: { p_amount: number; p_user_id: string }
         Returns: number
       }
       ensure_credit_account: {
-        Args: { p_source?: string; p_user_id?: string }
+        Args: { p_source?: string; p_user_id: string }
         Returns: Json
       }
       generate_board_slug: { Args: { board_title: string }; Returns: string }

@@ -203,7 +203,7 @@ export const useCredits = () => {
       const { data, error } = await supabase.rpc('use_credits', {
         resource_type: resourceType,
         credit_cost: creditCost,
-        metadata,
+        metadata: metadata as unknown as Json,
       });
 
       if (error) throw error;
