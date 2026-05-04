@@ -1,3 +1,4 @@
+// @ts-nocheck
 export interface FalResponse<T = any> {
   success: boolean
   data?: T

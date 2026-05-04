@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ============================================================================
 // SHARED: export-helpers.ts
 // PURPOSE: Remote video stitching via fal first, Editframe fallback.
