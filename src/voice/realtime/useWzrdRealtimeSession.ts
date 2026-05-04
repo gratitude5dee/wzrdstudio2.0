@@ -64,6 +64,25 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
     }
 
     try {
+      // Request microphone permission up-front so we get a clear error
+      let micStream: MediaStream;
+      try {
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // Release immediately — the WebRTC transport will request its own stream
+        micStream.getTracks().forEach((t) => t.stop());
+      } catch (micError) {
+        const msg = micError instanceof Error ? micError.message : String(micError);
+        const denied =
+          msg.includes('Permission denied') ||
+          msg.includes('NotAllowedError') ||
+          msg.includes('Permission dismissed');
+        throw new Error(
+          denied
+            ? 'Microphone access denied. Please allow microphone permission in your browser and try again.'
+            : `Microphone error: ${msg}`,
+        );
+      }
+
       const { RealtimeSession, OpenAIRealtimeWebRTC, agent } = await loadRuntime();
       const apiKey = await fetchRealtimeClientSecret();
       const model = import.meta.env.VITE_WZRD_REALTIME_MODEL ?? 'gpt-realtime';
