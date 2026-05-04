@@ -17,7 +17,7 @@ export default defineConfig(({ mode }) => ({
     vitePluginEditframe({
       root: "./src",
       cacheRoot: "./node_modules/.cache/editframe",
-    }),
+    }) as any,
     mode === 'editframe' &&
     viteSingleFile(),
     mode === 'development' &&
