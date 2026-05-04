@@ -115,7 +115,6 @@ import {
   isGmiKanvasModel,
   sortKanvasModelsFalFirst,
 } from "@/features/kanvas/modelProvider";
-import { MentionDropdown } from "@/components/character-creation/MentionDropdown";
 import { useCharacterMention } from "@/hooks/useCharacterMention";
 import { useUserTier, type UserTier } from "@/hooks/useUserTier";
 import { useCharacterCreationStore } from "@/lib/stores/character-creation-store";
@@ -839,6 +838,7 @@ export default function KanvasPage() {
   const [lipsyncAudioId, setLipsyncAudioId] = useState<string | null>(null);
   const [lipsyncModelId, setLipsyncModelId] = useState("");
   const [lipsyncSettings, setLipsyncSettings] = useState<Record<string, unknown>>({});
+  const appliedPromptPrefillRef = useRef<string | null>(null);
 
   const imageMode = imageReferenceIds.length > 0 ? "image-to-image" : "text-to-image";
   const videoReferenceAsset = useMemo(
@@ -1156,6 +1156,28 @@ export default function KanvasPage() {
     );
   }
 
+  useEffect(() => {
+    const promptPrefill = searchParams.get("prompt");
+    if (!promptPrefill) return;
+    const key = `${studio}:${promptPrefill}`;
+    if (appliedPromptPrefillRef.current === key) return;
+    appliedPromptPrefillRef.current = key;
+
+    if (studio === "image") {
+      setImagePrompt(promptPrefill);
+      onMentionChange(promptPrefill);
+    } else if (studio === "video") {
+      setVideoPrompt(promptPrefill);
+      onMentionChange(promptPrefill);
+    } else if (studio === "cinema") {
+      setCinemaPrompt(promptPrefill);
+      onMentionChange(promptPrefill);
+    } else if (studio === "lipsync") {
+      setLipsyncPrompt(promptPrefill);
+      onMentionChange(promptPrefill);
+    }
+  }, [onMentionChange, searchParams, studio]);
+
   /** Expand @mentions in a prompt string before sending to generation. */
   function resolvePromptForGeneration(rawPrompt: string, modelId: string) {
     const resolved = resolveMentions(rawPrompt);
@@ -1163,12 +1185,16 @@ export default function KanvasPage() {
       return {
         prompt: resolved.elementPrompt,
         elementIds: resolved.elementIds,
+        referenceAssetIds: resolved.referenceAssetIds,
+        referenceImageUrls: resolved.referenceImageUrls,
       };
     }
 
     return {
       prompt: resolved.expandedPrompt,
       elementIds: undefined,
+      referenceAssetIds: resolved.referenceAssetIds,
+      referenceImageUrls: resolved.referenceImageUrls,
     };
   }
 
@@ -1182,12 +1208,15 @@ export default function KanvasPage() {
       }
 
       const resolvedPrompt = resolvePromptForGeneration(imagePrompt.trim(), currentImageModel.id);
+      const mentionReferenceIds =
+        currentImageModel.mode === "image-to-image" ? resolvedPrompt.referenceAssetIds : [];
+      const imageIds = Array.from(new Set([...imageReferenceIds, ...mentionReferenceIds]));
 
       return buildImageRequest({
         modelId: currentImageModel.id,
         prompt: resolvedPrompt.prompt,
         settings: imageSettings,
-        imageIds: imageReferenceIds,
+        imageIds,
       });
     }
 
@@ -1200,6 +1229,12 @@ export default function KanvasPage() {
       }
 
       const resolvedPrompt = resolvePromptForGeneration(videoPrompt.trim(), currentVideoModel.id);
+      const mentionReferenceId =
+        currentVideoModel.mode === "text-to-video" ? null : resolvedPrompt.referenceAssetIds[0] ?? null;
+      const effectiveReferenceId = videoReferenceId ?? mentionReferenceId;
+      const effectiveReferenceAsset = effectiveReferenceId
+        ? assets.find((asset) => asset.id === effectiveReferenceId)
+        : null;
 
       return buildVideoRequest({
         modelId: currentVideoModel.id,
@@ -1210,13 +1245,14 @@ export default function KanvasPage() {
           "text-to-video" | "image-to-video" | "reference-to-video"
         >,
         imageId:
-          videoReferenceAsset?.asset_type === "image" &&
+          effectiveReferenceId &&
+          (effectiveReferenceAsset?.asset_type ?? "image") === "image" &&
           currentVideoModel.mode !== "reference-to-video"
-            ? videoReferenceAsset.id
+            ? effectiveReferenceId
             : undefined,
         referenceAssetId:
           currentVideoModel.mode === "reference-to-video"
-            ? videoReferenceAsset?.id
+            ? effectiveReferenceId
             : undefined,
         elementIds: resolvedPrompt.elementIds,
       });
@@ -1231,6 +1267,9 @@ export default function KanvasPage() {
       }
 
       const resolvedPrompt = resolvePromptForGeneration(cinemaPrompt.trim(), currentCinemaModel.id);
+      const cinemaReferenceIds = currentCinemaModel.requiresAssets.includes("image")
+        ? resolvedPrompt.referenceAssetIds
+        : [];
 
       return buildCinemaRequest({
         modelId: currentCinemaModel.id,
@@ -1238,6 +1277,7 @@ export default function KanvasPage() {
         settings: cinemaSettings,
         cinema: cinemaCameraSettings,
         elementIds: resolvedPrompt.elementIds,
+        imageIds: cinemaReferenceIds,
       });
     }
 
@@ -1510,6 +1550,14 @@ export default function KanvasPage() {
                 uploading={uploadingByType.image || uploadingByType.video}
                 onUpload={handleAssetUpload}
                 pageLoading={pageLoading}
+                mentionSuggestions={mentionSuggestions}
+                showMentionDropdown={showMentionDropdown}
+                onMentionSelect={(mention) => {
+                  const replaced = onSelectSuggestion(mention, imagePrompt);
+                  setImagePrompt(replaced);
+                }}
+                onMentionChange={onMentionChange}
+                onCloseMentions={closeMentionDropdown}
               />
             ) : studio === "video" ? (
               <VideoStudioSection
@@ -1533,6 +1581,14 @@ export default function KanvasPage() {
                 uploading={uploadingByType.image}
                 onUpload={handleAssetUpload}
                 pageLoading={pageLoading}
+                mentionSuggestions={mentionSuggestions}
+                showMentionDropdown={showMentionDropdown}
+                onMentionSelect={(mention) => {
+                  const replaced = onSelectSuggestion(mention, videoPrompt);
+                  setVideoPrompt(replaced);
+                }}
+                onMentionChange={onMentionChange}
+                onCloseMentions={closeMentionDropdown}
               />
             ) : studio === "edit" ? (
               <EditStudioSection

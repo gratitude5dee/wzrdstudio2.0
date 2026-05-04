@@ -124,6 +124,9 @@ export interface KanvasCinemaRequest extends KanvasGenerationBase {
   mode: 'cinematic-image';
   prompt: string;
   cinema: KanvasCinemaSettings;
+  assetSelections?: {
+    imageIds: string[];
+  };
 }
 
 export interface KanvasTalkingHeadRequest extends KanvasGenerationBase {
@@ -1274,6 +1277,8 @@ export function collectAssetIds(request: KanvasGenerationRequest): string[] {
       return [request.assetSelections.imageId];
     case 'reference-to-video':
       return [request.assetSelections.assetId];
+    case 'cinematic-image':
+      return request.assetSelections?.imageIds ?? [];
     case 'talking-head':
       return [request.assetSelections.audioId, request.assetSelections.imageId]
         .filter((assetId): assetId is string => typeof assetId === 'string' && assetId.length > 0);
@@ -1361,6 +1366,13 @@ export function buildFalInput(
         input.video_url = videoAsset.url;
       }
 
+      break;
+    }
+    case 'cinematic-image': {
+      const imageUrls = findAllAssets(assets, 'image').map((asset) => asset.url);
+      if (imageUrls.length > 0) {
+        input.image_urls = imageUrls;
+      }
       break;
     }
     case 'talking-head': {

@@ -270,6 +270,7 @@ export function buildCinemaRequest(input: {
   settings?: Record<string, unknown>;
   cinema: KanvasCinemaSettings;
   elementIds?: string[];
+  imageIds?: string[];
 }): KanvasCinemaRequest {
   return {
     studio: "cinema",
@@ -280,6 +281,7 @@ export function buildCinemaRequest(input: {
     settings: input.settings,
     elementIds: input.elementIds,
     cinema: input.cinema,
+    assetSelections: input.imageIds?.length ? { imageIds: input.imageIds } : undefined,
   };
 }
 

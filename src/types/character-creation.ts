@@ -4,7 +4,7 @@
 
 // ---- Kind -----------------------------------------------------------------
 
-export type CharacterKind = 'character' | 'object' | 'creature' | 'vehicle' | 'environment';
+export type CharacterKind = 'character' | 'object' | 'creature' | 'vehicle' | 'environment' | 'location';
 
 // ---- Builder Trait Options -------------------------------------------------
 
@@ -117,6 +117,8 @@ export interface CharacterBlueprint {
   promptFragment: string;
   imageUrl: string | null;
   thumbnailUrl: string | null;
+  referenceAssetIds: string[];
+  referenceImageUrls: string[];
   gmiElementId?: string | null;
   gmiElementRequestId?: string | null;
   gmiElementStatus?: string | null;
@@ -131,6 +133,7 @@ export interface CharacterBlueprint {
 export interface CharacterBlueprintImage {
   id: string;
   blueprintId: string;
+  assetId: string | null;
   imageUrl: string;
   label: string | null;
   isPrimary: boolean;
@@ -147,6 +150,9 @@ export interface CharacterMention {
   imageUrl: string | null;
   promptFragment: string;
   kind: CharacterKind;
+  referenceAssetIds: string[];
+  referenceImageUrls: string[];
+  gmiElementId?: string | null;
 }
 
 // ---- Store State -----------------------------------------------------------
@@ -181,6 +187,8 @@ export interface ResolvedCharacterRef {
   name: string;
   imageUrl: string | null;
   promptFragment: string;
+  referenceAssetIds: string[];
+  referenceImageUrls: string[];
   gmiElementId?: string | null;
 }
 

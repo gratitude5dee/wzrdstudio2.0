@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import wzrdLogo from '@/assets/wzrd-logo.png';
 import { ProjectList } from '@/components/home/ProjectList';
 import { AuraProjectList } from '@/components/home/AuraProjectList';
+import { AuraAssetStore } from '@/components/home/AuraAssetStore';
 import { ProjectListView } from '@/components/home/ProjectListView';
 import { Sidebar } from '@/components/home/Sidebar';
 import { MobileBottomNav } from '@/components/home/MobileBottomNav';
@@ -522,6 +523,8 @@ export default function Home() {
           <main data-tour="projects-section" className="p-4 md:p-6">
             {activeView === 'aura' ? (
               <AuraProjectList projects={projects} />
+            ) : activeView === 'asset-store' ? (
+              <AuraAssetStore projects={projects} />
             ) : isLoading ? (
               <div className="flex flex-col items-center justify-center py-12 md:py-20">
                 <div className="w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-accent/15 flex items-center justify-center mb-4">

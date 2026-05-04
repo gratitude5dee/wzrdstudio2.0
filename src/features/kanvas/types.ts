@@ -152,6 +152,9 @@ export interface KanvasCinemaRequest extends KanvasGenerationBase {
   mode: "cinematic-image";
   prompt: string;
   cinema: KanvasCinemaSettings;
+  assetSelections?: {
+    imageIds: string[];
+  };
 }
 
 export interface KanvasTalkingHeadRequest extends KanvasGenerationBase {

@@ -1,4 +1,4 @@
-import { X, FolderKanban, Layers, Users, Globe, Star, Settings, HelpCircle, LogOut, Sparkles } from 'lucide-react';
+import { X, FolderKanban, Layers, Users, Globe, Settings, HelpCircle, LogOut, Sparkles, Images } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -32,7 +32,8 @@ export const MobileSidebarDrawer = ({ isOpen, onClose, activeView, onViewChange 
   const mainNavItems = [
     { id: 'all', label: 'All Projects', icon: FolderKanban },
     { id: 'kanvas', label: 'Kanvas', icon: Layers, isRoute: true, showBadge: true },
-    { id: 'aura', label: 'Aura (Observability)', icon: Sparkles },
+    { id: 'aura', label: 'Aura', icon: Sparkles },
+    { id: 'asset-store', label: 'Asset Store', icon: Images },
   ];
 
   const secondaryNavItems = [

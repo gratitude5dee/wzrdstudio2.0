@@ -25,6 +25,8 @@ import { cn } from "@/lib/utils";
 import type { KanvasAsset, KanvasAssetType, KanvasJob, KanvasModel } from "@/features/kanvas/types";
 import { getJobPrimaryUrl, isJobActive } from "@/features/kanvas/helpers";
 import { useUserTier, sortModelsForTier } from "@/hooks/useUserTier";
+import { MentionDropdown } from "@/components/character-creation/MentionDropdown";
+import type { CharacterMention } from "@/types/character-creation";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -48,6 +50,11 @@ interface VideoStudioSectionProps {
   uploading: boolean;
   onUpload: (file: File, type: KanvasAssetType) => Promise<void>;
   pageLoading: boolean;
+  mentionSuggestions?: CharacterMention[];
+  showMentionDropdown?: boolean;
+  onMentionSelect?: (mention: CharacterMention) => void;
+  onMentionChange?: (text: string, cursorPos?: number) => void;
+  onCloseMentions?: () => void;
 }
 
 /* ------------------------------------------------------------------ */
@@ -159,6 +166,8 @@ export function VideoStudioSection({
   prompt, onPromptChange, referenceId, currentModel, models, onModelChange,
   settings, onSettingsChange, submitting, onGenerate, jobs, selectedJob,
   assets, uploading, onUpload,
+  mentionSuggestions = [], showMentionDropdown = false,
+  onMentionSelect, onMentionChange, onCloseMentions,
 }: VideoStudioSectionProps) {
   const { tier, isFree } = useUserTier();
   const [activeTab, setActiveTab] = useState<"create" | "edit" | "motion">("create");
@@ -184,6 +193,15 @@ export function VideoStudioSection({
   const completedJobs = jobs.filter((j) => j.status === "completed");
   const recentResults = completedJobs.slice(0, 4);
   const previewUrl = selectedJob ? getJobPrimaryUrl(selectedJob) : null;
+
+  const handlePromptInput = (value: string) => {
+    onPromptChange(value);
+    onMentionChange?.(value);
+  };
+
+  const handleMentionSelect = (mention: CharacterMention) => {
+    onMentionSelect?.(mention);
+  };
 
   /* ── Sub-nav ── */
   const subNav = (
@@ -275,12 +293,20 @@ export function VideoStudioSection({
         </div>
 
         {/* Prompt */}
-        <Textarea
-          value={prompt}
-          onChange={(e) => onPromptChange(e.currentTarget.value)}
-          placeholder="Describe the motion, camera movement, or scene..."
-          className="min-h-[100px] resize-none rounded-xl border-white/10 bg-[#1a1919] px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus-visible:ring-[#f97316]/30"
-        />
+        <div className="relative">
+          <MentionDropdown
+            suggestions={mentionSuggestions}
+            onSelect={handleMentionSelect}
+            visible={showMentionDropdown}
+          />
+          <Textarea
+            value={prompt}
+            onChange={(e) => handlePromptInput(e.currentTarget.value)}
+            onBlur={() => window.setTimeout(() => onCloseMentions?.(), 150)}
+            placeholder="Describe the motion, camera movement, or scene... Use @ to add saved blueprints."
+            className="min-h-[100px] resize-none rounded-xl border-white/10 bg-[#1a1919] px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus-visible:ring-[#f97316]/30"
+          />
+        </div>
 
         {/* Enhancement row */}
         <div className="flex gap-2">
@@ -506,12 +532,20 @@ export function VideoStudioSection({
           </div>
         </div>
 
-        <Textarea
-          value={prompt}
-          onChange={(e) => onPromptChange(e.currentTarget.value)}
-          placeholder="Describe the change you want..."
-          className="min-h-[100px] resize-none rounded-xl border-white/10 bg-[#1a1919] px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus-visible:ring-[#f97316]/30"
-        />
+        <div className="relative">
+          <MentionDropdown
+            suggestions={mentionSuggestions}
+            onSelect={handleMentionSelect}
+            visible={showMentionDropdown}
+          />
+          <Textarea
+            value={prompt}
+            onChange={(e) => handlePromptInput(e.currentTarget.value)}
+            onBlur={() => window.setTimeout(() => onCloseMentions?.(), 150)}
+            placeholder="Describe the change you want... Use @ to add saved blueprints."
+            className="min-h-[100px] resize-none rounded-xl border-white/10 bg-[#1a1919] px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus-visible:ring-[#f97316]/30"
+          />
+        </div>
 
         <div className="flex items-center justify-between rounded-xl bg-[#1a1919] px-4 py-2.5">
           <span className="text-xs font-semibold text-zinc-400">Auto Settings</span>

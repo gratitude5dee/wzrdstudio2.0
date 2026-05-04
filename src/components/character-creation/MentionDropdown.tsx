@@ -20,7 +20,7 @@ export function MentionDropdown({ suggestions, onSelect, visible }: MentionDropd
     <div className="absolute bottom-full left-0 z-50 mb-2 w-72 overflow-hidden rounded-2xl border border-white/10 bg-zinc-900/95 shadow-2xl backdrop-blur-md">
       <div className="p-1.5">
         <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-zinc-500">
-          Characters
+          Blueprints
         </p>
         {suggestions.map((mention) => (
           <button

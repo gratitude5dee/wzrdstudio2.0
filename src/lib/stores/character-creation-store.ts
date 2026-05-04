@@ -290,6 +290,9 @@ export const useCharacterCreationStore = create<CharacterCreationState & Charact
         imageUrl: b.imageUrl,
         promptFragment: b.promptFragment,
         kind: b.kind,
+        referenceAssetIds: b.referenceAssetIds,
+        referenceImageUrls: b.referenceImageUrls,
+        gmiElementId: b.gmiElementId,
       }));
     },
 

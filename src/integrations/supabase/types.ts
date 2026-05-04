@@ -1264,6 +1264,7 @@ export type Database = {
       }
       character_blueprint_images: {
         Row: {
+          asset_id: string | null
           blueprint_id: string
           created_at: string
           generation_params: Json | null
@@ -1275,6 +1276,7 @@ export type Database = {
           variant: string | null
         }
         Insert: {
+          asset_id?: string | null
           blueprint_id: string
           created_at?: string
           generation_params?: Json | null
@@ -1286,6 +1288,7 @@ export type Database = {
           variant?: string | null
         }
         Update: {
+          asset_id?: string | null
           blueprint_id?: string
           created_at?: string
           generation_params?: Json | null
@@ -1304,6 +1307,13 @@ export type Database = {
             referencedRelation: "character_blueprints"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "character_blueprint_images_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "project_assets"
+            referencedColumns: ["id"]
+          },
         ]
       }
       character_blueprints: {
@@ -1312,6 +1322,11 @@ export type Database = {
           created_at: string
           description: string | null
           face_details: Json | null
+          gmi_element_error: string | null
+          gmi_element_id: string | null
+          gmi_element_request_id: string | null
+          gmi_element_status: string | null
+          gmi_element_updated_at: string | null
           id: string
           image_url: string | null
           is_favorite: boolean | null
@@ -1336,6 +1351,11 @@ export type Database = {
           created_at?: string
           description?: string | null
           face_details?: Json | null
+          gmi_element_error?: string | null
+          gmi_element_id?: string | null
+          gmi_element_request_id?: string | null
+          gmi_element_status?: string | null
+          gmi_element_updated_at?: string | null
           id?: string
           image_url?: string | null
           is_favorite?: boolean | null
@@ -1360,6 +1380,11 @@ export type Database = {
           created_at?: string
           description?: string | null
           face_details?: Json | null
+          gmi_element_error?: string | null
+          gmi_element_id?: string | null
+          gmi_element_request_id?: string | null
+          gmi_element_status?: string | null
+          gmi_element_updated_at?: string | null
           id?: string
           image_url?: string | null
           is_favorite?: boolean | null

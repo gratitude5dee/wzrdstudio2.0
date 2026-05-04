@@ -32,6 +32,8 @@ interface UseCharacterMentionReturn {
     expandedPrompt: string;
     elementPrompt: string;
     elementIds: string[];
+    referenceAssetIds: string[];
+    referenceImageUrls: string[];
     usedCharacters: ResolvedCharacterRef[];
   };
   /** Close suggestions */
@@ -97,6 +99,8 @@ export function useCharacterMention(): UseCharacterMentionReturn {
       let expandedPrompt = prompt;
       let elementPrompt = prompt;
       const elementIds: string[] = [];
+      const referenceAssetIds: string[] = [];
+      const referenceImageUrls: string[] = [];
       const elementIndexById = new Map<string, number>();
 
       const matches = Array.from(prompt.matchAll(mentionRegex));
@@ -109,8 +113,22 @@ export function useCharacterMention(): UseCharacterMentionReturn {
             name: bp.name,
             imageUrl: bp.imageUrl,
             promptFragment: bp.promptFragment,
+            referenceAssetIds: bp.referenceAssetIds,
+            referenceImageUrls: bp.referenceImageUrls,
             gmiElementId: bp.gmiElementId,
           });
+
+          for (const assetId of bp.referenceAssetIds) {
+            if (!referenceAssetIds.includes(assetId)) {
+              referenceAssetIds.push(assetId);
+            }
+          }
+
+          for (const imageUrl of bp.referenceImageUrls) {
+            if (!referenceImageUrls.includes(imageUrl)) {
+              referenceImageUrls.push(imageUrl);
+            }
+          }
 
           // Replace @slug with the prompt fragment
           expandedPrompt = expandedPrompt.replace(
@@ -139,7 +157,14 @@ export function useCharacterMention(): UseCharacterMentionReturn {
         }
       }
 
-      return { expandedPrompt, elementPrompt, elementIds, usedCharacters };
+      return {
+        expandedPrompt,
+        elementPrompt,
+        elementIds,
+        referenceAssetIds,
+        referenceImageUrls,
+        usedCharacters,
+      };
     },
     [findBySlug, incrementUsage],
   );

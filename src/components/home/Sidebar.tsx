@@ -1,4 +1,4 @@
-import { Users, Globe, Star, ChevronLeft, LogOut, Layers, Sparkles, FolderKanban } from 'lucide-react';
+import { Users, Globe, Star, ChevronLeft, LogOut, Layers, Sparkles, FolderKanban, Images } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 import CreditsDisplay from '../CreditsDisplay';
@@ -60,7 +60,8 @@ export const Sidebar = ({ activeView, onViewChange }: SidebarProps) => {
   const mainNavItems = [
     { id: 'all', label: 'All Projects', icon: FolderKanban },
     { id: 'kanvas', label: 'Kanvas', icon: Layers, isRoute: true, showBadge: true },
-    { id: 'aura', label: 'Aura (Observability)', icon: Sparkles },
+    { id: 'aura', label: 'Aura', icon: Sparkles },
+    { id: 'asset-store', label: 'Asset Store', icon: Images },
   ];
 
   const secondaryNavItems = [
@@ -284,6 +285,8 @@ export const Sidebar = ({ activeView, onViewChange }: SidebarProps) => {
                           navigate(appRoutes.kanvas);
                         } else if (item.id === '_favorites') {
                           setFavoritesOpen(!favoritesOpen);
+                        } else if (item.id === 'asset-store') {
+                          onViewChange('asset-store');
                         } else {
                           onViewChange(item.id);
                         }

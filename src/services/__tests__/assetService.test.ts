@@ -232,6 +232,34 @@ describe("assetService", () => {
       expect(builder.__state.limit).toBe(10);
       expect(builder.__state.range).toEqual([5, 14]);
     });
+
+    it("normalizes legacy project_assets rows from the current generated DB shape", async () => {
+      const legacyRow = {
+        id: "asset-legacy",
+        project_id: null,
+        name: "legacy-reference.png",
+        type: "image",
+        url: "https://cdn.example.com/legacy-reference.png",
+        size: 2048,
+        metadata: { width: 1024, height: 1024 },
+        thumbnail_url: "https://cdn.example.com/legacy-reference-thumb.png",
+        created_at: "2026-05-04T08:00:00.000Z",
+      };
+      const builder = createListQuery([legacyRow as any]);
+      mockFrom.mockReturnValue(builder);
+
+      const result = await assetService.list({ assetType: ["image"] });
+
+      expect(result[0]).toMatchObject({
+        id: "asset-legacy",
+        file_name: "legacy-reference.png",
+        original_file_name: "legacy-reference.png",
+        asset_type: "image",
+        cdn_url: "https://cdn.example.com/legacy-reference.png",
+        media_metadata: { width: 1024, height: 1024 },
+        thumbnail_url: "https://cdn.example.com/legacy-reference-thumb.png",
+      });
+    });
   });
 
   describe("delete", () => {

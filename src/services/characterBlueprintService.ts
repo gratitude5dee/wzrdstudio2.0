@@ -3,52 +3,139 @@
 // ---------------------------------------------------------------------------
 
 import { supabase } from '@/integrations/supabase/client';
-import type { CharacterBlueprint, CharacterBlueprintImage } from '@/types/character-creation';
+import type { Database, Json } from '@/integrations/supabase/types';
+import type { CharacterBlueprint, CharacterBlueprintImage, CharacterKind } from '@/types/character-creation';
 import { toSlug } from '@/lib/stores/character-creation-store';
 import { unifiedGenerationService } from '@/services/unifiedGenerationService';
 import { getDefaultModelForTier, type UserTier } from '@/hooks/useUserTier';
 import { extractGmiElementId } from '@/lib/gmiCloud';
 
 // ---------------------------------------------------------------------------
+type CharacterBlueprintRow = Database['public']['Tables']['character_blueprints']['Row'];
+type CharacterBlueprintInsert = Database['public']['Tables']['character_blueprints']['Insert'];
+type CharacterBlueprintUpdate = Database['public']['Tables']['character_blueprints']['Update'];
+type CharacterBlueprintImageRow = Database['public']['Tables']['character_blueprint_images']['Row'];
+type CharacterBlueprintImageInsert = Database['public']['Tables']['character_blueprint_images']['Insert'];
+
+interface BlueprintReferenceInput {
+  assetId?: string | null;
+  imageUrl: string;
+  label?: string | null;
+  isPrimary?: boolean;
+}
+
+interface BlueprintReferenceSummary {
+  referenceAssetIds: string[];
+  referenceImageUrls: string[];
+}
+
+function toJson(value: unknown): Json {
+  return (value ?? {}) as Json;
+}
+
+function normalizeKind(value: string | null | undefined): CharacterKind {
+  if (
+    value === 'character' ||
+    value === 'object' ||
+    value === 'creature' ||
+    value === 'vehicle' ||
+    value === 'environment' ||
+    value === 'location'
+  ) {
+    return value;
+  }
+  return 'character';
+}
+
+function summarizeReferences(images: CharacterBlueprintImage[]): BlueprintReferenceSummary {
+  const referenceAssetIds = Array.from(
+    new Set(images.map((image) => image.assetId).filter((assetId): assetId is string => Boolean(assetId))),
+  );
+  const referenceImageUrls = Array.from(
+    new Set(images.map((image) => image.imageUrl).filter(Boolean)),
+  );
+  return { referenceAssetIds, referenceImageUrls };
+}
+
+function attachReferenceSummary(
+  blueprint: CharacterBlueprint,
+  images: CharacterBlueprintImage[],
+): CharacterBlueprint {
+  return {
+    ...blueprint,
+    ...summarizeReferences(images),
+  };
+}
+
+async function listBlueprintImagesForBlueprints(blueprintIds: string[]): Promise<Map<string, CharacterBlueprintImage[]>> {
+  const map = new Map<string, CharacterBlueprintImage[]>();
+  if (blueprintIds.length === 0) {
+    return map;
+  }
+
+  const { data, error } = await supabase
+    .from('character_blueprint_images')
+    .select('*')
+    .in('blueprint_id', blueprintIds)
+    .order('sort_order', { ascending: true });
+
+  if (error) throw error;
+
+  for (const row of data ?? []) {
+    const image = rowToImage(row);
+    const current = map.get(image.blueprintId) ?? [];
+    current.push(image);
+    map.set(image.blueprintId, current);
+  }
+
+  return map;
+}
+
 // Row ↔ Domain mapping helpers
 // ---------------------------------------------------------------------------
 
-function rowToBlueprint(row: Record<string, unknown>): CharacterBlueprint {
+export function rowToBlueprint(row: CharacterBlueprintRow, references: BlueprintReferenceSummary = {
+  referenceAssetIds: [],
+  referenceImageUrls: [],
+}): CharacterBlueprint {
   return {
-    id: row.id as string,
-    userId: row.user_id as string,
-    projectId: (row.project_id as string) ?? null,
-    name: row.name as string,
-    slug: row.slug as string,
-    kind: (row.kind as CharacterBlueprint['kind']) ?? 'character',
+    id: row.id,
+    userId: row.user_id,
+    projectId: row.project_id ?? null,
+    name: row.name,
+    slug: row.slug,
+    kind: normalizeKind(row.kind),
     traits: (row.traits as CharacterBlueprint['traits']) ?? {},
     faceDetails: (row.face_details as CharacterBlueprint['faceDetails']) ?? {},
     bodyDetails: (row.body_details as CharacterBlueprint['bodyDetails']) ?? {},
     styleDetails: (row.style_details as CharacterBlueprint['styleDetails']) ?? {},
-    promptFragment: (row.prompt_fragment as string) ?? '',
-    imageUrl: (row.image_url as string) ?? null,
-    thumbnailUrl: (row.thumbnail_url as string) ?? null,
-    gmiElementId: (row.gmi_element_id as string) ?? null,
-    gmiElementRequestId: (row.gmi_element_request_id as string) ?? null,
-    gmiElementStatus: (row.gmi_element_status as string) ?? null,
-    gmiElementError: (row.gmi_element_error as string) ?? null,
-    gmiElementUpdatedAt: (row.gmi_element_updated_at as string) ?? null,
-    isFavorite: (row.is_favorite as boolean) ?? false,
-    usageCount: (row.usage_count as number) ?? 0,
-    createdAt: (row.created_at as string) ?? new Date().toISOString(),
-    updatedAt: (row.updated_at as string) ?? new Date().toISOString(),
+    promptFragment: row.prompt_fragment ?? '',
+    imageUrl: row.image_url ?? null,
+    thumbnailUrl: row.thumbnail_url ?? null,
+    referenceAssetIds: references.referenceAssetIds,
+    referenceImageUrls: references.referenceImageUrls,
+    gmiElementId: row.gmi_element_id ?? null,
+    gmiElementRequestId: row.gmi_element_request_id ?? null,
+    gmiElementStatus: row.gmi_element_status ?? null,
+    gmiElementError: row.gmi_element_error ?? null,
+    gmiElementUpdatedAt: row.gmi_element_updated_at ?? null,
+    isFavorite: row.is_favorite ?? false,
+    usageCount: row.usage_count ?? 0,
+    createdAt: row.created_at ?? new Date().toISOString(),
+    updatedAt: row.updated_at ?? new Date().toISOString(),
   };
 }
 
-function rowToImage(row: Record<string, unknown>): CharacterBlueprintImage {
+export function rowToImage(row: CharacterBlueprintImageRow): CharacterBlueprintImage {
   return {
-    id: row.id as string,
-    blueprintId: row.blueprint_id as string,
-    imageUrl: row.image_url as string,
-    label: (row.label as string) ?? null,
-    isPrimary: (row.is_primary as boolean) ?? false,
-    sortOrder: (row.sort_order as number) ?? 0,
-    createdAt: (row.created_at as string) ?? new Date().toISOString(),
+    id: row.id,
+    blueprintId: row.blueprint_id,
+    assetId: row.asset_id ?? null,
+    imageUrl: row.image_url,
+    label: row.label ?? null,
+    isPrimary: row.is_primary ?? false,
+    sortOrder: row.sort_order ?? 0,
+    createdAt: row.created_at ?? new Date().toISOString(),
   };
 }
 
@@ -58,12 +145,16 @@ function rowToImage(row: Record<string, unknown>): CharacterBlueprintImage {
 
 export async function listBlueprints(): Promise<CharacterBlueprint[]> {
   const { data, error } = await supabase
-    .from('character_blueprints' as any)
+    .from('character_blueprints')
     .select('*')
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return ((data as unknown as Record<string, unknown>[]) ?? []).map(rowToBlueprint);
+  const rows = data ?? [];
+  const referencesByBlueprint = await listBlueprintImagesForBlueprints(rows.map((row) => row.id));
+  return rows.map((row) =>
+    rowToBlueprint(row, summarizeReferences(referencesByBlueprint.get(row.id) ?? [])),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -72,13 +163,15 @@ export async function listBlueprints(): Promise<CharacterBlueprint[]> {
 
 export async function getBlueprint(id: string): Promise<CharacterBlueprint | null> {
   const { data, error } = await supabase
-    .from('character_blueprints' as any)
+    .from('character_blueprints')
     .select('*')
     .eq('id', id)
     .maybeSingle();
 
   if (error) throw error;
-  return data ? rowToBlueprint(data as unknown as Record<string, unknown>) : null;
+  if (!data) return null;
+  const referencesByBlueprint = await listBlueprintImagesForBlueprints([data.id]);
+  return rowToBlueprint(data, summarizeReferences(referencesByBlueprint.get(data.id) ?? []));
 }
 
 // ---------------------------------------------------------------------------
@@ -96,6 +189,7 @@ export async function createBlueprint(input: {
   imageUrl?: string | null;
   thumbnailUrl?: string | null;
   projectId?: string | null;
+  referenceImages?: BlueprintReferenceInput[];
 }): Promise<CharacterBlueprint> {
   const {
     data: { user },
@@ -104,28 +198,44 @@ export async function createBlueprint(input: {
   if (!user) throw new Error('Not authenticated');
 
   const slug = toSlug(input.name);
+  const primaryReference = input.referenceImages?.find((image) => image.isPrimary) ?? input.referenceImages?.[0];
 
   const { data, error } = await supabase
-    .from('character_blueprints' as any)
+    .from('character_blueprints')
     .insert({
       user_id: user.id,
       project_id: input.projectId ?? null,
       name: input.name,
       slug,
       kind: input.kind,
-      traits: input.traits,
-      face_details: input.faceDetails,
-      body_details: input.bodyDetails,
-      style_details: input.styleDetails,
+      traits: toJson(input.traits),
+      face_details: toJson(input.faceDetails),
+      body_details: toJson(input.bodyDetails),
+      style_details: toJson(input.styleDetails),
       prompt_fragment: input.promptFragment,
-      image_url: input.imageUrl ?? null,
-      thumbnail_url: input.thumbnailUrl ?? null,
-    } as any)
+      image_url: input.imageUrl ?? primaryReference?.imageUrl ?? null,
+      thumbnail_url: input.thumbnailUrl ?? primaryReference?.imageUrl ?? null,
+    } satisfies CharacterBlueprintInsert)
     .select('*')
     .single();
 
   if (error) throw error;
-  return rowToBlueprint(data as unknown as Record<string, unknown>);
+  const blueprint = rowToBlueprint(data);
+
+  const insertedReferences: CharacterBlueprintImage[] = [];
+  for (const [index, reference] of (input.referenceImages ?? []).entries()) {
+    const image = await addBlueprintImage({
+      blueprintId: blueprint.id,
+      assetId: reference.assetId,
+      imageUrl: reference.imageUrl,
+      label: reference.label ?? null,
+      isPrimary: reference.isPrimary ?? index === 0,
+      sortOrder: index,
+    });
+    insertedReferences.push(image);
+  }
+
+  return attachReferenceSummary(blueprint, insertedReferences);
 }
 
 // ---------------------------------------------------------------------------
@@ -152,17 +262,17 @@ export async function updateBlueprintRecord(
     isFavorite: boolean;
   }>,
 ): Promise<CharacterBlueprint> {
-  const payload: Record<string, unknown> = {};
+  const payload: CharacterBlueprintUpdate = {};
 
   if (updates.name !== undefined) {
     payload.name = updates.name;
     payload.slug = toSlug(updates.name);
   }
   if (updates.kind !== undefined) payload.kind = updates.kind;
-  if (updates.traits !== undefined) payload.traits = updates.traits;
-  if (updates.faceDetails !== undefined) payload.face_details = updates.faceDetails;
-  if (updates.bodyDetails !== undefined) payload.body_details = updates.bodyDetails;
-  if (updates.styleDetails !== undefined) payload.style_details = updates.styleDetails;
+  if (updates.traits !== undefined) payload.traits = toJson(updates.traits);
+  if (updates.faceDetails !== undefined) payload.face_details = toJson(updates.faceDetails);
+  if (updates.bodyDetails !== undefined) payload.body_details = toJson(updates.bodyDetails);
+  if (updates.styleDetails !== undefined) payload.style_details = toJson(updates.styleDetails);
   if (updates.promptFragment !== undefined) payload.prompt_fragment = updates.promptFragment;
   if (updates.imageUrl !== undefined) payload.image_url = updates.imageUrl;
   if (updates.thumbnailUrl !== undefined) payload.thumbnail_url = updates.thumbnailUrl;
@@ -174,14 +284,15 @@ export async function updateBlueprintRecord(
   if (updates.isFavorite !== undefined) payload.is_favorite = updates.isFavorite;
 
   const { data, error } = await supabase
-    .from('character_blueprints' as any)
-    .update(payload as any)
+    .from('character_blueprints')
+    .update(payload)
     .eq('id', id)
     .select('*')
     .single();
 
   if (error) throw error;
-  return rowToBlueprint(data as unknown as Record<string, unknown>);
+  const referencesByBlueprint = await listBlueprintImagesForBlueprints([data.id]);
+  return rowToBlueprint(data, summarizeReferences(referencesByBlueprint.get(data.id) ?? []));
 }
 
 // ---------------------------------------------------------------------------
@@ -190,7 +301,7 @@ export async function updateBlueprintRecord(
 
 export async function deleteBlueprint(id: string): Promise<void> {
   const { error } = await supabase
-    .from('character_blueprints' as any)
+    .from('character_blueprints')
     .delete()
     .eq('id', id);
 
@@ -204,15 +315,15 @@ export async function deleteBlueprint(id: string): Promise<void> {
 export async function incrementBlueprintUsage(id: string): Promise<void> {
   // Use rpc or manual increment
   const { data: current } = await supabase
-    .from('character_blueprints' as any)
+    .from('character_blueprints')
     .select('usage_count')
     .eq('id', id)
     .single();
 
   if (current) {
     await supabase
-      .from('character_blueprints' as any)
-      .update({ usage_count: ((current as any).usage_count ?? 0) + 1 } as any)
+      .from('character_blueprints')
+      .update({ usage_count: (current.usage_count ?? 0) + 1 })
       .eq('id', id);
   }
 }
@@ -223,34 +334,38 @@ export async function incrementBlueprintUsage(id: string): Promise<void> {
 
 export async function listBlueprintImages(blueprintId: string): Promise<CharacterBlueprintImage[]> {
   const { data, error } = await supabase
-    .from('character_blueprint_images' as any)
+    .from('character_blueprint_images')
     .select('*')
     .eq('blueprint_id', blueprintId)
     .order('sort_order', { ascending: true });
 
   if (error) throw error;
-  return ((data as unknown as Record<string, unknown>[]) ?? []).map(rowToImage);
+  return (data ?? []).map(rowToImage);
 }
 
 export async function addBlueprintImage(input: {
   blueprintId: string;
+  assetId?: string | null;
   imageUrl: string;
-  label?: string;
+  label?: string | null;
   isPrimary?: boolean;
+  sortOrder?: number;
 }): Promise<CharacterBlueprintImage> {
   const { data, error } = await supabase
-    .from('character_blueprint_images' as any)
+    .from('character_blueprint_images')
     .insert({
       blueprint_id: input.blueprintId,
+      asset_id: input.assetId ?? null,
       image_url: input.imageUrl,
       label: input.label ?? null,
       is_primary: input.isPrimary ?? false,
-    } as any)
+      sort_order: input.sortOrder ?? 0,
+    } satisfies CharacterBlueprintImageInsert)
     .select('*')
     .single();
 
   if (error) throw error;
-  return rowToImage(data as unknown as Record<string, unknown>);
+  return rowToImage(data);
 }
 
 // ---------------------------------------------------------------------------
@@ -299,6 +414,7 @@ function getDefaultElementTagId(kind: CharacterBlueprint['kind']): string {
     case 'object':
     case 'vehicle':
       return 'o_104';
+    case 'location':
     case 'environment':
       return 'o_106';
     default:
@@ -443,12 +559,16 @@ export async function searchBlueprintsBySlug(
   if (!normalised) return [];
 
   const { data, error } = await supabase
-    .from('character_blueprints' as any)
+    .from('character_blueprints')
     .select('*')
     .ilike('slug', `${normalised}%`)
     .order('usage_count', { ascending: false })
     .limit(limit);
 
   if (error) throw error;
-  return ((data as unknown as Record<string, unknown>[]) ?? []).map(rowToBlueprint);
+  const rows = data ?? [];
+  const referencesByBlueprint = await listBlueprintImagesForBlueprints(rows.map((row) => row.id));
+  return rows.map((row) =>
+    rowToBlueprint(row, summarizeReferences(referencesByBlueprint.get(row.id) ?? [])),
+  );
 }

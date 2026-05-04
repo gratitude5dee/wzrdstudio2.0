@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildCinemaRequest,
   buildCinemaPrompt,
   buildImageRequest,
   buildLipSyncRequest,
@@ -41,6 +42,21 @@ describe("kanvas helpers", () => {
     expect(prompt).toContain("shot on a full-frame digital cinema camera");
     expect(prompt).toContain("using a vintage prime lens at 50mm");
     expect(prompt).toContain("aperture f/1.4");
+  });
+
+  it("builds cinema requests with compatible mention references", () => {
+    expect(
+      buildCinemaRequest({
+        modelId: "fal-ai/nano-banana-pro/edit",
+        prompt: "A hero shot of @nova-pilot",
+        cinema: createDefaultCinemaSettings(),
+        imageIds: ["asset-image-1"],
+      })
+    ).toMatchObject({
+      studio: "cinema",
+      mode: "cinematic-image",
+      assetSelections: { imageIds: ["asset-image-1"] },
+    });
   });
 
   it("builds image studio requests based on whether references are selected", () => {

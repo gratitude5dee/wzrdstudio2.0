@@ -19,6 +19,8 @@ import type { KanvasAsset, KanvasAssetType, KanvasJob, KanvasModel } from "@/fea
 import { getJobPrimaryUrl } from "@/features/kanvas/helpers";
 import { getKanvasModelProvider } from "@/features/kanvas/modelProvider";
 import { useUserTier, sortModelsForTier } from "@/hooks/useUserTier";
+import { MentionDropdown } from "@/components/character-creation/MentionDropdown";
+import type { CharacterMention } from "@/types/character-creation";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -42,6 +44,11 @@ interface ImageStudioSectionProps {
   uploading: boolean;
   onUpload: (file: File, type: KanvasAssetType) => Promise<void>;
   pageLoading: boolean;
+  mentionSuggestions?: CharacterMention[];
+  showMentionDropdown?: boolean;
+  onMentionSelect?: (mention: CharacterMention) => void;
+  onMentionChange?: (text: string, cursorPos?: number) => void;
+  onCloseMentions?: () => void;
 }
 
 /* ------------------------------------------------------------------ */
@@ -112,6 +119,11 @@ export default function ImageStudioSection({
   jobs,
   uploading,
   onUpload,
+  mentionSuggestions = [],
+  showMentionDropdown = false,
+  onMentionSelect,
+  onMentionChange,
+  onCloseMentions,
 }: ImageStudioSectionProps) {
   const [imageCount, setImageCount] = useState(1);
   const [activeTab, setActiveTab] = useState<"explore" | "history">("explore");
@@ -127,6 +139,16 @@ export default function ImageStudioSection({
 
   const generationModels = sortModelsForTier(models.filter((m) => m.mode === "text-to-image"), tier);
   const editingModels = sortModelsForTier(models.filter((m) => m.mode === "image-to-image"), tier);
+
+  const handlePromptInput = (value: string) => {
+    onPromptChange(value);
+    onMentionChange?.(value);
+  };
+
+  const handleMentionSelect = (mention: CharacterMention) => {
+    onMentionSelect?.(mention);
+    inputRef.current?.focus();
+  };
 
   const groupedModels = (() => {
     const groups: { label: string; icon: string; models: KanvasModel[] }[] = [];
@@ -353,8 +375,9 @@ export default function ImageStudioSection({
             <input
               type="text"
               value={prompt}
-              onChange={(e) => onPromptChange(e.target.value)}
+              onChange={(e) => handlePromptInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && prompt.trim()) onGenerate(); }}
+              onBlur={() => window.setTimeout(() => onCloseMentions?.(), 150)}
               placeholder="Describe the scene..."
               className="flex-1 min-w-0 bg-transparent border-none focus:ring-0 focus:outline-none text-white placeholder-zinc-600 font-medium text-sm px-2"
             />
@@ -407,8 +430,9 @@ export default function ImageStudioSection({
           ref={inputRef}
           type="text"
           value={prompt}
-          onChange={(e) => onPromptChange(e.target.value)}
+          onChange={(e) => handlePromptInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && prompt.trim()) onGenerate(); }}
+          onBlur={() => window.setTimeout(() => onCloseMentions?.(), 150)}
           placeholder="Describe the scene you imagine"
           className="flex-1 min-w-0 bg-transparent border-none focus:ring-0 focus:outline-none text-white placeholder-zinc-600 font-medium text-sm px-3"
         />
@@ -460,7 +484,16 @@ export default function ImageStudioSection({
         </div>
 
         {/* @ mention */}
-        <button className="shrink-0 w-9 h-9 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors">
+        <button
+          type="button"
+          onClick={() => {
+            inputRef.current?.focus();
+            if (!/@[\w-]*$/.test(prompt)) {
+              handlePromptInput(`${prompt}${prompt.trim() ? " " : ""}@`);
+            }
+          }}
+          className="shrink-0 w-9 h-9 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors"
+        >
           <AtSign className="h-3.5 w-3.5 text-zinc-500" />
         </button>
 
@@ -492,6 +525,11 @@ export default function ImageStudioSection({
           )}
         </button>
         </div>
+        <MentionDropdown
+          suggestions={mentionSuggestions}
+          onSelect={handleMentionSelect}
+          visible={showMentionDropdown}
+        />
 
         <input
           ref={uploadRef}
