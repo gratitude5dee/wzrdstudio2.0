@@ -1,33 +1,40 @@
+Plan to fix the persistent voice error:
 
-# Fix: IP Vault, Credit System, and Voice Errors
+1. Replace the voice client-secret call with an explicit authenticated fetch
+   - Update `src/voice/realtime/realtimeClientSecret.ts` so it no longer relies on `supabase.functions.invoke('realtime-client-secret')` for this path.
+   - Read the active Supabase session with `supabase.auth.getSession()`.
+   - If no access token exists, throw a clear `Please sign in again to use voice.` message instead of the generic Supabase `Failed to send a request to the Edge Function`.
+   - Call `https://<supabase-project>.supabase.co/functions/v1/realtime-client-secret` directly with:
+     - `Authorization: Bearer <access_token>`
+     - `apikey: <publishable key>`
+     - `Content-Type: application/json`
+   - Parse the error body on non-2xx responses so the UI shows the real cause, e.g. missing auth, OpenAI model access, or invalid OpenAI key.
 
-## Root Causes
+2. Harden Edge Function CORS for current Supabase JS/browser headers
+   - Update the shared CORS allow-list in `supabase/functions/_shared/response.ts` to include the additional Supabase client headers used by newer SDKs:
+     - `x-supabase-client-platform`
+     - `x-supabase-client-platform-version`
+     - `x-supabase-client-runtime`
+     - `x-supabase-client-runtime-version`
+   - This prevents browser preflight failures from surfacing as `FunctionsFetchError`.
 
-1. **"Failed to load IP Vault"** — The `ip_vault_items` table doesn't exist in the database. A migration file exists (`20260504143000_create_ip_vault_items.sql`) but was never applied.
+3. Improve the voice hook’s error reporting
+   - In `useWzrdRealtimeSession`, preserve the detailed error from `fetchRealtimeClientSecret()`.
+   - Avoid replacing it with the generic `Voice connection failed` fallback unless the thrown value is truly unknown.
 
-2. **"Error fetching credits" (console spam)** — `useCredits.ts` calls `supabase.rpc('credits_get_balance')`, which doesn't exist. On failure it falls back to `ensure_credit_account`, which also doesn't exist. Neither function has a migration.
+4. Update tests for the new explicit fetch behavior
+   - Adjust `realtimeClientSecret.test.ts` so it verifies:
+     - no session produces the clear sign-in message
+     - fetch is called with `Authorization`, `apikey`, and JSON headers
+     - HTTP error responses surface their real message
+     - valid `ek_...` responses still extract correctly
 
-3. **"Failed to finalize asset"** — This depends on `ip_vault_items` existing (the finalize writes to that table). Fixing #1 fixes this.
+5. Deploy and verify the Edge Function
+   - Deploy `realtime-client-secret` after the CORS/shared response update.
+   - Test the deployed function directly.
+   - If the authenticated call reaches OpenAI but fails, the remaining issue will be upstream OpenAI access/configuration rather than the app’s request path.
 
-4. **"Voice unavailable: failed to send a request to the Edge Function"** — The `realtime-client-secret` edge function exists and is deployed, but no logs indicate it's being hit. This is likely a downstream effect of the app being in an error state from #2 (credit errors firing repeatedly). If it persists after the other fixes, it may be an OpenAI API key issue.
-
-## Plan
-
-### Step 1: Apply the IP Vault migration
-Run the existing `20260504143000_create_ip_vault_items.sql` migration to create the `ip_vault_items` table with RLS policies. This fixes both "failed to load IP vault" and "failed to finalize asset."
-
-### Step 2: Fix the credit balance fetch in `useCredits.ts`
-The `credits_get_balance` and `ensure_credit_account` RPCs don't exist. Instead of creating new DB functions, fix `useCredits.ts` to use the existing `get_available_credits` RPC and `user_credits` table directly:
-
-- Replace `supabase.rpc('credits_get_balance')` with a direct query to `user_credits` table
-- Remove the `ensure_credit_account` fallback call
-- Keep the existing wallet/plan state but populate from available data
-
-This stops the console error spam and restores credit display.
-
-### Step 3: Verify voice function
-After fixes 1-2, verify the voice error resolves. If not, investigate the `realtime-client-secret` edge function separately.
-
-## Files Changed
-- `src/hooks/useCredits.ts` — rewrite `fetchCredits` to use existing DB schema
-- New migration — apply ip_vault_items table creation
+Notes:
+- I do not expect any new API keys to be required; `OPENAI_API_KEY` is already configured.
+- The current error text is the Supabase client’s network/preflight error, not the actual Edge Function response. The fix above should either make voice connect or reveal the true backend/OpenAI error in the UI.
+- I also noticed the preview is reporting unrelated TypeScript build errors. If those continue blocking deployment after this voice patch, I’ll keep the voice fix focused and only make the smallest necessary compile fixes related to the files touched by this change.
