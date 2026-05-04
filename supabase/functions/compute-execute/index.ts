@@ -31,7 +31,7 @@ import {
 import {
   getMediaActionById,
   type MediaActionDefinition,
-} from "../../../shared/mediaActionRegistry.ts";
+} from "../_shared/mediaActionRegistry.ts";
 import {
   executeGmiChatCompletion,
   executeGmiQueueModel,
