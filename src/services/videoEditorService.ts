@@ -291,7 +291,7 @@ export const videoEditorService = {
     const userId = await getCurrentUserId();
     const startTime = clip.startTime ?? 0;
     const duration = clip.duration ?? 0;
-    const { error } = await supabase.from('timeline_clips').upsert({
+    const { error } = await db.from('timeline_clips').upsert({
       id: clip.id,
       project_id: projectId,
       user_id: userId,
@@ -332,7 +332,7 @@ export const videoEditorService = {
   },
 
   async deleteTimelineClip(clipId: string): Promise<void> {
-    const { error } = await supabase.from('timeline_clips').delete().eq('id', clipId);
+    const { error } = await db.from('timeline_clips').delete().eq('id', clipId);
     if (error) {
       console.error('Failed to delete timeline clip', error);
       throw error;
@@ -418,7 +418,7 @@ export const videoEditorService = {
 
   async updateComposition(projectId: string, composition: Partial<CompositionSettings>): Promise<void> {
     const userId = await getCurrentUserId();
-    const { error } = await supabase.from('compositions').upsert({
+    const { error } = await db.from('compositions').upsert({
       project_id: projectId,
       user_id: userId,
       width: composition.width,
@@ -468,7 +468,7 @@ export const videoEditorService = {
 
   async saveKeyframe(projectId: string, keyframe: Keyframe): Promise<void> {
     const userId = await getCurrentUserId();
-    const { error } = await supabase.from('timeline_keyframes').upsert({
+    const { error } = await db.from('timeline_keyframes').upsert({
       id: keyframe.id,
       project_id: projectId,
       user_id: userId,
@@ -488,7 +488,7 @@ export const videoEditorService = {
   },
 
   async deleteKeyframe(keyframeId: string): Promise<void> {
-    const { error } = await supabase.from('timeline_keyframes').delete().eq('id', keyframeId);
+    const { error } = await db.from('timeline_keyframes').delete().eq('id', keyframeId);
     if (error) {
       console.error('Failed to delete keyframe', error);
       throw error;
