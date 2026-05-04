@@ -1,19 +1,33 @@
+
+# Fix: IP Vault, Credit System, and Voice Errors
+
+## Root Causes
+
+1. **"Failed to load IP Vault"** — The `ip_vault_items` table doesn't exist in the database. A migration file exists (`20260504143000_create_ip_vault_items.sql`) but was never applied.
+
+2. **"Error fetching credits" (console spam)** — `useCredits.ts` calls `supabase.rpc('credits_get_balance')`, which doesn't exist. On failure it falls back to `ensure_credit_account`, which also doesn't exist. Neither function has a migration.
+
+3. **"Failed to finalize asset"** — This depends on `ip_vault_items` existing (the finalize writes to that table). Fixing #1 fixes this.
+
+4. **"Voice unavailable: failed to send a request to the Edge Function"** — The `realtime-client-secret` edge function exists and is deployed, but no logs indicate it's being hit. This is likely a downstream effect of the app being in an error state from #2 (credit errors firing repeatedly). If it persists after the other fixes, it may be an OpenAI API key issue.
+
 ## Plan
 
-The migration file `supabase/migrations/20260503165000_repair_fal_catalog_visibility.sql` already exists in the repo. It needs to be applied to the Supabase database.
+### Step 1: Apply the IP Vault migration
+Run the existing `20260504143000_create_ip_vault_items.sql` migration to create the `ip_vault_items` table with RLS policies. This fixes both "failed to load IP vault" and "failed to finalize asset."
 
-### What the migration does
+### Step 2: Fix the credit balance fetch in `useCredits.ts`
+The `credits_get_balance` and `ensure_credit_account` RPCs don't exist. Instead of creating new DB functions, fix `useCredits.ts` to use the existing `get_available_credits` RPC and `user_credits` table directly:
 
-1. Adds missing columns to `ai_model_catalog` (`studio_surfaces`, `kanvas_modes`, `pricing`, `is_default`, `default_rank`, etc.)
-2. Updates check constraints to allow `fal_queue` transport type
-3. Creates GIN and composite indexes for efficient querying
-4. Upserts 8 curated Fal model defaults (Nano Banana 2, Kling Video, ElevenLabs TTS, Trellis 3D, GPT Image 2, etc.)
-5. Normalizes all Fal provider variants (`fal.ai`, `fal`, `fal_ai`) to `provider = 'fal-ai'`
-6. Backfills `studio_surfaces` from `media_type` so Studio dropdowns display Fal models
+- Replace `supabase.rpc('credits_get_balance')` with a direct query to `user_credits` table
+- Remove the `ensure_credit_account` fallback call
+- Keep the existing wallet/plan state but populate from available data
 
-### Steps
+This stops the console error spam and restores credit display.
 
-1. Apply the migration SQL to the database
-2. Run verification queries to confirm:
-   - Fal rows exist for image/video/audio/json/3d media types
-   - `fal_rows_missing_studio_surface = 0`
+### Step 3: Verify voice function
+After fixes 1-2, verify the voice error resolves. If not, investigate the `realtime-client-secret` edge function separately.
+
+## Files Changed
+- `src/hooks/useCredits.ts` — rewrite `fetchCredits` to use existing DB schema
+- New migration — apply ip_vault_items table creation
