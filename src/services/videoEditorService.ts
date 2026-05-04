@@ -73,7 +73,7 @@ const mapTimelineClipRecord = (record: TimelineClipRow): Clip => {
     layer: record.layer_index ?? record.track_index ?? 0,
     trimStart: record.trim_start_ms ?? undefined,
     trimEnd: record.trim_end_ms ?? undefined,
-    transition: record.transition ? asRecord(record.transition) as Clip['transition'] : undefined,
+    transition: record.transition ? asRecord(record.transition) as unknown as Clip['transition'] : undefined,
     transforms: {
       position: {
         x: Number(record.position_x ?? position.x ?? 0),
@@ -174,15 +174,15 @@ export const videoEditorService = {
     if (!mediaItemsResult.error) {
       for (const record of mediaItemsResult.data ?? []) {
         if (!record) continue;
-        addItem({
-          id: record.id,
-          projectId: record.project_id,
-          mediaType: record.media_type ?? 'video',
-          name: record.name ?? record.file_name ?? 'Untitled',
-          url: record.url ?? record.file_url ?? null,
-          durationSeconds: typeof record.duration_seconds === 'number' ? record.duration_seconds : undefined,
-          sourceType: record.source_type ?? 'uploaded',
-          status: record.status ?? 'completed',
+         addItem({
+           id: record.id,
+           projectId: record.project_id,
+           mediaType: (record as any).media_type ?? 'video',
+           name: record.name ?? (record as any).file_name ?? 'Untitled',
+           url: (record as any).url ?? (record as any).file_url ?? null,
+           durationSeconds: typeof record.duration_seconds === 'number' ? record.duration_seconds : undefined,
+           sourceType: (record as any).source_type ?? 'uploaded',
+           status: (record as any).status ?? 'completed',
           thumbnailUrl: record.thumbnail_url ?? undefined,
         });
       }
@@ -314,8 +314,8 @@ export const videoEditorService = {
       scale_y: clip.transforms.scale.y,
       rotation: clip.transforms.rotation,
       opacity: clip.transforms.opacity,
-      transition: (clip.transition ?? null) as Json,
-      effects: (clip.effects ?? []) as Json,
+      transition: (clip.transition ?? null) as unknown as Json,
+      effects: (clip.effects ?? []) as unknown as Json,
       style: (clip.style ?? {}) as Json,
       metadata: {
         mediaItemId: clip.mediaItemId ?? null,
@@ -359,7 +359,7 @@ export const videoEditorService = {
     const userId = await getCurrentUserId();
     const startTime = track.startTime ?? 0;
     const duration = track.duration ?? 0;
-    const { error } = await supabase.from('audio_tracks').upsert({
+    const { error } = await db.from('audio_tracks').upsert({
       id: track.id,
       project_id: projectId,
       name: track.name,
