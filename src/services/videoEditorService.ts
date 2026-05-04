@@ -3,13 +3,16 @@ import type { AudioTrack, Clip, ClipEffect, CompositionSettings, Keyframe, Libra
 import type { Database, Json } from '@/integrations/supabase/types';
 
 type Tables = Database['public']['Tables'];
-type TimelineClipRow = Tables['timeline_clips']['Row'];
-type AudioTrackRow = Tables['audio_tracks']['Row'] & {
+type TimelineClipRow = Tables extends { timeline_clips: { Row: infer R } } ? R : Record<string, any>;
+type AudioTrackRow = (Tables extends { audio_tracks: { Row: infer R } } ? R : Record<string, any>) & {
   media_item_id?: string | null;
   source_id?: string | null;
+  track_index?: number | null;
+  fade_in_ms?: number | null;
+  fade_out_ms?: number | null;
 };
-type KeyframeRow = Tables['timeline_keyframes']['Row'];
-type CompositionRow = Tables['compositions']['Row'];
+type KeyframeRow = Tables extends { timeline_keyframes: { Row: infer R } } ? R : Record<string, any>;
+type CompositionRow = Tables extends { compositions: { Row: infer R } } ? R : Record<string, any>;
 type MediaItemRow = Tables['media_items']['Row'];
 
 const ensureCompositionDefaults = (partial: Partial<CompositionSettings> = {}): CompositionSettings => ({
