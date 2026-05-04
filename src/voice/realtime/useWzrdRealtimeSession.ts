@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { VoiceActionRegistry } from '../actions/registry';
+import { getVoiceInstructions, getVoiceToolDefinitions } from '../agent';
 import { fetchRealtimeClientSecret } from './realtimeClientSecret';
+import { WebRTCTransport, type RealtimeEvent } from './webrtcTransport';
 
 export type VoiceSessionStatus =
   | 'idle'
@@ -17,88 +19,29 @@ interface UseWzrdRealtimeSessionOptions {
   registry: VoiceActionRegistry;
 }
 
-type RealtimeSessionInstance = {
-  connect: (options: { apiKey: string; model?: string }) => Promise<void>;
-  close: () => void;
-  interrupt: () => void;
-  transport: {
-    status: string;
-    sendEvent: (event: { type: string }) => void;
-  };
-  on: (event: string, callback: (...args: unknown[]) => void) => void;
-};
-
-type RealtimeRuntime = {
-  RealtimeSession: new (agent: unknown, options: Record<string, unknown>) => RealtimeSessionInstance;
-  OpenAIRealtimeWebRTC: new (options: { audioElement: HTMLAudioElement; mediaStream: MediaStream }) => unknown;
-  agent: unknown;
-};
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Stop all tracks on a MediaStream, ignoring errors. */
-function stopStream(stream: MediaStream | null) {
-  if (!stream) return;
-  try {
-    stream.getTracks().forEach((t) => t.stop());
-  } catch {
-    /* ignore */
-  }
-}
-
 /** Errors we can silently ignore (e.g. committing an empty audio buffer on short press). */
-function isBenignError(raw: unknown): boolean {
-  if (raw && typeof raw === 'object') {
-    const rec = raw as Record<string, unknown>;
-    const inner = rec.error as Record<string, unknown> | undefined;
-    if (inner && typeof inner === 'object') {
-      const nested = inner.error as Record<string, unknown> | undefined;
-      const code = nested?.code ?? inner.code;
-      if (code === 'input_audio_buffer_commit_empty') return true;
-    }
+function isBenignError(event: RealtimeEvent): boolean {
+  const err = event.error as Record<string, unknown> | undefined;
+  if (err && typeof err === 'object') {
+    if (err.code === 'input_audio_buffer_commit_empty') return true;
   }
   return false;
 }
 
 /**
- * Extract a user-friendly message from the SDK's `error` event payload.
+ * Extract a user-friendly message from an error event.
  */
-function normalizeVoiceError(raw: unknown): string {
-  if (raw instanceof Error) {
-    const msg = raw.message;
-    if (msg.includes('Failed to parse SessionDescription') || msg.includes('Expect line: v=')) {
-      return 'Voice connection failed — the Realtime API rejected the WebRTC session. Please try again.';
-    }
-    return msg;
+function normalizeVoiceError(event: RealtimeEvent): string {
+  const err = event.error as Record<string, unknown> | undefined;
+  if (err && typeof err === 'object') {
+    if (typeof err.message === 'string') return err.message;
+    if (typeof err.type === 'string') return err.type;
   }
-  if (typeof raw === 'string') return raw;
-
-  if (raw && typeof raw === 'object') {
-    const rec = raw as Record<string, unknown>;
-
-    const inner = rec.error;
-    if (inner && typeof inner === 'object') {
-      const err = inner as Record<string, unknown>;
-      // Handle double-nested { error: { error: { message } } }
-      const nested = err.error as Record<string, unknown> | undefined;
-      if (nested && typeof nested === 'object' && typeof nested.message === 'string') {
-        return nested.message;
-      }
-      const errType = typeof err.type === 'string' ? err.type : '';
-      const errMsg = typeof err.message === 'string' ? err.message : '';
-
-      if (errType === 'service_unavailable' || errMsg.includes('temporarily unavailable')) {
-        return 'OpenAI Realtime service is temporarily unavailable — please try again in a moment.';
-      }
-      if (errMsg) return errMsg;
-      if (errType) return errType;
-    }
-
-    if (typeof rec.message === 'string') return rec.message;
-  }
-
+  if (typeof event.message === 'string') return event.message;
   return 'Voice session error.';
 }
 
@@ -107,161 +50,171 @@ function normalizeVoiceError(raw: unknown): string {
 // ---------------------------------------------------------------------------
 
 export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptions) {
-  const sessionRef = useRef<RealtimeSessionInstance | null>(null);
-  const runtimeRef = useRef<Promise<RealtimeRuntime> | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const micStreamRef = useRef<MediaStream | null>(null);
+  const transportRef = useRef<WebRTCTransport | null>(null);
   const [status, setStatus] = useState<VoiceSessionStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const isSessionActive = useCallback(() => sessionRef.current !== null, []);
+  // Stable ref to registry so data channel handler always has the latest
+  const registryRef = useRef(registry);
+  registryRef.current = registry;
 
-  const loadRuntime = useCallback(() => {
-    if (!runtimeRef.current) {
-      runtimeRef.current = Promise.all([
-        import('@openai/agents/realtime'),
-        import('../agent'),
-      ]).then(([realtime, agentModule]) => ({
-        RealtimeSession: realtime.RealtimeSession as RealtimeRuntime['RealtimeSession'],
-        OpenAIRealtimeWebRTC: realtime.OpenAIRealtimeWebRTC as RealtimeRuntime['OpenAIRealtimeWebRTC'],
-        agent: agentModule.createWzrdRealtimeAgent(registry),
-      }));
-    }
-    return runtimeRef.current;
-  }, [registry]);
+  const isSessionActive = useCallback(() => transportRef.current !== null, []);
 
   const disconnect = useCallback(() => {
     try {
-      sessionRef.current?.close();
-    } catch {
-      /* ignore */
-    }
-    sessionRef.current = null;
-    stopStream(micStreamRef.current);
-    micStreamRef.current = null;
+      transportRef.current?.close();
+    } catch { /* ignore */ }
+    transportRef.current = null;
     setStatus('idle');
     setErrorMessage(null);
   }, []);
 
   const connect = useCallback(async () => {
-    if (sessionRef.current) return sessionRef.current;
+    if (transportRef.current) return transportRef.current;
     setStatus('connecting');
     setErrorMessage(null);
 
-    if (!audioRef.current) {
-      audioRef.current = new Audio();
-      audioRef.current.autoplay = true;
-    }
-
-    let micStream: MediaStream | null = null;
-
     try {
-      // 1. Acquire microphone
-      try {
-        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        micStreamRef.current = micStream;
-      } catch (micError) {
-        const msg = micError instanceof Error ? micError.message : String(micError);
-        const denied =
-          msg.includes('Permission denied') ||
-          msg.includes('NotAllowedError') ||
-          msg.includes('Permission dismissed');
-        throw new Error(
-          denied
-            ? 'Microphone access denied. Please allow microphone permission in your browser and try again.'
-            : `Microphone error: ${msg}`,
-        );
-      }
-
-      // 2. Load runtime, fetch ephemeral key
-      const { RealtimeSession, OpenAIRealtimeWebRTC, agent } = await loadRuntime();
       const apiKey = await fetchRealtimeClientSecret();
-      const model = import.meta.env.VITE_WZRD_REALTIME_MODEL ?? 'gpt-realtime';
+      const model = import.meta.env.VITE_WZRD_REALTIME_MODEL ?? 'gpt-4o-realtime-preview-2025-06-03';
       const voice = import.meta.env.VITE_WZRD_REALTIME_VOICE ?? 'ash';
 
-      // 3. Create session — audio-only output (the API rejects ['text', 'audio'])
-      const session = new RealtimeSession(agent, {
-        transport: new OpenAIRealtimeWebRTC({
-          audioElement: audioRef.current,
-          mediaStream: micStream,
-        }),
-        model,
-        tracingDisabled: true,
-        config: {
-          voice,
-          outputModalities: ['audio'],
-          audio: {
-            input: {
-              transcription: {
-                model: 'gpt-4o-mini-transcribe',
-                language: 'en',
-              },
-              turnDetection: {
-                type: 'semantic_vad',
-                createResponse: false,
-              },
+      const transport = new WebRTCTransport();
+
+      // --- Wire event handlers BEFORE connecting ---
+
+      // Audio playback events
+      transport.on('response.audio.delta', () => setStatus('speaking'));
+      transport.on('response.audio_transcript.delta', () => setStatus('speaking'));
+      transport.on('response.audio.done', () => {
+        // Will get response.done shortly after
+      });
+      transport.on('response.done', () => setStatus('connected'));
+
+      // Tool call handling
+      transport.on('response.function_call_arguments.done', async (event) => {
+        const callId = event.call_id as string;
+        const fnName = event.name as string;
+        const argsStr = event.arguments as string;
+
+        setStatus('thinking');
+
+        try {
+          let args: Record<string, unknown> = {};
+          try {
+            args = JSON.parse(argsStr);
+          } catch { /* empty args */ }
+
+          // The tool is always execute_worldstudio_action; extract the inner action
+          let result: unknown;
+          if (fnName === 'execute_worldstudio_action') {
+            const actionName = args.name as string;
+            const input = (args.input as Record<string, unknown>) ?? {};
+            const confirmed = args.confirmed as boolean | undefined;
+            result = await registryRef.current.execute(
+              actionName as Parameters<typeof registryRef.current.execute>[0],
+              input,
+              { confirmed: confirmed ?? undefined },
+            );
+          } else {
+            result = { ok: false, status: 'invalid_input', message: `Unknown tool: ${fnName}` };
+          }
+
+          // Send tool result back
+          transport.send({
+            type: 'conversation.item.create',
+            item: {
+              type: 'function_call_output',
+              call_id: callId,
+              output: JSON.stringify(result),
             },
-          },
-        },
+          });
+
+          // Trigger model to respond after receiving tool output
+          transport.send({ type: 'response.create' });
+        } catch (err) {
+          console.error('[Voice] tool execution error:', err);
+          transport.send({
+            type: 'conversation.item.create',
+            item: {
+              type: 'function_call_output',
+              call_id: callId,
+              output: JSON.stringify({
+                ok: false,
+                status: 'error',
+                message: err instanceof Error ? err.message : 'Tool execution failed',
+              }),
+            },
+          });
+          transport.send({ type: 'response.create' });
+        }
       });
 
-      // 4. Wire up event handlers
-      session.on('audio_start', () => setStatus('speaking'));
-      session.on('audio_stopped', () => setStatus('connected'));
-      session.on('agent_tool_start', () => setStatus('thinking'));
-      session.on('agent_tool_end', () => setStatus('connected'));
-
-      session.on('error', (error: unknown) => {
-        // Silently ignore benign errors like empty audio buffer commits
-        if (isBenignError(error)) {
-          console.debug('[Voice] benign error suppressed:', error);
+      // Error handling
+      transport.on('error', (event) => {
+        if (isBenignError(event)) {
+          console.debug('[Voice] benign error suppressed:', event);
           return;
         }
-        const msg = normalizeVoiceError(error);
-        console.warn('[Voice] session error:', msg, error);
+        const msg = normalizeVoiceError(event);
+        console.warn('[Voice] session error:', msg, event);
         setStatus('error');
         setErrorMessage(msg);
       });
 
-      session.on('transport_event', (event: { type?: string }) => {
-        if (event.type === 'response.output_audio_transcript.delta') {
-          setStatus('speaking');
-        }
-        if (event.type === 'response.done') {
-          setStatus('connected');
-        }
+      // Session created confirmation
+      transport.on('session.created', () => {
+        console.info('[Voice] session created');
       });
 
-      // 5. Connect
-      await session.connect({ apiKey, model });
-      sessionRef.current = session;
+      transport.on('session.updated', () => {
+        console.info('[Voice] session configured');
+      });
+
+      // Input audio speech events (for status feedback)
+      transport.on('input_audio_buffer.speech_started', () => setStatus('listening'));
+      transport.on('input_audio_buffer.speech_stopped', () => setStatus('thinking'));
+
+      // --- Connect ---
+      await transport.connect({
+        apiKey,
+        model,
+        sessionConfig: {
+          modalities: ['text', 'audio'],
+          voice,
+          instructions: getVoiceInstructions(),
+          tools: getVoiceToolDefinitions(registryRef.current),
+          turn_detection: { type: 'server_vad' },
+          input_audio_transcription: { model: 'gpt-4o-mini-transcribe' },
+        },
+      });
+
+      transportRef.current = transport;
       setStatus('connected');
-      return session;
+      return transport;
     } catch (error) {
-      stopStream(micStream);
-      micStreamRef.current = null;
       setStatus('error');
-      setErrorMessage(error instanceof Error ? error.message : 'Voice connection failed.');
+      const msg = error instanceof Error ? error.message : 'Voice connection failed.';
+      setErrorMessage(msg);
       throw error;
     }
-  }, [loadRuntime]);
+  }, [disconnect]);
 
   const pushToTalkStart = useCallback(async () => {
-    const session = await connect();
-    session.interrupt();
-    session.transport.sendEvent({ type: 'input_audio_buffer.clear' } as never);
+    const transport = transportRef.current ?? (await connect());
+    transport.interrupt();
+    transport.send({ type: 'input_audio_buffer.clear' });
     setStatus('listening');
   }, [connect]);
 
   const pushToTalkStop = useCallback(() => {
-    const session = sessionRef.current;
-    if (!session) return;
-    if (session.transport.status !== 'connected') {
+    const transport = transportRef.current;
+    if (!transport || transport.status !== 'connected') {
       console.warn('[Voice] pushToTalkStop skipped — transport not connected');
       return;
     }
-    session.transport.sendEvent({ type: 'input_audio_buffer.commit' } as never);
-    session.transport.sendEvent({ type: 'response.create' } as never);
+    transport.send({ type: 'input_audio_buffer.commit' });
+    transport.send({ type: 'response.create' });
     setStatus('thinking');
   }, []);
 
@@ -270,9 +223,7 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
 
   // Clean up when user closes/refreshes the tab
   useEffect(() => {
-    const handleBeforeUnload = () => {
-      disconnect();
-    };
+    const handleBeforeUnload = () => disconnect();
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [disconnect]);
