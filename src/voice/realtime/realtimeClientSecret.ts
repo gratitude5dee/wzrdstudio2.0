@@ -1,7 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/integrations/supabase/config';
 
 export function extractRealtimeClientSecret(payload: unknown): string | null {
   if (!payload || typeof payload !== 'object') return null;
@@ -20,6 +18,24 @@ export function extractRealtimeClientSecret(payload: unknown): string | null {
   }
 
   return null;
+}
+
+/**
+ * Safely parse a JSON response, throwing a friendly error when the
+ * server returns HTML (e.g. the app's index.html for a bad URL).
+ */
+async function safeJsonParse(response: Response, label: string): Promise<unknown> {
+  const contentType = response.headers.get('content-type') ?? '';
+  if (contentType.includes('text/html')) {
+    throw new Error(`${label}: received an HTML page instead of JSON – check the request URL.`);
+  }
+
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`${label}: response is not valid JSON.`);
+  }
 }
 
 /**
@@ -53,9 +69,10 @@ export async function fetchRealtimeClientSecret(): Promise<string> {
   if (!response.ok) {
     let message = `Voice service error (${response.status})`;
     try {
-      const body = await response.json();
-      if (body?.error) {
-        message = typeof body.error === 'string' ? body.error : JSON.stringify(body.error);
+      const body = await safeJsonParse(response, 'Voice service error');
+      if (body && typeof body === 'object' && 'error' in (body as Record<string, unknown>)) {
+        const err = (body as Record<string, unknown>).error;
+        message = typeof err === 'string' ? err : JSON.stringify(err);
       }
     } catch {
       // ignore parse failures
@@ -63,7 +80,7 @@ export async function fetchRealtimeClientSecret(): Promise<string> {
     throw new Error(message);
   }
 
-  const payload = await response.json();
+  const payload = await safeJsonParse(response, 'Voice service');
   const secret = extractRealtimeClientSecret(payload);
   if (!secret) {
     throw new Error('Realtime client secret response did not include an ephemeral key.');
