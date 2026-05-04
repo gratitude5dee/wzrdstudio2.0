@@ -6,7 +6,7 @@ import path from "path";
 import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
-// @ts-ignore -- plugin type mismatch with Vite 6
+// @ts-nocheck
 export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
