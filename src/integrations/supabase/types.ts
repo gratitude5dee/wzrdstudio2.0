@@ -568,8 +568,6 @@ export type Database = {
           created_at: string
           duration_ms: number | null
           end_time_ms: number | null
-          fade_in_ms: number | null
-          fade_out_ms: number | null
           id: string
           is_muted: boolean | null
           metadata: Json | null
@@ -578,7 +576,6 @@ export type Database = {
           start_time_ms: number | null
           storage_bucket: string
           storage_path: string
-          track_index: number | null
           updated_at: string
           user_id: string
           volume: number | null
@@ -587,8 +584,6 @@ export type Database = {
           created_at?: string
           duration_ms?: number | null
           end_time_ms?: number | null
-          fade_in_ms?: number | null
-          fade_out_ms?: number | null
           id?: string
           is_muted?: boolean | null
           metadata?: Json | null
@@ -597,7 +592,6 @@ export type Database = {
           start_time_ms?: number | null
           storage_bucket: string
           storage_path: string
-          track_index?: number | null
           updated_at?: string
           user_id: string
           volume?: number | null
@@ -606,8 +600,6 @@ export type Database = {
           created_at?: string
           duration_ms?: number | null
           end_time_ms?: number | null
-          fade_in_ms?: number | null
-          fade_out_ms?: number | null
           id?: string
           is_muted?: boolean | null
           metadata?: Json | null
@@ -616,7 +608,6 @@ export type Database = {
           start_time_ms?: number | null
           storage_bucket?: string
           storage_path?: string
-          track_index?: number | null
           updated_at?: string
           user_id?: string
           volume?: number | null
@@ -1783,59 +1774,6 @@ export type Database = {
             foreignKeyName: "compute_runs_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
-            referencedRelation: "projects"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      compositions: {
-        Row: {
-          aspect_ratio: string
-          background_color: string
-          created_at: string
-          duration_ms: number
-          fps: number
-          height: number
-          id: string
-          metadata: Json
-          project_id: string
-          updated_at: string
-          user_id: string
-          width: number
-        }
-        Insert: {
-          aspect_ratio?: string
-          background_color?: string
-          created_at?: string
-          duration_ms?: number
-          fps?: number
-          height?: number
-          id?: string
-          metadata?: Json
-          project_id: string
-          updated_at?: string
-          user_id?: string
-          width?: number
-        }
-        Update: {
-          aspect_ratio?: string
-          background_color?: string
-          created_at?: string
-          duration_ms?: number
-          fps?: number
-          height?: number
-          id?: string
-          metadata?: Json
-          project_id?: string
-          updated_at?: string
-          user_id?: string
-          width?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "compositions_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: true
             referencedRelation: "projects"
             referencedColumns: ["id"]
           },
@@ -3126,69 +3064,6 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "export_jobs_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "projects"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      editframe_webhook_events: {
-        Row: {
-          created_at: string
-          error_message: string | null
-          event_id: string | null
-          id: string
-          job_id: string | null
-          payload: Json
-          processed_at: string | null
-          project_id: string | null
-          render_id: string | null
-          signature: string | null
-          status: string
-          topic: string
-          user_id: string | null
-        }
-        Insert: {
-          created_at?: string
-          error_message?: string | null
-          event_id?: string | null
-          id?: string
-          job_id?: string | null
-          payload?: Json
-          processed_at?: string | null
-          project_id?: string | null
-          render_id?: string | null
-          signature?: string | null
-          status?: string
-          topic: string
-          user_id?: string | null
-        }
-        Update: {
-          created_at?: string
-          error_message?: string | null
-          event_id?: string | null
-          id?: string
-          job_id?: string | null
-          payload?: Json
-          processed_at?: string | null
-          project_id?: string | null
-          render_id?: string | null
-          signature?: string | null
-          status?: string
-          topic?: string
-          user_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "editframe_webhook_events_job_id_fkey"
-            columns: ["job_id"]
-            isOneToOne: false
-            referencedRelation: "export_jobs"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "editframe_webhook_events_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
@@ -8633,167 +8508,6 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "timeline_assets_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "projects"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      timeline_clips: {
-        Row: {
-          clip_type: string
-          created_at: string
-          duration_ms: number
-          effects: Json
-          end_time_ms: number | null
-          id: string
-          layer_index: number
-          media_item_id: string | null
-          metadata: Json
-          name: string
-          opacity: number
-          position_x: number
-          position_y: number
-          project_id: string
-          rotation: number
-          scale_x: number
-          scale_y: number
-          source_id: string | null
-          source_url: string | null
-          start_time_ms: number
-          style: Json
-          text_content: string | null
-          track_index: number
-          transition: Json
-          trim_end_ms: number | null
-          trim_start_ms: number | null
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          clip_type: string
-          created_at?: string
-          duration_ms?: number
-          effects?: Json
-          end_time_ms?: number | null
-          id?: string
-          layer_index?: number
-          media_item_id?: string | null
-          metadata?: Json
-          name?: string
-          opacity?: number
-          position_x?: number
-          position_y?: number
-          project_id: string
-          rotation?: number
-          scale_x?: number
-          scale_y?: number
-          source_id?: string | null
-          source_url?: string | null
-          start_time_ms?: number
-          style?: Json
-          text_content?: string | null
-          track_index?: number
-          transition?: Json
-          trim_end_ms?: number | null
-          trim_start_ms?: number | null
-          updated_at?: string
-          user_id?: string
-        }
-        Update: {
-          clip_type?: string
-          created_at?: string
-          duration_ms?: number
-          effects?: Json
-          end_time_ms?: number | null
-          id?: string
-          layer_index?: number
-          media_item_id?: string | null
-          metadata?: Json
-          name?: string
-          opacity?: number
-          position_x?: number
-          position_y?: number
-          project_id?: string
-          rotation?: number
-          scale_x?: number
-          scale_y?: number
-          source_id?: string | null
-          source_url?: string | null
-          start_time_ms?: number
-          style?: Json
-          text_content?: string | null
-          track_index?: number
-          transition?: Json
-          trim_end_ms?: number | null
-          trim_start_ms?: number | null
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "timeline_clips_media_item_id_fkey"
-            columns: ["media_item_id"]
-            isOneToOne: false
-            referencedRelation: "media_items"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "timeline_clips_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "projects"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      timeline_keyframes: {
-        Row: {
-          created_at: string
-          easing: string
-          id: string
-          metadata: Json
-          project_id: string
-          property_path: string
-          target_id: string
-          target_type: string
-          time_ms: number
-          updated_at: string
-          user_id: string
-          value: Json
-        }
-        Insert: {
-          created_at?: string
-          easing?: string
-          id?: string
-          metadata?: Json
-          project_id: string
-          property_path: string
-          target_id: string
-          target_type?: string
-          time_ms: number
-          updated_at?: string
-          user_id?: string
-          value: Json
-        }
-        Update: {
-          created_at?: string
-          easing?: string
-          id?: string
-          metadata?: Json
-          project_id?: string
-          property_path?: string
-          target_id?: string
-          target_type?: string
-          time_ms?: number
-          updated_at?: string
-          user_id?: string
-          value?: Json
-        }
-        Relationships: [
-          {
-            foreignKeyName: "timeline_keyframes_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
