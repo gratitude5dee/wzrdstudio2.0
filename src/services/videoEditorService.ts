@@ -272,7 +272,7 @@ export const videoEditorService = {
   },
 
   async getTimelineClips(projectId: string): Promise<Clip[]> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('timeline_clips')
       .select('*')
       .eq('project_id', projectId)
@@ -340,7 +340,7 @@ export const videoEditorService = {
   },
 
   async getAudioTracks(projectId: string): Promise<AudioTrack[]> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('audio_tracks')
       .select('*')
       .eq('project_id', projectId)
@@ -395,7 +395,7 @@ export const videoEditorService = {
   },
 
   async getComposition(projectId: string): Promise<CompositionSettings> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('compositions')
       .select('*')
       .eq('project_id', projectId)
@@ -437,7 +437,7 @@ export const videoEditorService = {
   },
 
   async getTimelineClip(projectId: string, clipId: string): Promise<Clip | null> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('timeline_clips')
       .select('*')
       .eq('id', clipId)
@@ -452,7 +452,7 @@ export const videoEditorService = {
   },
 
   async getKeyframes(projectId: string): Promise<Keyframe[]> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('timeline_keyframes')
       .select('*')
       .eq('project_id', projectId)
@@ -523,7 +523,7 @@ export const videoEditorService = {
   },
 
   async getAudioTrack(projectId: string, trackId: string): Promise<AudioTrack | null> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('audio_tracks')
       .select('*')
       .eq('id', trackId)
