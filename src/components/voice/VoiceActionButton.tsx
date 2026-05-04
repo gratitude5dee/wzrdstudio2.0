@@ -116,7 +116,7 @@ export function VoiceActionButton({
       >
         <Icon className={cn('h-5 w-5', (status === 'connecting' || status === 'thinking') && 'animate-spin')} />
         {/* Pulsing dot to indicate active session */}
-        {isActive && status !== 'listening' && status !== 'error' && (
+        {isActive && status !== 'listening' && (
           <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-green-400 animate-pulse" />
         )}
       </Button>

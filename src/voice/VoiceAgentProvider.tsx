@@ -106,6 +106,7 @@ export function VoiceAgentProvider({ children }: { children: React.ReactNode }) 
           errorMessage={voiceSession.errorMessage}
           onPressStart={voiceSession.pushToTalkStart}
           onPressEnd={voiceSession.pushToTalkStop}
+          onDisconnect={voiceSession.disconnect}
         />
       ) : null}
     </VoiceAgentContext.Provider>
