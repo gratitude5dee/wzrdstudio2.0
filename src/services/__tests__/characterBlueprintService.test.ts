@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { rowToBlueprint, rowToImage } from '@/services/characterBlueprintService';
 import type { Database } from '@/integrations/supabase/types';
 
-type BlueprintRow = Database['public']['Tables']['character_blueprints']['Row'];
-type BlueprintImageRow = Database['public']['Tables']['character_blueprint_images']['Row'];
+type BlueprintRow = Database['public']['Tables']['character_blueprints']['Row'] & Record<string, any>;
+type BlueprintImageRow = Database['public']['Tables']['character_blueprint_images']['Row'] & Record<string, any>;
 
 const baseBlueprintRow: BlueprintRow = {
   body_details: {},
