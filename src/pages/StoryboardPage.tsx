@@ -283,7 +283,8 @@ const StoryboardPage = () => {
     try {
       const { error } = await supabase
         .from('scenes')
-        .update(updates as Record<string, unknown>)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .update(updates as any)
         .eq('id', sceneId);
       if (error) throw error;
 
