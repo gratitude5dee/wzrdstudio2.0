@@ -269,8 +269,13 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
 
   const pushToTalkStart = useCallback(async () => {
     const transport = transportRef.current ?? (await connect());
-    transport.interrupt();
-    transport.send({ type: 'output_audio_buffer.clear' });
+    // Only cancel if the assistant is actively responding
+    if (responseActiveRef.current) {
+      transport.interrupt();
+    }
+    if (outputAudioActiveRef.current) {
+      transport.send({ type: 'output_audio_buffer.clear' });
+    }
     transport.send({ type: 'input_audio_buffer.clear' });
     setStatus('listening');
   }, [connect]);
