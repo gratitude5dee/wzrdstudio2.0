@@ -34,6 +34,7 @@ function isBenignError(event: RealtimeEvent): boolean {
   const err = event.error as Record<string, unknown> | undefined;
   if (err && typeof err === 'object') {
     if (err.code === 'input_audio_buffer_commit_empty') return true;
+    if (err.code === 'response_cancel_not_active') return true;
   }
   return false;
 }
@@ -86,6 +87,8 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
   const [status, setStatus] = useState<VoiceSessionStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const processedToolCallsRef = useRef<Set<string>>(new Set());
+  const responseActiveRef = useRef(false);
+  const outputAudioActiveRef = useRef(false);
 
   // Stable ref to registry so data channel handler always has the latest
   const registryRef = useRef(registry);
@@ -170,17 +173,26 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
 
       // --- Wire event handlers BEFORE connecting ---
 
+      // Track response lifecycle for push-to-talk guards
+      transport.on('response.created', () => {
+        responseActiveRef.current = true;
+      });
+
       // Audio playback events
-      transport.on('response.audio.delta', () => setStatus('speaking'));
+      transport.on('response.audio.delta', () => {
+        setStatus('speaking');
+        outputAudioActiveRef.current = true;
+      });
       transport.on('response.audio_transcript.delta', () => setStatus('speaking'));
       transport.on('response.audio.done', () => {
-        // Will get response.done shortly after
+        outputAudioActiveRef.current = false;
       });
 
       // response.done is the SOLE entry point for tool execution.
-      // We removed the per-call response.function_call_arguments.done handler
-      // to prevent concurrent execution of multi-tool responses.
       transport.on('response.done', (event) => {
+        responseActiveRef.current = false;
+        outputAudioActiveRef.current = false;
+
         const toolCalls = getFunctionCallsFromResponseDone(event);
         if (toolCalls.length > 0) {
           void (async () => {
@@ -257,8 +269,13 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
 
   const pushToTalkStart = useCallback(async () => {
     const transport = transportRef.current ?? (await connect());
-    transport.interrupt();
-    transport.send({ type: 'output_audio_buffer.clear' });
+    // Only cancel if the assistant is actively responding
+    if (responseActiveRef.current) {
+      transport.interrupt();
+    }
+    if (outputAudioActiveRef.current) {
+      transport.send({ type: 'output_audio_buffer.clear' });
+    }
     transport.send({ type: 'input_audio_buffer.clear' });
     setStatus('listening');
   }, [connect]);

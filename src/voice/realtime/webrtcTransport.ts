@@ -55,6 +55,8 @@ export class WebRTCTransport {
   private wildcardListeners = new Set<RealtimeEventHandler>();
   private _status: 'disconnected' | 'connecting' | 'connected' = 'disconnected';
   private sessionConfig: RealtimeSessionConfig | null = null;
+  private _dcOpenResolve: (() => void) | null = null;
+  private _dcOpenPromise: Promise<void> | null = null;
 
   get status() {
     return this._status;
@@ -121,6 +123,11 @@ export class WebRTCTransport {
     const dc = pc.createDataChannel('oai-events');
     this.dc = dc;
 
+    // Create a promise that resolves when the data channel opens
+    this._dcOpenPromise = new Promise<void>((resolve) => {
+      this._dcOpenResolve = resolve;
+    });
+
     dc.onopen = () => {
       this._status = 'connected';
       // Send session configuration once the channel is open
@@ -131,6 +138,9 @@ export class WebRTCTransport {
         });
       }
       this.emit({ type: 'transport.connected' });
+      // Resolve the open promise so connect() can return
+      this._dcOpenResolve?.();
+      this._dcOpenResolve = null;
     };
 
     dc.onmessage = (e) => {
@@ -186,6 +196,12 @@ export class WebRTCTransport {
       type: 'answer',
       sdp: answerSdp,
     });
+
+    // 8. Wait for the data channel to actually open before returning
+    if (this._dcOpenPromise) {
+      await this._dcOpenPromise;
+      this._dcOpenPromise = null;
+    }
   }
 
   /** Close the connection and release all resources. */
