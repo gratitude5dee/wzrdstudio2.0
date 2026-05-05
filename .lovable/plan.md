@@ -1,44 +1,39 @@
 
-## Problem
+# Voice Selection UI Integration for Storyboard Timeline
 
-Two issues:
+## What's already done
 
-1. **"Unknown parameter: 'session.type'"** — The `session.update` payload sent on data channel open uses the beta-era format with `type: 'realtime'` and nested `audio.input/output` structure. The GA API rejects `session.type` and doesn't understand the nested audio format, so the session never gets configured with instructions/tools. Without instructions, the model defaults to whatever locale it infers (Spanish) and has no tool definitions to act on.
+All voice bridges, action handlers, prompt, registry, transport, and GA API format are fully implemented. Glow rings work on CharacterCard and BreakdownTab scene cards. The `VoiceSelectionContext` values (`expandedShotId`, `selectedTargets`, `isSelected`) are imported in `ShotsRow` but never consumed.
 
-2. **Spanish responses + no actions** — Direct consequence of #1. Since session config is rejected, the model has no system instructions (which say "speak in short, useful lines" in English) and no tool definitions.
+## What's missing
+
+The storyboard timeline doesn't visually reflect voice selection state:
+1. **ShotCard** has no `isVoiceSelected` prop or glow ring styling
+2. **ShotsRow** imports voice selection but never passes it to ShotCard or uses `expandedShotId` to auto-expand a shot
+3. Shot cards have no `data-voice-shot-id` attribute for scroll-into-view targeting
 
 ## Changes
 
-### 1. Fix session config format in `src/voice/realtime/useWzrdRealtimeSession.ts` (lines 234-258)
+### 1. ShotCard -- Add voice glow ring
 
-Replace the beta-era session config with the GA format:
+File: `src/components/storyboard/shot/ShotCard.tsx`
 
-```ts
-sessionConfig: {
-  modalities: ['text', 'audio'],
-  voice,
-  instructions: getVoiceInstructions(),
-  tools: getVoiceToolDefinitions(registryRef.current),
-  tool_choice: 'auto',
-  turn_detection: null,
-  input_audio_transcription: { model: 'gpt-4o-mini-transcribe' },
-},
-```
+- Add `isVoiceSelected?: boolean` prop
+- Add `data-voice-shot-id={shot.id}` attribute to the root element
+- When `isVoiceSelected` is true, apply an orange glow ring (matching the CharacterCard pattern: `ring-2 ring-orange-500/60 shadow-[0_0_12px_rgba(249,115,22,0.3)]`)
 
-Key changes:
-- Remove `type: 'realtime'` (not a valid session parameter in GA)
-- Remove `model` from session config (model is set via the WebRTC URL query param, not session.update)
-- Replace `output_modalities` with `modalities: ['text', 'audio']`
-- Remove nested `audio.input/output` structure — use flat `voice` at top level
-- Keep `turn_detection: null` at top level for push-to-talk
+### 2. ShotsRow -- Wire voice state to ShotCard
 
-### 2. Clean up `RealtimeSessionConfig` type in `src/voice/realtime/webrtcTransport.ts` (lines 30-45)
+File: `src/components/storyboard/ShotsRow.tsx`
 
-Remove the `type` and `audio` fields from the interface to match the GA API shape, preventing future regressions.
+- Pass `isVoiceSelected={selectedTargets.shot?.id === shot.id}` to each ShotCard
+- Use `expandedShotId` to auto-expand the voice-selected shot (if the component has an expand/detail mechanism)
+- Use `selectTarget` to set voice selection when a shot is clicked (if not already handled by the page bridge)
 
-## Expected outcome
+### 3. Scroll-into-view targeting
 
-- Session config is accepted by OpenAI GA API
-- Instructions (English, with tool definitions) are applied
-- Model responds in English and executes `execute_worldstudio_action` tool calls
-- Voice actions dispatch through the registry as designed
+The `scrollVoiceTargetIntoView` calls in the StoryboardPage bridge already reference `[data-voice-shot-id="..."]` -- adding that data attribute to ShotCard completes the wiring.
+
+## Outcome
+
+When the voice assistant selects a shot (e.g. "select shot 3"), the corresponding ShotCard will glow orange, scroll into view, and auto-expand if applicable.
