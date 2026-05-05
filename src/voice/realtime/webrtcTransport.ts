@@ -196,7 +196,12 @@ export class WebRTCTransport {
       type: 'answer',
       sdp: answerSdp,
     });
-  }
+
+    // 8. Wait for the data channel to actually open before returning
+    if (this._dcOpenPromise) {
+      await this._dcOpenPromise;
+      this._dcOpenPromise = null;
+    }
 
   /** Close the connection and release all resources. */
   close(): void {
