@@ -53,8 +53,9 @@ describe('realtime client secret service', () => {
         }),
       );
 
-      const secret = await fetchRealtimeClientSecret();
-      expect(secret).toBe('ek_test123');
+      const result = await fetchRealtimeClientSecret();
+      expect(result.clientSecret).toBe('ek_test123');
+      expect(result.model).toBeNull();
 
       expect(fetchSpy).toHaveBeenCalledOnce();
       const [url, init] = fetchSpy.mock.calls[0];
