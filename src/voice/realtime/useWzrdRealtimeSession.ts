@@ -113,7 +113,11 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
       const voice = import.meta.env.VITE_WZRD_REALTIME_VOICE ?? 'marin';
 
       const transport = new WebRTCTransport();
-      const executeToolCall = async (call: RealtimeFunctionCall) => {
+      /**
+       * Execute a single tool call, resolve its result, and return the output
+       * message (but do NOT send response.create — the caller batches that).
+       */
+      const executeAndEmitOutput = async (call: RealtimeFunctionCall) => {
         if (processedToolCallsRef.current.has(call.call_id)) return;
         processedToolCallsRef.current.add(call.call_id);
 
@@ -147,8 +151,6 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
               output: JSON.stringify(result),
             },
           });
-
-          transport.send({ type: 'response.create' });
         } catch (err) {
           console.error('[Voice] tool execution error:', err);
           transport.send({
@@ -163,7 +165,6 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
               }),
             },
           });
-          transport.send({ type: 'response.create' });
         }
       };
 
@@ -175,31 +176,26 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
       transport.on('response.audio.done', () => {
         // Will get response.done shortly after
       });
+
+      // response.done is the SOLE entry point for tool execution.
+      // We removed the per-call response.function_call_arguments.done handler
+      // to prevent concurrent execution of multi-tool responses.
       transport.on('response.done', (event) => {
         const toolCalls = getFunctionCallsFromResponseDone(event);
         if (toolCalls.length > 0) {
-          // Sequential execution so earlier tool calls (e.g. set fields)
-          // complete before later ones (e.g. advance page) read state.
           void (async () => {
             for (const call of toolCalls) {
-              await executeToolCall(call);
+              await executeAndEmitOutput(call);
             }
+            // Send ONE response.create after all outputs are submitted
+            transport.send({ type: 'response.create' });
           })();
           return;
         }
         setStatus('connected');
       });
 
-      // Tool call handling
-      transport.on('response.function_call_arguments.done', async (event) => {
-        await executeToolCall({
-          call_id: event.call_id as string,
-          name: event.name as string,
-          arguments: (event.arguments as string | undefined) ?? '{}',
-        });
-      });
 
-      // Error handling
       transport.on('error', (event) => {
         if (isBenignError(event)) {
           console.debug('[Voice] benign error suppressed:', event);
