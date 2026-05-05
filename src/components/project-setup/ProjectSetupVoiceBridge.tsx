@@ -120,6 +120,8 @@ export function ProjectSetupVoiceBridge() {
           const { tab, save, generateStoryline: shouldGenerateStoryline, finalize, ...fields } = payload;
           if (Object.keys(fields).length > 0) {
             updateProjectData(fields);
+            // Eagerly update ref so subsequent tool calls in the same tick see the new values
+            projectDataRef.current = { ...projectDataRef.current, ...fields };
           }
           if (isProjectSetupTab(tab)) {
             setActiveTab(tab);
