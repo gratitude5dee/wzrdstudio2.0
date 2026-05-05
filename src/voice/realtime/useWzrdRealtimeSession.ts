@@ -87,6 +87,8 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
   const [status, setStatus] = useState<VoiceSessionStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const processedToolCallsRef = useRef<Set<string>>(new Set());
+  const responseActiveRef = useRef(false);
+  const outputAudioActiveRef = useRef(false);
 
   // Stable ref to registry so data channel handler always has the latest
   const registryRef = useRef(registry);
