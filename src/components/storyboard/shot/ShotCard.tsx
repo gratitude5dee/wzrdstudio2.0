@@ -22,6 +22,7 @@ interface ShotCardProps {
   onConnectionPointClick?: (shotId: string, point: 'left' | 'right') => void;
   connectedPoints?: { left: boolean; right: boolean };
   isSelected?: boolean;
+  isVoiceSelected?: boolean;
   isExpanded?: boolean;
   onExpandedChange?: (expanded: boolean) => void;
 }
