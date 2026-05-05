@@ -71,6 +71,11 @@ export function ProjectSetupVoiceBridge() {
   } = useProjectContext();
   const { selectedTargets, selectTarget } = useVoiceSelection();
 
+  // Mutable ref so voice handlers always read the latest projectData,
+  // even when multiple tool calls arrive in the same tick before React re-renders.
+  const projectDataRef = useRef(projectData);
+  projectDataRef.current = projectData;
+
   const actions = useMemo<VoiceActionRegistration[]>(
     () => [
       {
