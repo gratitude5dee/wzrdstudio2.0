@@ -1,30 +1,15 @@
+## Problem
 
-# Fix Voice Concept Display + Character Image Generation (via fal.ai)
+The `realtime-client-secret` edge function creates a session token with model `"gpt-realtime"` (from env `WZRD_REALTIME_MODEL`), but the client in `useWzrdRealtimeSession.ts` connects using a hardcoded `"gpt-4o-realtime-preview-2025-06-03"`. OpenAI rejects the connection because the model in the WebRTC connect call doesn't match the model baked into the ephemeral token.
 
-## Issue 1: Voice concept not appearing in the textarea
+## Fix
 
-The console shows `Unknown parameter: 'response.output_modalities'` from `webrtcTransport.ts:sendOutOfBandAudio()`. This error disrupts the Realtime session and may prevent tool calls from completing, so the concept never reaches the textarea.
+### 1. `src/voice/realtime/realtimeClientSecret.ts`
+- Update `fetchRealtimeClientSecret` to return both the ephemeral key **and** the model from the session response (the OpenAI response includes a `model` field).
+- Add a helper `extractRealtimeModel` to pull the model string from the payload.
 
-**Fix:** Remove `output_modalities` from the `response.create` payload in `sendOutOfBandAudio` (line 95 of `webrtcTransport.ts`). The session-level `modalities: ['text', 'audio']` already handles this.
+### 2. `src/voice/realtime/useWzrdRealtimeSession.ts`
+- Use the model returned from `fetchRealtimeClientSecret` instead of the hardcoded `gpt-4o-realtime-preview-2025-06-03`.
+- Fall back to the env var / default only if the response doesn't include a model.
 
-## Issue 2: Character image generation failing — switch from GMI to fal.ai
-
-The edge function `generate-character-image` currently uses GMI Cloud (`executeGmiQueueModel`) which fails with `model nanobanana-2 does not exist`. The user wants to use **fal.ai** with `fal-ai/nano-banana-2` instead.
-
-**Fix:** Rewrite `generate-character-image/index.ts` to use `executeFalModel` and `pollFalStatus` from `_shared/falai-client.ts` instead of `executeGmiQueueModel`/`pollGmiQueueStatus`. Remove the `image-fallback.ts` resolver (not needed when we're hardcoding to fal nano-banana-2). Remove the GMI imports entirely.
-
-### Changes to `generate-character-image/index.ts`:
-- Replace GMI imports with fal imports: `executeFalModel`, `pollFalStatus` from `falai-client.ts`
-- Keep the visual prompt generation step via GMI (`executeGmiChatCompletion` for text LLM is fine)
-- Replace the image generation step: use `executeFalModel('fal-ai/nano-banana-2', { prompt, image_size: { width: 1024, height: 1024 } }, 'queue')` 
-- Poll with `pollFalStatus` using the returned `requestId` and `statusUrl`
-- Extract the image URL from the fal response (`data.result?.images?.[0]?.url` or similar)
-- Remove the `resolveImageGenerationPlan` import and usage
-
-## Files to change
-
-1. **`src/voice/realtime/webrtcTransport.ts`** — Remove `output_modalities: ['audio']` from `sendOutOfBandAudio`.
-
-2. **`supabase/functions/generate-character-image/index.ts`** — Switch image generation from GMI Cloud to fal.ai `fal-ai/nano-banana-2`.
-
-3. Redeploy `generate-character-image` edge function.
+No edge function changes or redeployment needed.

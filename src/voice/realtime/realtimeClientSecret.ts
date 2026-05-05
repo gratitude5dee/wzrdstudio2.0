@@ -1,6 +1,11 @@
 import { supabase } from '@/integrations/supabase/client';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/integrations/supabase/config';
 
+export interface RealtimeSessionInfo {
+  clientSecret: string;
+  model: string | null;
+}
+
 export function extractRealtimeClientSecret(payload: unknown): string | null {
   if (!payload || typeof payload !== 'object') return null;
   const record = payload as Record<string, unknown>;
@@ -17,6 +22,13 @@ export function extractRealtimeClientSecret(payload: unknown): string | null {
     }
   }
 
+  return null;
+}
+
+export function extractRealtimeModel(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const record = payload as Record<string, unknown>;
+  if (typeof record.model === 'string') return record.model;
   return null;
 }
 
@@ -42,11 +54,10 @@ async function safeJsonParse(response: Response, label: string): Promise<unknown
  * Fetches an ephemeral OpenAI Realtime client secret via the
  * `realtime-client-secret` Edge Function.
  *
- * Uses an explicit `fetch` instead of `supabase.functions.invoke` so we
- * control the Authorization header and can surface real error messages
- * instead of a generic "Failed to send a request to the Edge Function".
+ * Returns both the ephemeral key and the model that the token was created for,
+ * so the client can connect with the matching model.
  */
-export async function fetchRealtimeClientSecret(): Promise<string> {
+export async function fetchRealtimeClientSecret(): Promise<RealtimeSessionInfo> {
   const { data: sessionData } = await supabase.auth.getSession();
   const accessToken = sessionData?.session?.access_token;
 
@@ -86,5 +97,7 @@ export async function fetchRealtimeClientSecret(): Promise<string> {
     throw new Error('Realtime client secret response did not include an ephemeral key.');
   }
 
-  return secret;
+  const model = extractRealtimeModel(payload);
+
+  return { clientSecret: secret, model };
 }
