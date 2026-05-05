@@ -558,7 +558,7 @@ const StorylineTab = ({ projectData, updateProjectData }: StorylineTabProps) => 
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ delay: idx * 0.1, duration: 0.3 }}
                           >
-                            <span className="font-medium text-primary">Scene {scene.scene_number}:</span>{' '}
+                            <span className="font-medium text-primary">Scene {idx + 1}:</span>{' '}
                             <span className="text-zinc-300">{scene.title}</span>
                           </motion.div>
                         ))}
