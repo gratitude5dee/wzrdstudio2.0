@@ -173,17 +173,26 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
 
       // --- Wire event handlers BEFORE connecting ---
 
+      // Track response lifecycle for push-to-talk guards
+      transport.on('response.created', () => {
+        responseActiveRef.current = true;
+      });
+
       // Audio playback events
-      transport.on('response.audio.delta', () => setStatus('speaking'));
+      transport.on('response.audio.delta', () => {
+        setStatus('speaking');
+        outputAudioActiveRef.current = true;
+      });
       transport.on('response.audio_transcript.delta', () => setStatus('speaking'));
       transport.on('response.audio.done', () => {
-        // Will get response.done shortly after
+        outputAudioActiveRef.current = false;
       });
 
       // response.done is the SOLE entry point for tool execution.
-      // We removed the per-call response.function_call_arguments.done handler
-      // to prevent concurrent execution of multi-tool responses.
       transport.on('response.done', (event) => {
+        responseActiveRef.current = false;
+        outputAudioActiveRef.current = false;
+
         const toolCalls = getFunctionCallsFromResponseDone(event);
         if (toolCalls.length > 0) {
           void (async () => {
