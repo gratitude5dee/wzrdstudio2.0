@@ -191,7 +191,14 @@ export function ProjectSetupVoiceBridge() {
         scope: 'project-setup',
         handler: async (input, context) => {
           if (activeTab === 'concept') {
-            // Read from ref to get the latest value (may have been set in the same tick)
+            // Accept inline concept/logline in the input and merge into ref
+            const rawInput = (input as Record<string, unknown>) ?? {};
+            const inlineFields = normalizeConceptInput(rawInput);
+            if (Object.keys(inlineFields).length > 0) {
+              updateProjectData(inlineFields);
+              projectDataRef.current = { ...projectDataRef.current, ...inlineFields };
+            }
+
             const latestData = projectDataRef.current;
             const concept = latestData.concept?.trim();
             if (!concept || concept.length < 12) {
@@ -204,11 +211,13 @@ export function ProjectSetupVoiceBridge() {
               return needsConfirmation('project_setup_next', input, 'generation');
             }
 
-            const savedProjectId = await saveProjectData();
+            // Pass eager ref state as overrides so the concept is saved even if React hasn't flushed
+            const overrides: Partial<ProjectData> = { ...inlineFields, concept: latestData.concept };
+            const savedProjectId = await saveProjectData(overrides);
             if (!savedProjectId) return invalid('I could not save the project yet.');
 
             if (latestData.conceptOption === 'ai') {
-              await generateStoryline(savedProjectId);
+              await generateStoryline(savedProjectId, overrides);
             }
             setActiveTab('storyline');
             return completed('Storyline is open and generation has started.', {
