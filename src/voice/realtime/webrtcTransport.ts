@@ -123,6 +123,11 @@ export class WebRTCTransport {
     const dc = pc.createDataChannel('oai-events');
     this.dc = dc;
 
+    // Create a promise that resolves when the data channel opens
+    this._dcOpenPromise = new Promise<void>((resolve) => {
+      this._dcOpenResolve = resolve;
+    });
+
     dc.onopen = () => {
       this._status = 'connected';
       // Send session configuration once the channel is open
@@ -133,6 +138,9 @@ export class WebRTCTransport {
         });
       }
       this.emit({ type: 'transport.connected' });
+      // Resolve the open promise so connect() can return
+      this._dcOpenResolve?.();
+      this._dcOpenResolve = null;
     };
 
     dc.onmessage = (e) => {
