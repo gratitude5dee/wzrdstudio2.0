@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { musicPolishAssets, type MusicPolishAsset } from '@/lib/musicPolishAssets';
 
 const fadeUp = {
   initial: { opacity: 0, y: 30 },
@@ -11,6 +12,7 @@ interface ModelCategory {
   title: string;
   description: string;
   models: string[];
+  image: MusicPolishAsset;
 }
 
 const categories: ModelCategory[] = [
@@ -18,31 +20,37 @@ const categories: ModelCategory[] = [
     title: 'Video',
     description: 'Generate motion with keyframe and camera controls with natural physics.',
     models: ['Veo 3.1', 'Kling O3 Pro', 'Seedance 1.5 Pro', 'Sora 2', 'LTX-2 Fast'],
+    image: musicPolishAssets.cinema.neonStreet,
   },
   {
     title: 'Voice',
     description: 'Clone voices, generate narration, and produce dialogue with emotional range.',
     models: ['ElevenLabs V3', 'Sesame CSM', 'Fish Speech 1.5', 'Kokoro 82M'],
+    image: musicPolishAssets.blueprints.microphone,
   },
   {
     title: 'Story Script',
     description: 'Write screenplays, storyboards, and shot lists with structured AI direction.',
     models: ['Claude Sonnet 4.6', 'GPT-4.1 Pro', 'Gemini 2.5 Pro', 'DeepSeek R2'],
+    image: musicPolishAssets.cinema.castBoard,
   },
   {
     title: 'Sound FX & Music',
     description: 'Score films, design sound effects, and generate ambient audio landscapes.',
     models: ['MMAudio', 'Stable Audio 2', 'Udio v2', 'Suno v4'],
+    image: musicPolishAssets.cinema.soundstage,
   },
   {
     title: 'Image',
     description: 'Create stills, concept art, matte paintings, and character reference sheets.',
     models: ['Flux 1.1 Ultra', 'DALL·E 4', 'Midjourney v7', 'Ideogram 3.0'],
+    image: musicPolishAssets.landing.heroGothicStorm,
   },
   {
     title: 'Upscaling',
     description: 'Enhance resolution, restore footage, and refine details to broadcast quality.',
     models: ['Topaz AI 4x', 'Real-ESRGAN', 'Aura SR v2', 'Creative Upscaler'],
+    image: musicPolishAssets.toolSurfaces.editWorkbench,
   },
 ];
 
@@ -65,16 +73,27 @@ const ModelToggle = ({ name, index }: { name: string; index: number }) => (
 
 const ModelCard = ({ category, index }: { category: ModelCategory; index: number }) => (
   <motion.div
-    className="bg-[#121212] border border-white/5 rounded-3xl p-8"
+    className="overflow-hidden rounded-3xl border border-white/5 bg-[#121212]"
     {...fadeUp}
     transition={{ ...fadeUp.transition, delay: 0.1 * index }}
   >
-    <h3 className="text-2xl md:text-3xl font-medium text-white mb-2">{category.title}</h3>
-    <p className="text-zinc-500 mb-8 text-sm leading-relaxed">{category.description}</p>
-    <div className="flex flex-col gap-4">
-      {category.models.map((model, i) => (
-        <ModelToggle key={model} name={model} index={i} />
-      ))}
+    <div className="relative h-28 border-b border-white/5">
+      <img
+        src={category.image.src}
+        alt={category.image.alt}
+        className="h-full w-full object-cover opacity-75"
+        loading="lazy"
+      />
+      <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-[#121212]/25 to-transparent" />
+    </div>
+    <div className="p-8">
+      <h3 className="text-2xl md:text-3xl font-medium text-white mb-2">{category.title}</h3>
+      <p className="text-zinc-500 mb-8 text-sm leading-relaxed">{category.description}</p>
+      <div className="flex flex-col gap-4">
+        {category.models.map((model, i) => (
+          <ModelToggle key={model} name={model} index={i} />
+        ))}
+      </div>
     </div>
   </motion.div>
 );

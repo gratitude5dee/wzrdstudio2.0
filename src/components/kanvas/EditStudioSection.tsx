@@ -11,6 +11,7 @@ import type { ImageEditOperation } from '@/types/imageEdit';
 import type { KanvasAsset, KanvasJob, KanvasAssetType, KanvasModel } from '@/features/kanvas/types';
 import { isFalKanvasModel } from '@/features/kanvas/modelProvider';
 import EditCanvas, { type EditCanvasHandle } from './EditCanvas';
+import { musicPolishAssets } from '@/lib/musicPolishAssets';
 
 /* ── Types ── */
 type EditFeature = 'inpaint' | 'removeBackground' | 'upscale' | 'relight' | 'stylize' | 'skinEnhance' | 'angles' | 'productPlacement';
@@ -45,14 +46,14 @@ const HERO_FEATURES = FEATURES.filter(f => ['inpaint', 'removeBackground', 'upsc
 const TAB_FEATURES = FEATURES;
 
 const FEATURE_IMAGES: Record<string, string> = {
-  inpaint: 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?w=800&q=80&auto=format',
-  removeBackground: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&q=80&auto=format',
-  upscale: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&q=80&auto=format',
-  relight: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=800&q=80&auto=format',
-  stylize: 'https://images.unsplash.com/photo-1547891654-e66ed7ebb968?w=800&q=80&auto=format',
-  skinEnhance: 'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=800&q=80&auto=format',
-  angles: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&q=80&auto=format',
-  productPlacement: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&q=80&auto=format',
+  inpaint: musicPolishAssets.toolSurfaces.editWorkbench.src,
+  removeBackground: musicPolishAssets.kanvas.backgroundReframe.src,
+  upscale: musicPolishAssets.landing.platformDeliveryWall.src,
+  relight: musicPolishAssets.cinema.soundstage.src,
+  stylize: musicPolishAssets.lyrics.animatedRain.src,
+  skinEnhance: musicPolishAssets.talent.faceWardrobe.src,
+  angles: musicPolishAssets.landing.rooftopChoreography.src,
+  productPlacement: musicPolishAssets.kanvas.stageProductVisual.src,
 };
 
 /* ── Helpers ── */

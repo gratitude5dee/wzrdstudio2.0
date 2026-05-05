@@ -3,12 +3,15 @@ import { Sliders, Check } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { musicPolishAssets } from '@/lib/musicPolishAssets';
+import type { MusicPolishAsset } from '@/lib/musicPolishAssets';
 
 interface Effect {
   id: string;
   name: string;
   type: 'filter' | 'adjustment' | 'overlay';
   params: Record<string, number>;
+  preview: MusicPolishAsset;
   icon?: string;
 }
 
@@ -17,18 +20,18 @@ interface EffectsTabProps {
 }
 
 const effects: Effect[] = [
-  { id: 'brightness', name: 'Brightness', type: 'adjustment', params: { value: 100 } },
-  { id: 'contrast', name: 'Contrast', type: 'adjustment', params: { value: 100 } },
-  { id: 'saturation', name: 'Saturation', type: 'adjustment', params: { value: 100 } },
-  { id: 'exposure', name: 'Exposure', type: 'adjustment', params: { value: 0 } },
-  { id: 'blur', name: 'Blur', type: 'filter', params: { radius: 0 } },
-  { id: 'sharpen', name: 'Sharpen', type: 'filter', params: { amount: 0 } },
-  { id: 'grayscale', name: 'Grayscale', type: 'filter', params: { amount: 0 } },
-  { id: 'sepia', name: 'Sepia', type: 'filter', params: { amount: 0 } },
-  { id: 'invert', name: 'Invert', type: 'filter', params: { amount: 0 } },
-  { id: 'vignette', name: 'Vignette', type: 'overlay', params: { intensity: 0 } },
-  { id: 'grain', name: 'Film Grain', type: 'overlay', params: { amount: 0 } },
-  { id: 'noise', name: 'Noise', type: 'overlay', params: { amount: 0 } },
+  { id: 'brightness', name: 'Brightness', type: 'adjustment', params: { value: 100 }, preview: musicPolishAssets.cinema.performanceCloseup },
+  { id: 'contrast', name: 'Contrast', type: 'adjustment', params: { value: 100 }, preview: musicPolishAssets.landing.heroGothicStorm },
+  { id: 'saturation', name: 'Saturation', type: 'adjustment', params: { value: 100 }, preview: musicPolishAssets.cinema.neonStreet },
+  { id: 'exposure', name: 'Exposure', type: 'adjustment', params: { value: 0 }, preview: musicPolishAssets.cinema.soundstage },
+  { id: 'blur', name: 'Blur', type: 'filter', params: { radius: 0 }, preview: musicPolishAssets.landing.animatedRainStreet },
+  { id: 'sharpen', name: 'Sharpen', type: 'filter', params: { amount: 0 }, preview: musicPolishAssets.kanvas.stageProductVisual },
+  { id: 'grayscale', name: 'Grayscale', type: 'filter', params: { amount: 0 }, preview: musicPolishAssets.lyrics.gothicStorm },
+  { id: 'sepia', name: 'Sepia', type: 'filter', params: { amount: 0 }, preview: musicPolishAssets.lyrics.rnbGlass },
+  { id: 'invert', name: 'Invert', type: 'filter', params: { amount: 0 }, preview: musicPolishAssets.landing.rooftopChoreography },
+  { id: 'vignette', name: 'Vignette', type: 'overlay', params: { intensity: 0 }, preview: musicPolishAssets.talent.faceWardrobe },
+  { id: 'grain', name: 'Film Grain', type: 'overlay', params: { amount: 0 }, preview: musicPolishAssets.toolSurfaces.editWorkbench },
+  { id: 'noise', name: 'Noise', type: 'overlay', params: { amount: 0 }, preview: musicPolishAssets.landing.platformDeliveryWall },
 ];
 
 const getParamConfig = (effectId: string, paramKey: string) => {
@@ -83,13 +86,23 @@ export const EffectsTab: React.FC<EffectsTabProps> = ({ onSelectEffect }) => {
             key={effect.id}
             onClick={() => handleSelectEffect(effect)}
             className={cn(
-              'p-3 bg-zinc-800 rounded-lg cursor-pointer transition-all',
+              'relative overflow-hidden bg-zinc-800 rounded-lg cursor-pointer transition-all',
               'hover:bg-zinc-700',
               selectedEffect === effect.id && 'ring-2 ring-orange-500 bg-zinc-700'
             )}
           >
-            <Sliders className="w-5 h-5 mb-2 text-zinc-400" />
-            <p className="text-[10px] text-zinc-300 truncate">{effect.name}</p>
+            <div className="relative aspect-video">
+              <img
+                src={effect.preview.src}
+                alt={effect.preview.alt}
+                className="h-full w-full object-cover opacity-70"
+                loading="lazy"
+                decoding="async"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+              <Sliders className="absolute left-2 top-2 w-4 h-4 text-white/70" />
+            </div>
+            <p className="px-2 py-2 text-[10px] text-zinc-300 truncate">{effect.name}</p>
           </div>
         ))}
       </div>

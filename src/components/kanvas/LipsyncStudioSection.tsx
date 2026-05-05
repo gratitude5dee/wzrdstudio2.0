@@ -25,6 +25,8 @@ import type { KanvasAsset, KanvasAssetType, KanvasJob, KanvasModel } from "@/fea
 import { getJobPrimaryUrl, isJobActive } from "@/features/kanvas/helpers";
 import { cn } from "@/lib/utils";
 import { useUserTier, sortModelsForTier } from "@/hooks/useUserTier";
+import { musicPolishAssets } from "@/lib/musicPolishAssets";
+import type { MusicPolishAsset } from "@/lib/musicPolishAssets";
 
 /* ─── Types ──────────────────────────────────────────── */
 
@@ -75,10 +77,25 @@ const WIZARD_STEPS: { key: WizardStep; label: string; icon: typeof FileText }[] 
 /* ─── Templates Data ─────────────────────────────────── */
 
 const TEMPLATES = [
-  { id: "general", label: "PRODUCTION TYPE", title: "General", gradient: "from-violet-900/80 to-black" },
-  { id: "selfie", label: "CAMERA STYLE", title: "Selfie", gradient: "from-amber-900/80 to-black" },
-  { id: "selling", label: "CONTENT TYPE", title: "Selling", gradient: "from-emerald-900/80 to-black" },
-];
+  {
+    id: "general",
+    label: "PRODUCTION TYPE",
+    title: "General",
+    asset: musicPolishAssets.talent.voiceBooth,
+  },
+  {
+    id: "selfie",
+    label: "CAMERA STYLE",
+    title: "Selfie",
+    asset: musicPolishAssets.talent.leadVocalist,
+  },
+  {
+    id: "selling",
+    label: "CONTENT TYPE",
+    title: "Selling",
+    asset: musicPolishAssets.toolSurfaces.lipsyncProductRead,
+  },
+] satisfies Array<{ id: string; label: string; title: string; asset: MusicPolishAsset }>;
 
 /* ─── Voice Types ────────────────────────────────────── */
 
@@ -302,19 +319,27 @@ function LipsyncDashboard({
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
-            className="w-full aspect-[16/9] rounded-2xl border border-white/5 bg-[#131313] flex flex-col items-center justify-center gap-3 hover:border-[#f97316]/20 transition-all group cursor-pointer"
+            className="relative w-full aspect-[16/9] overflow-hidden rounded-2xl border border-white/5 bg-[#131313] flex flex-col items-center justify-center gap-3 hover:border-[#f97316]/20 transition-all group cursor-pointer"
           >
+            <img
+              src={musicPolishAssets.kanvas.aiVisualWall.src}
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover opacity-20 transition duration-700 group-hover:scale-105 group-hover:opacity-30"
+              loading="lazy"
+              decoding="async"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/55 to-black/30" />
             {uploadingImage ? (
-              <Loader2 className="h-8 w-8 animate-spin text-[#f97316]" />
+              <Loader2 className="relative h-8 w-8 animate-spin text-[#f97316]" />
             ) : (
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f97316]/10 group-hover:bg-[#f97316]/20 transition-colors">
+              <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f97316]/10 group-hover:bg-[#f97316]/20 transition-colors">
                 <Upload className="h-6 w-6 text-[#f97316]" />
               </div>
             )}
-            <p className="text-xs uppercase tracking-[0.2em] text-zinc-500 font-bold">
+            <p className="relative text-xs uppercase tracking-[0.2em] text-zinc-300 font-bold">
               Upload Asset
             </p>
-            <p className="text-[10px] text-zinc-600">PNG, JPG, MP4 — Max 50MB</p>
+            <p className="relative text-[10px] text-zinc-500">PNG, JPG, MP4 — Max 50MB</p>
           </button>
           <input
             ref={fileRef}
@@ -505,11 +530,13 @@ function UGCTemplates({
                   : "border border-white/5 hover:border-white/10"
               )}
             >
-              {/* Background gradient placeholder */}
-              <div className={cn(
-                "absolute inset-0 bg-gradient-to-t",
-                tpl.gradient
-              )} />
+              <img
+                src={tpl.asset.src}
+                alt={tpl.asset.alt}
+                className="absolute inset-0 h-full w-full object-cover opacity-75 transition duration-700 group-hover:scale-105 group-hover:opacity-95"
+                loading="lazy"
+                decoding="async"
+              />
               <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
 
               {/* Selected check */}

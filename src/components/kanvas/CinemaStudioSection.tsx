@@ -12,6 +12,7 @@ import type { KanvasCinemaSettings } from '@/features/kanvas/types';
 import type { CharacterMention } from '@/types/character-creation';
 import { MentionDropdown } from '@/components/character-creation/MentionDropdown';
 import { useUserTier, sortModelsForTier } from "@/hooks/useUserTier";
+import { musicPolishAssets } from '@/lib/musicPolishAssets';
 type CinemaTab = 'image' | 'video' | 'cast';
 type FilterItem = 'genre' | 'budget' | 'era' | 'archetype' | 'identity' | 'appearance' | 'details' | 'outfit';
 
@@ -55,14 +56,14 @@ const FILTER_PILLS: { id: FilterItem; label: string }[] = [
 ];
 
 const GENRE_CARDS = [
-  { title: 'Action', color: '#ff3399', image: 'https://images.unsplash.com/photo-1535016120720-40c646be5580?w=640&q=80&auto=format' },
-  { title: 'Adventure', color: '#ff68a8', image: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=640&q=80&auto=format' },
-  { title: 'Comedy', color: '#ffd700', image: 'https://images.unsplash.com/photo-1485846234645-a62644f84728?w=640&q=80&auto=format' },
-  { title: 'Drama', color: '#9b87f5', image: 'https://images.unsplash.com/photo-1478720568477-152d9b164e26?w=640&q=80&auto=format' },
-  { title: 'Thriller', color: '#ff4444', image: 'https://images.unsplash.com/photo-1509347528160-9a9e33742cdb?w=640&q=80&auto=format' },
-  { title: 'Horror', color: '#cc0000', image: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=640&q=80&auto=format' },
-  { title: 'Detective', color: '#71717a', image: 'https://images.unsplash.com/photo-1534996858221-380b92700493?w=640&q=80&auto=format' },
-  { title: 'Romance', color: '#f472b6', image: 'https://images.unsplash.com/photo-1518621736915-f3b1c41bfd00?w=640&q=80&auto=format' },
+  { title: 'Gothic Storm', color: '#e5e7eb', image: musicPolishAssets.landing.heroGothicStorm.src, alt: musicPolishAssets.landing.heroGothicStorm.alt, style: 'Monochrome key art' },
+  { title: 'Rooftop Motion', color: '#67e8f9', image: musicPolishAssets.landing.rooftopChoreography.src, alt: musicPolishAssets.landing.rooftopChoreography.alt, style: 'Aerial choreography' },
+  { title: 'Rain Anime', color: '#fbbf24', image: musicPolishAssets.landing.animatedRainStreet.src, alt: musicPolishAssets.landing.animatedRainStreet.alt, style: 'Illustrated street' },
+  { title: 'Soundstage', color: '#fb923c', image: musicPolishAssets.cinema.soundstage.src, alt: musicPolishAssets.cinema.soundstage.alt, style: 'Hyperreal production' },
+  { title: 'Neon Street', color: '#22d3ee', image: musicPolishAssets.cinema.neonStreet.src, alt: musicPolishAssets.cinema.neonStreet.alt, style: 'Night performance' },
+  { title: 'Close-up', color: '#f97316', image: musicPolishAssets.cinema.performanceCloseup.src, alt: musicPolishAssets.cinema.performanceCloseup.alt, style: 'Artist frame' },
+  { title: 'Cast Board', color: '#a3e635', image: musicPolishAssets.cinema.castBoard.src, alt: musicPolishAssets.cinema.castBoard.alt, style: 'Treatment board' },
+  { title: 'Chrome Prop', color: '#cbd5e1', image: musicPolishAssets.blueprints.microphone.src, alt: musicPolishAssets.blueprints.microphone.alt, style: 'Object anchor' },
 ];
 
 const CAMERA_PRESETS = [
@@ -75,10 +76,10 @@ const CAMERA_PRESETS = [
 ];
 
 const FALLBACK_AVATARS = [
-  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=128&q=80&auto=format',
-  'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=128&q=80&auto=format',
-  'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=128&q=80&auto=format',
-  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=128&q=80&auto=format',
+  musicPolishAssets.blueprints.vocalist.src,
+  musicPolishAssets.cinema.performanceCloseup.src,
+  musicPolishAssets.landing.animatedRainStreet.src,
+  musicPolishAssets.landing.heroGothicStorm.src,
 ];
 
 const TAB_LIST: { id: CinemaTab; label: string; Icon: ElementType }[] = [
@@ -319,18 +320,25 @@ export default function CinemaStudioSection({
   function renderImageTab() {
     return (
       <div className="flex-1 flex flex-col items-center justify-center relative pb-40">
-        <div className="absolute inset-0 bg-gradient-to-b from-purple-950/30 via-[#090909] to-[#090909] pointer-events-none" />
+        <img
+          src={musicPolishAssets.cinema.soundstage.src}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover opacity-35"
+          loading="lazy"
+          decoding="async"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-[#090909]/90 to-[#090909] pointer-events-none" />
         <div className="relative z-10 text-center max-w-3xl px-8">
-          <p className="text-[10px] uppercase tracking-[0.3em] text-zinc-500 font-bold mb-4">CINEMA STUDIO 2.5</p>
+          <p className="text-[10px] uppercase tracking-[0.3em] text-cyan-200/70 font-bold mb-4">PREMIUM MUSIC VIDEO STUDIO</p>
           <h1 className="text-5xl md:text-6xl font-black tracking-tight leading-[1.1] mb-6" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-            <span className="bg-gradient-to-r from-pink-400 via-purple-400 to-pink-300 bg-clip-text text-transparent">
-              What would you shoot
+            <span className="bg-gradient-to-r from-cyan-200 via-white to-orange-200 bg-clip-text text-transparent">
+              Build the treatment
             </span>
             <br />
-            <span className="text-white">with infinite budget?</span>
+            <span className="text-white">before the camera rolls.</span>
           </h1>
           <p className="text-zinc-500 text-sm mb-10 max-w-lg mx-auto">
-            Describe any scene from any era, genre, or universe. Our AI cinematographer will bring it to life.
+            Define fictional artists, sets, camera language, and visual motifs with production-grade stills.
           </p>
 
           {/* Character Avatars — real blueprints or fallback */}
@@ -353,16 +361,16 @@ export default function CinemaStudioSection({
 
           {/* Quick action cards */}
           <div className="grid grid-cols-2 gap-4 max-w-md mx-auto">
-            <div className="bg-[#1a1a1a] border border-white/[0.06] rounded-2xl p-5 text-left hover:border-white/10 transition-colors cursor-pointer">
+            <div className="bg-[#1a1a1a]/90 border border-white/[0.06] rounded-lg p-5 text-left hover:border-white/10 transition-colors cursor-pointer backdrop-blur">
               <Users className="h-5 w-5 text-[#f97316] mb-3" />
-              <p className="text-xs font-bold text-white mb-1">Characters</p>
-              <p className="text-[10px] text-zinc-500 leading-relaxed">Reuse characters across scenes</p>
-              <button className="mt-3 text-[9px] uppercase tracking-widest text-[#f97316] font-bold">+ Create Character</button>
+              <p className="text-xs font-bold text-white mb-1">Artist Anchors</p>
+              <p className="text-[10px] text-zinc-500 leading-relaxed">Keep performers consistent across scenes</p>
+              <button className="mt-3 text-[9px] uppercase tracking-widest text-[#f97316] font-bold">+ Create Anchor</button>
             </div>
-            <div className="bg-[#1a1a1a] border border-white/[0.06] rounded-2xl p-5 text-left hover:border-white/10 transition-colors cursor-pointer">
+            <div className="bg-[#1a1a1a]/90 border border-white/[0.06] rounded-lg p-5 text-left hover:border-white/10 transition-colors cursor-pointer backdrop-blur">
               <Film className="h-5 w-5 text-[#f97316] mb-3" />
-              <p className="text-xs font-bold text-white mb-1">Locations</p>
-              <p className="text-[10px] text-zinc-500 leading-relaxed">Keep every scene in the same world</p>
+              <p className="text-xs font-bold text-white mb-1">Stage Worlds</p>
+              <p className="text-[10px] text-zinc-500 leading-relaxed">Lock soundstages, streets, and lyric plates</p>
               <button className="mt-3 text-[9px] uppercase tracking-widest text-[#f97316] font-bold">+ Create Location</button>
             </div>
           </div>
@@ -385,7 +393,7 @@ export default function CinemaStudioSection({
                 <button
                   key={preset.label}
                   onClick={() => setCameraPreset(preset.label)}
-                  className={`rounded-2xl overflow-hidden border transition-all ${
+                  className={`rounded-lg overflow-hidden border transition-all ${
                     isActive ? 'border-[#f97316]/40 shadow-[0_0_20px_rgba(249,115,22,0.1)]' : 'border-white/[0.06] hover:border-white/10'
                   }`}
                 >
@@ -403,7 +411,7 @@ export default function CinemaStudioSection({
 
           {/* Director Panel */}
           <p className="text-[9px] uppercase tracking-[0.2em] text-zinc-500 font-bold mb-4">Director Panel</p>
-          <div className="bg-[#131313] border border-white/[0.06] rounded-2xl p-6">
+          <div className="bg-[#131313] border border-white/[0.06] rounded-lg p-6">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
               <div>
                 <p className="text-[9px] uppercase tracking-widest text-zinc-500 mb-3">Characters</p>
@@ -527,18 +535,22 @@ export default function CinemaStudioSection({
                 {GENRE_CARDS.map((card) => (
                   <div
                     key={card.title}
-                    className="flex-none w-[200px] h-[280px] rounded-2xl bg-[#131313] relative overflow-hidden group cursor-pointer"
+                    className="flex-none w-[200px] h-[280px] rounded-lg bg-[#131313] relative overflow-hidden group cursor-pointer border border-white/[0.06]"
                   >
                     <img
                       src={card.image}
-                      alt={card.title}
+                      alt={card.alt}
                       className="w-full h-full object-cover opacity-70 group-hover:scale-105 group-hover:opacity-100 transition-all duration-700"
                       loading="lazy"
+                      decoding="async"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
                     <div className="absolute bottom-4 left-4 right-4">
                       <p className="text-2xl text-white font-bold tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                         {card.title}
+                      </p>
+                      <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-300">
+                        {card.style}
                       </p>
                     </div>
                     <div className="absolute top-3 left-3">

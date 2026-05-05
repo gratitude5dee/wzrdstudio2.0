@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { musicPolishAssets } from '@/lib/musicPolishAssets';
 
 const fadeUp = {
   initial: { opacity: 0, y: 30 },
@@ -10,15 +11,15 @@ const fadeUp = {
 const cases = [
   {
     label: 'Commercials',
-    image: 'https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?w=800&h=450&fit=crop',
+    image: musicPolishAssets.kanvas.stageProductVisual,
   },
   {
     label: 'Animations',
-    image: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=800&h=450&fit=crop',
+    image: musicPolishAssets.landing.animatedRainStreet,
   },
   {
     label: 'Films',
-    image: 'https://images.unsplash.com/photo-1485846234645-a62644f84728?w=800&h=450&fit=crop',
+    image: musicPolishAssets.landing.heroGothicStorm,
   },
 ];
 
@@ -45,8 +46,8 @@ const UseCasesShowcase = () => {
             >
               <div className="aspect-video rounded-2xl overflow-hidden border border-white/5 bg-zinc-900">
                 <img
-                  src={item.image}
-                  alt={item.label}
+                  src={item.image.src}
+                  alt={item.image.alt}
                   className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                   loading="lazy"
                 />

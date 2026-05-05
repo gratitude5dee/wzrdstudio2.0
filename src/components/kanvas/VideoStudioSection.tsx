@@ -27,6 +27,8 @@ import { getJobPrimaryUrl, isJobActive } from "@/features/kanvas/helpers";
 import { useUserTier, sortModelsForTier } from "@/hooks/useUserTier";
 import { MentionDropdown } from "@/components/character-creation/MentionDropdown";
 import type { CharacterMention } from "@/types/character-creation";
+import { musicPolishAssets } from "@/lib/musicPolishAssets";
+import type { MusicPolishAsset } from "@/lib/musicPolishAssets";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -120,12 +122,31 @@ function Pill({ value, active, onClick }: { value: string; active: boolean; onCl
   );
 }
 
-function FeatureCard({ title, description, icon: Icon, accent = "lime" }: { title: string; description: string; icon: typeof ImagePlus; accent?: "lime" | "pink" | "white" }) {
+function FeatureCard({
+  title,
+  description,
+  icon: Icon,
+  asset,
+  accent = "lime",
+}: {
+  title: string;
+  description: string;
+  icon: typeof ImagePlus;
+  asset: MusicPolishAsset;
+  accent?: "lime" | "pink" | "white";
+}) {
   const color = accent === "lime" ? "text-[#f97316]" : accent === "pink" ? "text-[#ff3399]" : "text-white";
   const bg = accent === "lime" ? "bg-[#f97316]/10 border-[#f97316]/20" : accent === "pink" ? "bg-[#ff3399]/10 border-[#ff3399]/20" : "bg-white/10 border-white/20";
   return (
     <div className="group relative flex aspect-[4/5] flex-col justify-end overflow-hidden rounded-2xl bg-[#1a1919] p-6 transition-all hover:bg-[#222]">
-      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+      <img
+        src={asset.src}
+        alt={asset.alt}
+        className="absolute inset-0 h-full w-full object-cover opacity-65 transition duration-700 group-hover:scale-105 group-hover:opacity-85"
+        loading="lazy"
+        decoding="async"
+      />
+      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/45 to-transparent" />
       <div className="relative space-y-4">
         <div className={cn("flex h-12 w-12 items-center justify-center rounded-full border", bg)}>
           <Icon className={cn("h-5 w-5", color)} />
@@ -152,12 +173,23 @@ const MODEL_TABS = [
 const FILTER_PILLS = ["All", "New", "Trending", "Effects", "Camera Control", "Epic Shots"];
 
 const MOTION_LIBRARY = [
-  { id: "1", title: "Dynamic Walk", category: "MOVEMENT" },
-  { id: "2", title: "Camera Pan L→R", category: "CAMERA" },
-  { id: "3", title: "Hair Flip", category: "GESTURE" },
-  { id: "4", title: "Slow Zoom In", category: "CAMERA" },
-  { id: "5", title: "Dance Routine", category: "MOVEMENT" },
+  { id: "1", title: "Dynamic Walk", category: "MOVEMENT", asset: musicPolishAssets.talent.motionStage },
+  { id: "2", title: "Camera Pan L→R", category: "CAMERA", asset: musicPolishAssets.landing.rooftopChoreography },
+  { id: "3", title: "Hair Flip", category: "GESTURE", asset: musicPolishAssets.talent.faceWardrobe },
+  { id: "4", title: "Slow Zoom In", category: "CAMERA", asset: musicPolishAssets.cinema.performanceCloseup },
+  { id: "5", title: "Dance Routine", category: "MOVEMENT", asset: musicPolishAssets.cinema.soundstage },
 ];
+
+const PRESET_GALLERY = [
+  { title: "Dance Routine", category: "Top Choice", asset: musicPolishAssets.talent.motionStage },
+  { title: "Camera Pan", category: "Camera", asset: musicPolishAssets.landing.rooftopChoreography },
+  { title: "Slow Zoom", category: "Camera", asset: musicPolishAssets.cinema.performanceCloseup },
+  { title: "Stage Walk", category: "Movement", asset: musicPolishAssets.cinema.soundstage },
+  { title: "Neon Street", category: "Epic Shot", asset: musicPolishAssets.cinema.neonStreet },
+  { title: "Lyric Pulse", category: "Effects", asset: musicPolishAssets.lyrics.rooftopMotion },
+  { title: "Product Read", category: "UGC", asset: musicPolishAssets.toolSurfaces.lipsyncProductRead },
+  { title: "Gothic Push", category: "Film", asset: musicPolishAssets.landing.heroGothicStorm },
+] as const;
 
 /* ------------------------------------------------------------------ */
 /*  Main Component                                                     */
@@ -257,6 +289,13 @@ export function VideoStudioSection({
       <div className="w-full md:w-[280px] md:shrink-0 space-y-5">
         {/* Preset thumbnail */}
         <div className="relative rounded-2xl overflow-hidden bg-[#1a1919] aspect-video">
+          <img
+            src={musicPolishAssets.cinema.neonStreet.src}
+            alt={musicPolishAssets.cinema.neonStreet.alt}
+            className="absolute inset-0 h-full w-full object-cover opacity-80"
+            loading="lazy"
+            decoding="async"
+          />
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
           <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
             <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Active Preset</span>
@@ -390,9 +429,9 @@ export function VideoStudioSection({
 
         {/* 3-step flow */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <FeatureCard title="Add Image" description="Upload a start frame or reference" icon={ImagePlus} accent="lime" />
-          <FeatureCard title="Choose Preset" description="Pick from 250+ motion presets and styles" icon={SlidersHorizontal} accent="white" />
-          <FeatureCard title="Get Video" description="AI generates cinematic video in seconds" icon={Film} accent="pink" />
+          <FeatureCard title="Add Image" description="Upload a start frame or reference" icon={ImagePlus} asset={musicPolishAssets.kanvas.aiVisualWall} accent="lime" />
+          <FeatureCard title="Choose Preset" description="Pick from 250+ motion presets and styles" icon={SlidersHorizontal} asset={musicPolishAssets.cinema.soundstage} accent="white" />
+          <FeatureCard title="Get Video" description="AI generates cinematic video in seconds" icon={Film} asset={musicPolishAssets.cinema.performanceCloseup} accent="pink" />
         </div>
 
         {/* Active job */}
@@ -454,10 +493,16 @@ export function VideoStudioSection({
               </button>
             ))}
           </div>
-          {/* Placeholder preset grid */}
-          <div className="grid grid-cols-4 gap-3">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="group relative aspect-video rounded-xl bg-[#1a1919] overflow-hidden cursor-pointer border border-white/5 hover:border-[#f97316]/30 transition-colors">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {PRESET_GALLERY.map((preset, i) => (
+              <div key={preset.title} className="group relative aspect-video rounded-xl bg-[#1a1919] overflow-hidden cursor-pointer border border-white/5 hover:border-[#f97316]/30 transition-colors">
+                <img
+                  src={preset.asset.src}
+                  alt={preset.asset.alt}
+                  className="absolute inset-0 h-full w-full object-cover opacity-75 transition duration-700 group-hover:scale-105 group-hover:opacity-100"
+                  loading="lazy"
+                  decoding="async"
+                />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
                 {i === 0 && (
                   <div className="absolute top-2 left-2">
@@ -465,7 +510,8 @@ export function VideoStudioSection({
                   </div>
                 )}
                 <div className="absolute bottom-2 left-2">
-                  <p className="text-[9px] font-bold text-zinc-400 uppercase">Preset {i + 1}</p>
+                  <p className="text-[8px] font-bold uppercase tracking-widest text-[#f97316]">{preset.category}</p>
+                  <p className="text-[9px] font-bold text-zinc-300 uppercase">{preset.title}</p>
                 </div>
               </div>
             ))}
@@ -627,6 +673,13 @@ export function VideoStudioSection({
           <div className="flex gap-4 overflow-x-auto pb-2" style={{ scrollbarWidth: "none" }}>
             {MOTION_LIBRARY.map((item) => (
               <div key={item.id} className="group relative aspect-[9/16] w-40 shrink-0 cursor-pointer overflow-hidden rounded-xl bg-[#1a1919] hover:ring-2 hover:ring-[#f97316]/30 transition-all">
+                <img
+                  src={item.asset.src}
+                  alt={item.asset.alt}
+                  className="absolute inset-0 h-full w-full object-cover opacity-75 transition duration-700 group-hover:scale-105 group-hover:opacity-100"
+                  loading="lazy"
+                  decoding="async"
+                />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
                 <div className="absolute bottom-3 left-3 right-3 space-y-1">
                   <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-600">{item.category}</p>

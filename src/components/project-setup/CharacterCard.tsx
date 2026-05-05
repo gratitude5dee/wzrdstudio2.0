@@ -18,6 +18,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { CharacterEditDialog } from './CharacterEditDialog';
 import { Character } from './types';
+import { musicTalentRange } from '@/lib/musicPolishAssets';
 
 interface CharacterCardProps {
   character: Character;
@@ -50,6 +51,11 @@ const STATUS_BADGE: Record<string, { icon: React.ReactNode; label: string; class
   },
 };
 
+const getCharacterFallback = (name: string) => {
+  const hash = Array.from(name || 'character').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  return musicTalentRange[hash % musicTalentRange.length];
+};
+
 const CharacterCard: React.FC<CharacterCardProps> = ({
   character,
   onDelete,
@@ -67,6 +73,7 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
   const hasImage = !!character.image_url;
   const imageStatus = isGenerating ? 'generating' : (character.image_status || (hasImage ? 'completed' : 'pending'));
   const isActivelyGenerating = isGenerating || isImageLoading;
+  const fallbackImage = getCharacterFallback(character.name);
 
   // Progress bar simulation
   useEffect(() => {
@@ -212,6 +219,8 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.3 }}
                   className="w-full h-full object-cover"
+                  loading="lazy"
+                  decoding="async"
                 />
               ) : isActivelyGenerating ? (
                 <motion.div
@@ -236,12 +245,20 @@ const CharacterCard: React.FC<CharacterCardProps> = ({
                   key="placeholder"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="flex flex-col items-center justify-center text-zinc-700"
+                  className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden text-zinc-300"
                 >
-                  <div className="w-16 h-16 rounded-full bg-zinc-800/50 flex items-center justify-center">
+                  <img
+                    src={fallbackImage.src}
+                    alt={fallbackImage.alt}
+                    className="absolute inset-0 h-full w-full object-cover opacity-55"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/35 to-black/20" />
+                  <div className="relative w-16 h-16 rounded-full bg-black/45 border border-white/10 backdrop-blur-sm flex items-center justify-center">
                     <User className="h-10 w-10" />
                   </div>
-                  <p className="text-xs text-zinc-600 mt-2">No image</p>
+                  <p className="relative text-xs text-zinc-400 mt-2">No image</p>
                 </motion.div>
               )}
             </AnimatePresence>

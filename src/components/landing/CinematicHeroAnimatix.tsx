@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
+import { musicPolishAssets } from '@/lib/musicPolishAssets';
 
 const fadeUp = {
   initial: { opacity: 0, y: 30 },
@@ -32,24 +33,24 @@ const CinematicHeroAnimatix = () => {
       >
         The{' '}
         <InlineMedia
-          src="https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=400&h=200&fit=crop"
-          alt="cinematic"
+          src={musicPolishAssets.cinema.performanceCloseup.src}
+          alt={musicPolishAssets.cinema.performanceCloseup.alt}
           delay={0.2}
         />{' '}
         AI video
         <br className="hidden md:block" />
         {' '}production{' '}
         <InlineMedia
-          src="https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?w=400&h=200&fit=crop"
-          alt="production"
+          src={musicPolishAssets.cinema.soundstage.src}
+          alt={musicPolishAssets.cinema.soundstage.alt}
           delay={0.4}
         />{' '}
         pipeline
         <br className="hidden md:block" />
         {' '}for{' '}
         <InlineMedia
-          src="https://images.unsplash.com/photo-1485846234645-a62644f84728?w=400&h=200&fit=crop"
-          alt="agencies"
+          src={musicPolishAssets.landing.rooftopChoreography.src}
+          alt={musicPolishAssets.landing.rooftopChoreography.alt}
           delay={0.6}
         />{' '}
         the agencies

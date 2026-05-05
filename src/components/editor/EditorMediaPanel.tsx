@@ -11,27 +11,30 @@ import { TransitionsTab } from './tabs/TransitionsTab';
 import { EffectsTab } from './tabs/EffectsTab';
 import { ElementsTab } from './tabs/ElementsTab';
 import { toast } from 'sonner';
+import { musicPolishAssets, musicStyleRange } from '@/lib/musicPolishAssets';
 
 interface EditorMediaPanelProps {
   activeTab: EditorTab;
-  onAssetDrag?: (asset: any) => void;
-  onAddToTimeline?: (item: any) => void;
-  onApplyTransition?: (transition: any) => void;
-  onApplyEffect?: (effect: any) => void;
+  onAssetDrag?: (asset: unknown) => void;
+  onAddToTimeline?: (item: unknown) => void;
+  onApplyTransition?: (transition: unknown) => void;
+  onApplyEffect?: (effect: unknown) => void;
   projectId?: string;
 }
 
-// Sample Pexels-style images for demo
+const getPayloadLabel = (item: unknown) => {
+  if (!item || typeof item !== 'object') return 'item';
+  const record = item as { name?: unknown; type?: unknown };
+  return typeof record.name === 'string' ? record.name : typeof record.type === 'string' ? record.type : 'item';
+};
+
 const sampleImages = [
-  'https://images.pexels.com/photos/1761279/pexels-photo-1761279.jpeg?auto=compress&cs=tinysrgb&w=300',
-  'https://images.pexels.com/photos/100582/pexels-photo-100582.jpeg?auto=compress&cs=tinysrgb&w=300',
-  'https://images.pexels.com/photos/1008155/pexels-photo-1008155.jpeg?auto=compress&cs=tinysrgb&w=300',
-  'https://images.pexels.com/photos/417074/pexels-photo-417074.jpeg?auto=compress&cs=tinysrgb&w=300',
-  'https://images.pexels.com/photos/691668/pexels-photo-691668.jpeg?auto=compress&cs=tinysrgb&w=300',
-  'https://images.pexels.com/photos/1660995/pexels-photo-1660995.jpeg?auto=compress&cs=tinysrgb&w=300',
-  'https://images.pexels.com/photos/1054218/pexels-photo-1054218.jpeg?auto=compress&cs=tinysrgb&w=300',
-  'https://images.pexels.com/photos/325185/pexels-photo-325185.jpeg?auto=compress&cs=tinysrgb&w=300',
-];
+  ...musicStyleRange,
+  musicPolishAssets.cinema.neonStreet,
+  musicPolishAssets.cinema.soundstage,
+  musicPolishAssets.toolSurfaces.lipsyncProductRead,
+  musicPolishAssets.landing.platformDeliveryWall,
+] as const;
 
 export const EditorMediaPanel: React.FC<EditorMediaPanelProps> = ({
   activeTab,
@@ -44,29 +47,29 @@ export const EditorMediaPanel: React.FC<EditorMediaPanelProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
 
   // Handler for adding items to timeline
-  const handleAddToTimeline = useCallback((item: any) => {
+  const handleAddToTimeline = useCallback((item: unknown) => {
     if (onAddToTimeline) {
       onAddToTimeline(item);
     } else {
-      toast.success(`Added ${item.name || item.type} to timeline`);
+      toast.success(`Added ${getPayloadLabel(item)} to timeline`);
     }
   }, [onAddToTimeline]);
 
   // Handler for applying transitions
-  const handleApplyTransition = useCallback((transition: any) => {
+  const handleApplyTransition = useCallback((transition: unknown) => {
     if (onApplyTransition) {
       onApplyTransition(transition);
     } else {
-      toast.success(`Applied ${transition.name} transition`);
+      toast.success(`Applied ${getPayloadLabel(transition)} transition`);
     }
   }, [onApplyTransition]);
 
   // Handler for applying effects
-  const handleApplyEffect = useCallback((effect: any) => {
+  const handleApplyEffect = useCallback((effect: unknown) => {
     if (onApplyEffect) {
       onApplyEffect(effect);
     } else {
-      toast.success(`Applied ${effect.name} effect`);
+      toast.success(`Applied ${getPayloadLabel(effect)} effect`);
     }
   }, [onApplyEffect]);
 
@@ -120,7 +123,7 @@ export const EditorMediaPanel: React.FC<EditorMediaPanelProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search Pexels images..."
+              placeholder="Search WZRD stills..."
               className="w-full pr-10 focus:outline-none focus:ring-2 transition-all"
               style={{
                 height: `${exactMeasurements.mediaPanel.searchHeight}px`,
@@ -167,9 +170,9 @@ export const EditorMediaPanel: React.FC<EditorMediaPanelProps> = ({
               gap: `${exactMeasurements.mediaPanel.gridGap}px`,
             }}
           >
-            {sampleImages.map((src, index) => (
+            {sampleImages.map((asset) => (
               <div
-                key={index}
+                key={asset.title}
                 className="relative cursor-grab active:cursor-grabbing transition-transform duration-200"
                 style={{
                   aspectRatio: exactMeasurements.mediaPanel.imageAspectRatio,
@@ -178,7 +181,7 @@ export const EditorMediaPanel: React.FC<EditorMediaPanelProps> = ({
                   background: editorTheme.bg.tertiary,
                 }}
                 draggable
-                onDragStart={() => onAssetDrag?.({ src, type: 'image' })}
+                onDragStart={() => onAssetDrag?.({ src: asset.src, type: 'image', name: asset.title })}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.transform = 'scale(1.05)';
                   e.currentTarget.style.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.3)';
@@ -189,10 +192,12 @@ export const EditorMediaPanel: React.FC<EditorMediaPanelProps> = ({
                 }}
               >
                 <img
-                  src={src}
-                  alt={`Pexels ${index + 1}`}
+                  src={asset.src}
+                  alt={asset.alt}
                   className="w-full h-full object-cover"
                   draggable={false}
+                  loading="lazy"
+                  decoding="async"
                 />
               </div>
             ))}

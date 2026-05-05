@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { archiveTemplate, listTemplates } from '@/features/kanvas-lyrics/service';
 import type { KanvasLyricTemplate, TemplateStatus } from '@/features/kanvas-lyrics/types';
+import { musicPolishAssets } from '@/lib/musicPolishAssets';
 
 type FilterKey = 'all' | 'drafts' | 'saved' | 'archived';
 
@@ -24,6 +25,13 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'saved', label: 'Saved' },
   { key: 'archived', label: 'Archived' },
 ];
+
+const LYRIC_STYLE_PRESETS = [
+  musicPolishAssets.lyrics.gothicStorm,
+  musicPolishAssets.lyrics.rnbGlass,
+  musicPolishAssets.lyrics.rooftopMotion,
+  musicPolishAssets.lyrics.animatedRain,
+] as const;
 
 interface TemplatesLandingProps {
   onCreate: () => void;
@@ -110,11 +118,14 @@ export function TemplatesLanding({ onCreate, onOpen }: TemplatesLandingProps) {
         <span className="inline-flex items-center gap-1.5 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-300">
           <Sparkles className="h-3 w-3" /> Lyric Templates
         </span>
-        <h1 className="mt-4 bg-gradient-to-r from-cyan-300 via-sky-300 to-blue-500 bg-clip-text text-5xl font-black tracking-[0.16em] text-transparent md:text-6xl">
-          YOUR TEMPLATES
+        <h1
+          aria-label="YOUR TEMPLATES"
+          className="mt-4 bg-gradient-to-r from-cyan-200 via-white to-orange-200 bg-clip-text text-5xl font-black tracking-[0.12em] text-transparent md:text-6xl"
+        >
+          <span aria-hidden="true">LYRIC VISUAL PLATES</span>
         </h1>
         <p className="mx-auto mt-3 max-w-xl text-xs uppercase tracking-[0.32em] text-zinc-500">
-          Reusable lyric video bases · Audio · Lyrics · Markers
+          Reusable music-video templates · Audio · Lyrics · Markers
         </p>
       </div>
 
@@ -123,10 +134,18 @@ export function TemplatesLanding({ onCreate, onOpen }: TemplatesLandingProps) {
         <button
           type="button"
           onClick={onCreate}
-          className="group relative overflow-hidden rounded-2xl border border-cyan-400/30 bg-gradient-to-br from-cyan-400/10 via-[#0A0A0A] to-[#0A0A0A] p-6 text-left transition-all hover:border-cyan-400/60 hover:shadow-[0_0_32px_rgba(34,211,238,0.18)]"
+          className="group relative overflow-hidden rounded-lg border border-cyan-400/30 bg-[#0A0A0A] p-6 text-left transition-all hover:border-cyan-400/60 hover:shadow-[0_0_32px_rgba(34,211,238,0.14)]"
         >
-          <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-400/15 ring-1 ring-cyan-400/30">
+          <img
+            src={musicPolishAssets.lyrics.rnbGlass.src}
+            alt=""
+            className="absolute inset-y-0 right-0 hidden h-full w-1/2 object-cover opacity-35 md:block"
+            loading="lazy"
+            decoding="async"
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-black via-black/80 to-black/20" />
+          <div className="relative flex items-center gap-4">
+            <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-cyan-400/15 ring-1 ring-cyan-400/30">
               <Plus className="h-6 w-6 text-cyan-300" />
             </div>
             <div className="flex-1">
@@ -172,6 +191,30 @@ export function TemplatesLanding({ onCreate, onOpen }: TemplatesLandingProps) {
         </div>
       </div>
 
+      <section className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {LYRIC_STYLE_PRESETS.map((preset) => (
+          <div
+            key={preset.title}
+            className="group relative aspect-video overflow-hidden rounded-lg border border-white/[0.06] bg-[#0F1116]"
+          >
+            <img
+              src={preset.src}
+              alt={preset.alt}
+              className="h-full w-full object-cover opacity-80 transition duration-700 group-hover:scale-[1.04] group-hover:opacity-100"
+              loading="lazy"
+              decoding="async"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
+            <div className="absolute bottom-3 left-3 right-3">
+              <p className="truncate text-sm font-bold text-white">{preset.title}</p>
+              <p className="mt-0.5 truncate text-[10px] font-bold uppercase tracking-[0.16em] text-cyan-100/70">
+                {preset.style}
+              </p>
+            </div>
+          </div>
+        ))}
+      </section>
+
       {/* Grid */}
       <section className="mt-8">
         {loading ? (
@@ -179,7 +222,7 @@ export function TemplatesLanding({ onCreate, onOpen }: TemplatesLandingProps) {
             {Array.from({ length: 6 }).map((_, i) => (
               <div
                 key={i}
-                className="h-44 animate-pulse rounded-2xl border border-white/5 bg-white/[0.02]"
+                className="h-44 animate-pulse rounded-lg border border-white/5 bg-white/[0.02]"
               />
             ))}
           </div>
@@ -202,7 +245,7 @@ export function TemplatesLanding({ onCreate, onOpen }: TemplatesLandingProps) {
       </section>
 
       {/* How it works */}
-      <section className="mt-16 rounded-2xl border border-white/5 bg-[#0B0D13] p-6">
+      <section className="mt-16 rounded-lg border border-white/5 bg-[#0B0D13] p-6">
         <h2 className="text-[10px] font-bold uppercase tracking-[0.22em] text-zinc-500">
           How it works
         </h2>
@@ -212,7 +255,7 @@ export function TemplatesLanding({ onCreate, onOpen }: TemplatesLandingProps) {
             { n: 2, title: 'Sync lyrics', body: 'AI transcribes and aligns words to the beat.' },
             { n: 3, title: 'Place markers', body: 'Tap M to mark cut points across the clip.' },
           ].map((s) => (
-            <div key={s.n} className="rounded-xl border border-white/5 bg-black/30 p-4">
+            <div key={s.n} className="rounded-lg border border-white/5 bg-black/30 p-4">
               <div className="flex items-center gap-2">
                 <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#f97316]/15 text-[10px] font-bold text-[#f97316]">
                   {s.n}
@@ -343,7 +386,24 @@ function TemplateCard({
 
 function EmptyState({ onCreate }: { onCreate: () => void }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-[#0B0D13] py-20 text-center">
+    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-white/10 bg-[#0B0D13] px-5 py-16 text-center">
+      <div className="mb-6 grid w-full max-w-3xl grid-cols-2 gap-3 md:grid-cols-4">
+        {LYRIC_STYLE_PRESETS.map((preset) => (
+          <div key={preset.title} className="relative aspect-video overflow-hidden rounded-lg border border-white/[0.06] bg-black">
+            <img
+              src={preset.src}
+              alt={preset.alt}
+              className="h-full w-full object-cover opacity-75"
+              loading="lazy"
+              decoding="async"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
+            <span className="absolute bottom-2 left-2 right-2 truncate text-left text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-200">
+              {preset.title}
+            </span>
+          </div>
+        ))}
+      </div>
       <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#f97316]/10 ring-1 ring-[#f97316]/20">
         <Music2 className="h-7 w-7 text-[#f97316]" />
       </div>

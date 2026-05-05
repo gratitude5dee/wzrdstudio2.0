@@ -1,4 +1,21 @@
 import { motion } from 'framer-motion';
+import { musicPolishAssets, type MusicPolishAsset } from '@/lib/musicPolishAssets';
+
+const StepMockup = ({ image, label }: { image: MusicPolishAsset; label: string }) => (
+  <div className="relative min-h-[180px] overflow-hidden">
+    <img
+      src={image.src}
+      alt={image.alt}
+      className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+      loading="lazy"
+    />
+    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/10" />
+    <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between rounded-lg border border-white/10 bg-black/35 px-3 py-2 backdrop-blur-md">
+      <span className="text-[10px] font-mono uppercase tracking-widest text-white/60">{label}</span>
+      <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_16px_rgba(103,232,249,0.8)]" />
+    </div>
+  </div>
+);
 
 const steps = [
   {
@@ -6,72 +23,21 @@ const steps = [
     title: 'Ideate',
     headline: 'Explore 100s of possibilities',
     description: 'Text, image and video models in one place. No tab-switching, no limits.',
-    mockup: (
-      <div className="space-y-2 p-3">
-        {['Brand concept A', 'Video treatment', 'Visual identity'].map((item, i) => (
-          <div key={i} className="flex items-center gap-2 bg-white/[0.04] rounded-lg px-3 py-2 border border-white/[0.06]">
-            <div className="w-2 h-2 rounded-full bg-orange-400/50" />
-            <span className="text-[10px] text-white/40 font-mono">{item}</span>
-          </div>
-        ))}
-        <div className="flex items-center gap-2 bg-white/[0.02] rounded-lg px-3 py-2 border border-dashed border-white/[0.08]">
-          <span className="text-[10px] text-white/20 font-mono">+ Add source…</span>
-        </div>
-      </div>
-    ),
+    mockup: <StepMockup image={musicPolishAssets.kanvas.aiVisualWall} label="Concept wall" />,
   },
   {
     number: '02',
     title: 'Iterate',
     headline: "Get to 'final' faster",
     description: 'Real-time collaboration with AI-powered refinement. Every revision tracked.',
-    mockup: (
-      <div className="p-3 space-y-3">
-        <div className="aspect-video rounded-lg bg-gradient-to-br from-purple-500/20 to-orange-500/10 border border-white/[0.06] flex items-center justify-center">
-          <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
-            <div className="w-3 h-3 rounded-sm bg-white/30" />
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <div className="flex items-center gap-1 bg-purple-500/10 rounded-full px-2 py-0.5">
-            <div className="w-1.5 h-1.5 rounded-full bg-purple-400" />
-            <span className="text-[8px] text-purple-300/60">Alex</span>
-          </div>
-          <div className="flex items-center gap-1 bg-orange-500/10 rounded-full px-2 py-0.5">
-            <div className="w-1.5 h-1.5 rounded-full bg-orange-400" />
-            <span className="text-[8px] text-orange-300/60">Komal</span>
-          </div>
-        </div>
-      </div>
-    ),
+    mockup: <StepMockup image={musicPolishAssets.kanvas.backgroundReframe} label="Revision bay" />,
   },
   {
     number: '03',
     title: 'Scale',
     headline: 'Create scalable workflows',
     description: 'Turn one-off creations into repeatable pipelines. From prototype to production.',
-    mockup: (
-      <div className="p-3 space-y-2">
-        {[
-          { w: '70%', color: 'bg-orange-500/20 border-orange-500/15' },
-          { w: '50%', color: 'bg-blue-500/20 border-blue-500/15' },
-          { w: '85%', color: 'bg-orange-500/20 border-orange-500/15' },
-        ].map((bar, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded bg-white/[0.04] border border-white/[0.06] flex items-center justify-center">
-              <div className="w-1.5 h-1.5 rounded-full bg-white/20" />
-            </div>
-            <div className="flex-1 h-3 bg-white/[0.02] rounded">
-              <div className={`h-full rounded border ${bar.color}`} style={{ width: bar.w }} />
-            </div>
-          </div>
-        ))}
-        <div className="flex items-center justify-between mt-2">
-          <span className="text-[8px] text-white/20 font-mono">3 workflows active</span>
-          <div className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" />
-        </div>
-      </div>
-    ),
+    mockup: <StepMockup image={musicPolishAssets.landing.platformDeliveryWall} label="Delivery stack" />,
   },
 ];
 

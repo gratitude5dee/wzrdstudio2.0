@@ -1,14 +1,15 @@
 import { motion } from 'framer-motion';
 import { Shield, Zap, Network, Sparkles, Layers, Workflow } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { musicPolishAssets } from '@/lib/musicPolishAssets';
 
 const features = [
-  { icon: Zap, title: 'Content at Scale', description: 'Generate hundreds of ad variations, social assets, and marketing content for SaaS go-to-market teams in minutes, not weeks.', highlight: '100x Output', color: 'orange' },
-  { icon: Shield, title: 'Secure Asset Pipeline', description: 'Enterprise-grade security for cybersecurity firms. SOC 2 compliant workflows with encrypted asset management and audit trails.', highlight: 'SOC 2 Ready', color: 'orange' },
-  { icon: Network, title: 'Distribution Engine', description: 'Media & entertainment distribution at scale. Transcode, format, and deliver content across every platform and territory automatically.', highlight: 'Global Reach', color: 'orange' },
-  { icon: Sparkles, title: 'AI-Powered Creative', description: 'Let AI handle the heavy lifting. Generate storyboards, visuals, and edits from a simple text prompt or reference image.', highlight: 'Text to Video', color: 'orange' },
-  { icon: Layers, title: 'Platform-Ready Formats', description: 'Export optimized for TikTok, Instagram, YouTube Shorts, CTV, and paid ads. Every aspect ratio, every platform, instantly.', highlight: 'All Platforms', color: 'orange' },
-  { icon: Workflow, title: 'Enterprise Workflows', description: 'Approval chains, brand governance, and team permissions. Built for organizations that need control without sacrificing speed.', highlight: 'Team Scale', color: 'orange' },
+  { icon: Zap, title: 'Content at Scale', description: 'Generate hundreds of ad variations, social assets, and marketing content for SaaS go-to-market teams in minutes, not weeks.', highlight: '100x Output', image: musicPolishAssets.kanvas.aiVisualWall },
+  { icon: Shield, title: 'Secure Asset Pipeline', description: 'Enterprise-grade security for cybersecurity firms. SOC 2 compliant workflows with encrypted asset management and audit trails.', highlight: 'SOC 2 Ready', image: musicPolishAssets.landing.securityControlRoom },
+  { icon: Network, title: 'Distribution Engine', description: 'Media & entertainment distribution at scale. Transcode, format, and deliver content across every platform and territory automatically.', highlight: 'Global Reach', image: musicPolishAssets.landing.platformDeliveryWall },
+  { icon: Sparkles, title: 'AI-Powered Creative', description: 'Let AI handle the heavy lifting. Generate storyboards, visuals, and edits from a simple text prompt or reference image.', highlight: 'Text to Video', image: musicPolishAssets.kanvas.stageProductVisual },
+  { icon: Layers, title: 'Platform-Ready Formats', description: 'Export optimized for TikTok, Instagram, YouTube Shorts, CTV, and paid ads. Every aspect ratio, every platform, instantly.', highlight: 'All Platforms', image: musicPolishAssets.lyrics.rooftopMotion },
+  { icon: Workflow, title: 'Enterprise Workflows', description: 'Approval chains, brand governance, and team permissions. Built for organizations that need control without sacrificing speed.', highlight: 'Team Scale', image: musicPolishAssets.cinema.castBoard },
 ];
 
 export function FeatureGrid() {
@@ -50,6 +51,16 @@ export function FeatureGrid() {
               )}
             >
               <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-b from-orange-500/5 to-transparent pointer-events-none" />
+
+              <div className="relative mb-6 h-28 overflow-hidden rounded-xl border border-white/[0.08] bg-black/40">
+                <img
+                  src={feature.image.src}
+                  alt={feature.image.alt}
+                  className="h-full w-full object-cover opacity-80 transition-transform duration-700 group-hover:scale-105"
+                  loading="lazy"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/55 to-transparent" />
+              </div>
 
               <div className={cn('w-14 h-14 rounded-xl flex items-center justify-center mb-6', 'bg-orange-500/10 border border-orange-500/20', 'group-hover:bg-orange-500/20 group-hover:border-orange-500/30', 'transition-all duration-300')}>
                 <feature.icon className="w-7 h-7 text-orange-400" />

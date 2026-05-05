@@ -6,12 +6,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { FileText, RefreshCw, Loader2, ImageIcon, X, Music, Upload } from 'lucide-react';
+import { Activity, Camera, Clapperboard, FileText, RefreshCw, Loader2, ImageIcon, X, Music, Palette, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { documentService, ACCEPTED_DOCUMENT_EXTENSIONS } from '@/services/documentService';
 import { cn } from '@/lib/utils';
+import { musicStyleRange } from '@/lib/musicPolishAssets';
 import { useProjectContext } from './ProjectContext';
 import { useAuth } from '@/providers/AuthProvider';
 import { MetaPromptEditor } from './MetaPromptEditor';
@@ -416,7 +417,7 @@ const MusicVideoForm: React.FC<{
     performanceRatio: 50,
   };
 
-  const updateMusicData = (field: string, value: string | number | number[] | undefined) => {
+  const updateMusicData = (field: string, value: string | number | number[] | string[] | undefined) => {
     updateProjectData({
       musicVideoData: { ...musicData, [field]: value },
     });
@@ -511,11 +512,46 @@ const MusicVideoForm: React.FC<{
 
   return (
     <div className="space-y-6">
-      <div className="p-4 rounded-lg bg-gradient-to-r from-pink-500/10 to-rose-500/10 border border-pink-500/20">
-        <h3 className="text-lg font-semibold text-pink-400 mb-1">Music Video Brief</h3>
-        <p className="text-sm text-zinc-400">
-          Build a visual narrative that amplifies the audio experience
-        </p>
+      <div className="overflow-hidden rounded-lg border border-white/10 bg-[#0b0d12]">
+        <div className="grid gap-0 md:grid-cols-[1fr_1.1fr]">
+          <div className="p-5">
+            <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-cyan-200/70">Music Video Brief</p>
+            <h3 className="mt-3 text-xl font-semibold text-white">Build the treatment around the track.</h3>
+            <p className="mt-2 text-sm leading-relaxed text-zinc-500">
+              Upload audio, define the artist world, capture mood references, then balance performance, choreography, lyric plates, and story scenes.
+            </p>
+            <div className="mt-4 grid grid-cols-2 gap-2 text-[10px] uppercase tracking-[0.16em] text-zinc-400">
+              {[
+                { label: 'Audio timing', Icon: Activity },
+                { label: 'Artist anchor', Icon: Music },
+                { label: 'Scene language', Icon: Camera },
+                { label: 'Visual palette', Icon: Palette },
+              ].map(({ label, Icon }) => (
+                <div key={label} className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2">
+                  <Icon className="h-3.5 w-3.5 text-[#f97316]" />
+                  {label}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 p-3">
+            {musicStyleRange.map((asset) => (
+              <div key={asset.title} className="relative aspect-video overflow-hidden rounded-lg border border-white/[0.06] bg-black">
+                <img
+                  src={asset.src}
+                  alt={asset.alt}
+                  className="h-full w-full object-cover opacity-80"
+                  loading="lazy"
+                  decoding="async"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-transparent" />
+                <span className="absolute bottom-2 left-2 right-2 truncate text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-200">
+                  {asset.style}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -526,7 +562,7 @@ const MusicVideoForm: React.FC<{
           <Input
             value={musicData.artistName}
             onChange={(e) => updateMusicData('artistName', e.target.value)}
-            placeholder="e.g., The Weeknd"
+            placeholder="e.g., Fictional artist name"
             className="bg-[#111319] border-zinc-700"
           />
         </div>
@@ -537,7 +573,7 @@ const MusicVideoForm: React.FC<{
           <Input
             value={musicData.trackTitle}
             onChange={(e) => updateMusicData('trackTitle', e.target.value)}
-            placeholder="e.g., Blinding Lights"
+            placeholder="e.g., Working track title"
             className="bg-[#111319] border-zinc-700"
           />
         </div>
@@ -548,8 +584,26 @@ const MusicVideoForm: React.FC<{
         <Input
           value={musicData.genre}
           onChange={(e) => updateMusicData('genre', e.target.value)}
-          placeholder="e.g., Synthwave, Pop, Hip-Hop, Rock..."
+          placeholder="e.g., Gothic trap, rain-soaked R&B, cyberpop choreography..."
           className="bg-[#111319] border-zinc-700"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-sm text-zinc-400 uppercase tracking-wide flex items-center gap-2">
+          <Clapperboard className="w-4 h-4" />
+          Treatment Notes / References
+        </Label>
+        <Textarea
+          value={(musicData.moodBoard || []).join('\n')}
+          onChange={(e) =>
+            updateMusicData(
+              'moodBoard',
+              e.target.value.split('\n').map((line) => line.trim()).filter(Boolean)
+            )
+          }
+          placeholder="One reference per line: key art mood, choreography direction, lens language, wardrobe palette, lyric typography..."
+          className="bg-[#111319] border-zinc-700 min-h-[96px] text-sm"
         />
       </div>
 
@@ -558,7 +612,7 @@ const MusicVideoForm: React.FC<{
         <Label className="text-sm text-zinc-400 uppercase tracking-wide flex items-center gap-2">
           <Music className="w-4 h-4" />
           Audio Track
-          <span className="text-xs text-zinc-500">(for BPM detection)</span>
+          <span className="text-xs text-zinc-500">(tempo + beat map)</span>
         </Label>
 
         <AnimatePresence mode="wait">
@@ -568,12 +622,12 @@ const MusicVideoForm: React.FC<{
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
-              className="rounded-lg border border-pink-500/20 bg-[#18191E] p-4 space-y-3"
+              className="rounded-lg border border-[#f97316]/20 bg-[#18191E] p-4 space-y-3"
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-pink-500/20 flex items-center justify-center">
-                    <Music className="w-5 h-5 text-pink-400" />
+                  <div className="w-10 h-10 rounded-lg bg-[#f97316]/20 flex items-center justify-center">
+                    <Music className="w-5 h-5 text-[#f97316]" />
                   </div>
                   <div>
                     <p className="text-sm text-white font-medium truncate max-w-[200px]">
@@ -584,7 +638,7 @@ const MusicVideoForm: React.FC<{
                         <Loader2 className="w-3 h-3 animate-spin" /> Analyzing BPM...
                       </p>
                     ) : musicData.bpm ? (
-                      <p className="text-xs text-pink-400 font-mono">
+                      <p className="text-xs text-[#f97316] font-mono">
                         {musicData.bpm} BPM detected
                       </p>
                     ) : (
@@ -610,7 +664,7 @@ const MusicVideoForm: React.FC<{
                     {musicData.beatTimeline.slice(0, 60).map((beat, i) => (
                       <div
                         key={i}
-                        className="flex-1 bg-pink-500/60 rounded-t-sm min-w-[2px]"
+                        className="flex-1 bg-[#f97316]/70 rounded-t-sm min-w-[2px]"
                         style={{
                           height: `${i % 4 === 0 ? 100 : 50}%`,
                           opacity: i % 4 === 0 ? 1 : 0.5,
@@ -648,7 +702,7 @@ const MusicVideoForm: React.FC<{
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => audioInputRef.current?.click()}
-              className="border-2 border-dashed border-zinc-700 hover:border-pink-500/40 rounded-lg p-6 flex flex-col items-center justify-center gap-2 cursor-pointer transition-all bg-[#18191E]"
+              className="border-2 border-dashed border-zinc-700 hover:border-[#f97316]/40 rounded-lg p-6 flex flex-col items-center justify-center gap-2 cursor-pointer transition-all bg-[#18191E]"
             >
               <input
                 ref={audioInputRef}
@@ -663,8 +717,8 @@ const MusicVideoForm: React.FC<{
               <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center">
                 <Upload className="w-5 h-5 text-zinc-400" />
               </div>
-              <p className="text-sm text-zinc-400">Upload audio for BPM detection</p>
-              <p className="text-xs text-zinc-500">MP3, WAV, or other audio formats</p>
+              <p className="text-sm text-zinc-400">Upload the song or edit section</p>
+              <p className="text-xs text-zinc-500">MP3, WAV, or other audio formats for BPM detection</p>
             </motion.div>
           )}
         </AnimatePresence>
@@ -697,7 +751,7 @@ const MusicVideoForm: React.FC<{
         <Textarea
           value={musicData.lyrics || ''}
           onChange={(e) => updateMusicData('lyrics', e.target.value)}
-          placeholder="Paste lyrics here for visual scene matching..."
+          placeholder="Paste lyrics for visual scene matching, hooks, typography moments, and beat-aware cuts..."
           className="bg-[#111319] border-zinc-700 min-h-[120px] font-mono text-sm"
         />
       </div>
@@ -1040,9 +1094,9 @@ const DefaultConceptForm: React.FC<{
       } else {
         throw new Error('Invalid response format');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error generating examples:', error);
-      toast.error(error.message || 'Failed to generate new examples');
+      toast.error(error instanceof Error ? error.message : 'Failed to generate new examples');
     } finally {
       setIsGeneratingExamples(false);
     }

@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { Palette, Shield, Megaphone, Film, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { musicPolishAssets } from '@/lib/musicPolishAssets';
 
 const caseStudies = [
   {
@@ -11,6 +12,7 @@ const caseStudies = [
       'End-to-end brand identity creation — from mood boards to final deliverables — with AI-assisted iteration and real-time collaboration.',
     stats: '3x faster brand sprints',
     gradient: 'from-violet-500/20 to-purple-500/5',
+    image: musicPolishAssets.cinema.castBoard,
   },
   {
     icon: Shield,
@@ -20,6 +22,7 @@ const caseStudies = [
       'Generate threat briefings, compliance documentation visuals, and internal training content with enterprise-grade security.',
     stats: 'SOC 2 compliant pipeline',
     gradient: 'from-cyan-500/20 to-blue-500/5',
+    image: musicPolishAssets.landing.securityControlRoom,
   },
   {
     icon: Megaphone,
@@ -29,6 +32,7 @@ const caseStudies = [
       'Launch campaigns with 100+ ad variations. A/B test creative at scale and distribute across every paid and organic channel.',
     stats: '10x creative output',
     gradient: 'from-orange-500/20 to-red-500/5',
+    image: musicPolishAssets.kanvas.stageProductVisual,
   },
   {
     icon: Film,
@@ -38,6 +42,7 @@ const caseStudies = [
       'From raw footage to platform-ready delivery. Automated transcoding, localization, and distribution across global territories.',
     stats: '48hr turnaround',
     gradient: 'from-orange-500/20 to-amber-500/5',
+    image: musicPolishAssets.landing.platformDeliveryWall,
   },
 ];
 
@@ -79,6 +84,15 @@ export function UseCasesSection() {
               )}
             >
               <div className={`absolute inset-0 bg-gradient-to-br ${study.gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-500`} />
+              <div className="absolute inset-y-0 right-0 w-2/5 opacity-35 transition-opacity duration-500 group-hover:opacity-55">
+                <img
+                  src={study.image.src}
+                  alt={study.image.alt}
+                  className="h-full w-full object-cover"
+                  loading="lazy"
+                />
+                <div className="absolute inset-0 bg-gradient-to-r from-[#111] via-[#111]/60 to-transparent" />
+              </div>
 
               <div className="relative z-10">
                 <div className="flex items-start justify-between mb-6">

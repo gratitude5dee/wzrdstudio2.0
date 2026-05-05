@@ -36,6 +36,7 @@ import {
 } from "@/hooks/useAssets";
 import type { ProjectAsset, AssetType, AssetFilters } from "@/types/assets";
 import { cn } from "@/lib/utils";
+import { musicPolishAssets } from "@/lib/musicPolishAssets";
 
 interface AssetLibraryProps {
   projectId?: string;
@@ -54,6 +55,16 @@ const ASSET_TYPE_ICONS: Record<AssetType, React.ElementType> = {
   model: FileText,
   font: FileText,
   other: FileText,
+};
+
+const ASSET_FALLBACKS: Record<AssetType, { src: string; alt: string }> = {
+  image: musicPolishAssets.landing.heroGothicStorm,
+  video: musicPolishAssets.cinema.neonStreet,
+  audio: musicPolishAssets.blueprints.microphone,
+  document: musicPolishAssets.cinema.castBoard,
+  model: musicPolishAssets.blueprints.soundstage,
+  font: musicPolishAssets.lyrics.rnbGlass,
+  other: musicPolishAssets.landing.platformDeliveryWall,
 };
 
 export const AssetLibrary: React.FC<AssetLibraryProps> = ({
@@ -259,6 +270,7 @@ const AssetCard: React.FC<AssetCardProps> = ({
   isArchived,
 }) => {
   const Icon = ASSET_TYPE_ICONS[asset.asset_type];
+  const fallback = ASSET_FALLBACKS[asset.asset_type];
   const { data: downloadUrl } = useAssetDownloadUrl(asset.id);
 
   const formatFileSize = (bytes: number) => {
@@ -293,11 +305,23 @@ const AssetCard: React.FC<AssetCardProps> = ({
             src={asset.thumbnail_url || asset.cdn_url}
             alt={asset.original_file_name}
             className="w-full h-full object-cover"
+            loading="lazy"
+            decoding="async"
             data-testid="asset-card-thumbnail"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <Icon className="w-12 h-12 text-muted-foreground" />
+          <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
+            <img
+              src={fallback.src}
+              alt={fallback.alt}
+              className="absolute inset-0 h-full w-full object-cover opacity-55"
+              loading="lazy"
+              decoding="async"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/35 to-transparent" />
+            <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl border border-white/15 bg-black/40 backdrop-blur-sm">
+              <Icon className="w-7 h-7 text-white/75" />
+            </div>
           </div>
         )}
 

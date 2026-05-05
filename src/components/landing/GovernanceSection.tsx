@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { Shield, Scale, FileCheck } from 'lucide-react';
+import { musicTalentRange, type MusicPolishAsset } from '@/lib/musicPolishAssets';
 
 const fadeUp = {
   initial: { opacity: 0, y: 30 },
@@ -8,9 +9,22 @@ const fadeUp = {
   transition: { duration: 0.8, ease: [0.22, 1, 0.36, 1] },
 };
 
-const TalentCard = ({ name, role }: { name: string; role: string }) => (
+const talentCards = [
+  { name: 'Alex Rivera', role: 'Lead Actor', image: musicTalentRange[0] },
+  { name: 'Maya Chen', role: 'Voice Artist', image: musicTalentRange[1] },
+  { name: 'Jordan Blake', role: 'Motion Ref', image: musicTalentRange[2] },
+  { name: 'Sam Nakamura', role: 'Face Model', image: musicTalentRange[3] },
+];
+
+const TalentCard = ({ name, role, image }: { name: string; role: string; image: MusicPolishAsset }) => (
   <div className="relative rounded-xl overflow-hidden bg-zinc-800/50 border border-white/5 aspect-[3/4]">
-    <div className="w-full h-full bg-gradient-to-b from-zinc-700/30 to-zinc-800/60" />
+    <img
+      src={image.src}
+      alt={image.alt}
+      className="w-full h-full object-cover"
+      loading="lazy"
+    />
+    <div className="absolute inset-0 bg-gradient-to-b from-black/0 via-black/10 to-black/80" />
     <div className="absolute bottom-0 inset-x-0 p-3 bg-gradient-to-t from-black/80 to-transparent">
       <div className="text-[11px] text-white font-medium">{name}</div>
       <div className="text-[10px] text-zinc-400">{role}</div>
@@ -110,10 +124,9 @@ const GovernanceSection = () => {
             >
               <div className="text-[10px] text-zinc-500 uppercase tracking-wider mb-4">IP Cleared Talent Library</div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <TalentCard name="Alex Rivera" role="Lead Actor" />
-                <TalentCard name="Maya Chen" role="Voice Artist" />
-                <TalentCard name="Jordan Blake" role="Motion Ref" />
-                <TalentCard name="Sam Nakamura" role="Face Model" />
+                {talentCards.map((talent) => (
+                  <TalentCard key={talent.name} {...talent} />
+                ))}
               </div>
             </motion.div>
 
@@ -131,7 +144,7 @@ const GovernanceSection = () => {
                   { step: 'Output', detail: 'scene_014_v2.mp4 — 2048×1152, 6s', time: '10:26 AM' },
                   { step: 'License', detail: 'Commercial use cleared — Enterprise tier', time: '10:26 AM' },
                 ].map((item, i) => (
-                  <div key={i} className="flex items-start gap-3">
+                  <div key={`${item.step}-${item.time}`} className="flex items-start gap-3">
                     <div className="flex flex-col items-center">
                       <div className="w-2 h-2 rounded-full bg-[#FF5A5A] mt-1.5" />
                       {i < 3 && <div className="w-px h-8 bg-white/10" />}

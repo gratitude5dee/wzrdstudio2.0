@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useVoiceSelection } from '@/voice/VoiceSelectionContext';
 import { cn } from '@/lib/utils';
+import { musicPolishAssets } from '@/lib/musicPolishAssets';
 
 interface BreakdownTabProps {
   projectData: ProjectData;
@@ -35,6 +36,16 @@ const cardVariants = {
     y: -10,
     transition: { duration: 0.2 },
   },
+};
+
+const getSceneFallback = (scene: Scene) => {
+  const text = `${scene.location} ${scene.lighting} ${scene.weather} ${scene.description}`.toLowerCase();
+  if (text.includes('roof') || text.includes('aerial') || text.includes('choreo')) return musicPolishAssets.landing.rooftopChoreography;
+  if (text.includes('rain') || text.includes('storm')) return musicPolishAssets.cinema.neonStreet;
+  if (text.includes('stage') || text.includes('studio') || text.includes('performance')) return musicPolishAssets.cinema.soundstage;
+  if (text.includes('lyric') || text.includes('title')) return musicPolishAssets.lyrics.rnbGlass;
+  if (text.includes('neon') || text.includes('night')) return musicPolishAssets.cinema.neonStreet;
+  return musicPolishAssets.cinema.castBoard;
 };
 
 /** Scene card extracted to module scope to prevent remounts on parent re-renders. */
@@ -64,12 +75,26 @@ const SceneCard = ({
     data-voice-scene-id={scene.id}
     onClick={() => onSelect?.(scene)}
     className={cn(
-      'bg-[#111319] rounded-lg border border-zinc-800 p-4 mb-4 transition-all duration-300',
+      'overflow-hidden bg-[#111319] rounded-lg border border-zinc-800 mb-4 transition-all duration-300',
       onSelect && 'cursor-pointer',
       isVoiceSelected &&
         'border-[#f97316]/70 ring-2 ring-[#f97316]/45 shadow-[0_0_0_4px_rgba(249,115,22,0.1),0_0_34px_rgba(249,115,22,0.22)]',
     )}
   >
+    <div className="relative aspect-[16/5] overflow-hidden border-b border-white/5">
+      <img
+        src={getSceneFallback(scene).src}
+        alt={getSceneFallback(scene).alt}
+        className="h-full w-full object-cover opacity-65"
+        loading="lazy"
+        decoding="async"
+      />
+      <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/35 to-transparent" />
+      <div className="absolute bottom-3 left-4 text-[10px] font-semibold uppercase tracking-[0.22em] text-[#f97316]">
+        Scene {scene.number}
+      </div>
+    </div>
+    <div className="p-4">
     <div className="flex justify-between items-start mb-3">
       <h3 className="text-lg font-bold">{scene.title}</h3>
       <div className="flex space-x-2">
@@ -119,6 +144,7 @@ const SceneCard = ({
           <span className="text-zinc-300">{scene.weather}</span>
         </div>
       )}
+    </div>
     </div>
   </motion.div>
 );

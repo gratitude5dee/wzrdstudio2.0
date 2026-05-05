@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, Play, ArrowDown, Film, Music, Type, Sparkles, Layers, SkipBack, SkipForward, Volume2, Search, Plus, Send } from 'lucide-react';
 import ScrollingPartners from '@/components/landing/ScrollingPartners';
 import wzrdIntroGif from '@/assets/wzrd-intro.gif';
+import { musicStyleRange } from '@/lib/musicPolishAssets';
 
 interface HeroSectionProps {
   headline?: string;
@@ -12,7 +13,7 @@ interface HeroSectionProps {
 
 export function HeroSection({ 
   headline, 
-  subheadline = "Bring your ideas to life faster than ever before with our autonomous creative agency. Every creative AI tool, one unified process — built for SaaS, cybersecurity, and media distribution teams." 
+  subheadline = "Create music-video worlds, lyric plates, artist references, and production-ready visual assets in one studio workflow."
 }: HeroSectionProps) {
   const sectionRef = useRef<HTMLElement>(null);
   const { scrollYProgress } = useScroll({
@@ -126,10 +127,21 @@ export function HeroSection({
                         <Search className="w-2.5 h-2.5 text-white/20" />
                       </div>
                       <div className="grid grid-cols-2 gap-0.5">
-                        {[0,1,2,3].map(i => (
-                          <div key={i} className="aspect-square rounded-sm bg-white/[0.04] border border-white/[0.05]" />
+                        {musicStyleRange.map((asset) => (
+                          <div key={asset.title} className="aspect-square overflow-hidden rounded-sm border border-white/[0.06] bg-white/[0.04]">
+                            <img
+                              src={asset.src}
+                              alt=""
+                              className="h-full w-full object-cover opacity-75"
+                              loading="lazy"
+                              decoding="async"
+                            />
+                          </div>
                         ))}
                       </div>
+                      <button className="mt-1.5 flex w-full items-center justify-center rounded-sm border border-white/[0.06] bg-white/[0.03] py-1 text-white/25 transition-colors hover:text-orange-300" aria-label="Add media">
+                        <Plus className="h-2.5 w-2.5" />
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -139,8 +151,14 @@ export function HeroSection({
                   {/* Preview Window */}
                   <div className="flex-1 p-3">
                     <div className="bg-black rounded-lg h-full flex items-center justify-center border border-white/[0.05] relative overflow-hidden min-h-[160px]">
-                      <img src={wzrdIntroGif} alt="WZRD Studio Preview" className="absolute inset-0 w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-black/10" />
+                      <img
+                        src={wzrdIntroGif}
+                        alt="WZRD.studio animated product preview"
+                        className="absolute inset-0 w-full h-full object-cover"
+                        loading="eager"
+                        decoding="async"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-black/5" />
                     </div>
                   </div>
 
@@ -263,7 +281,7 @@ export function HeroSection({
             transition={{ duration: 0.7, delay: 0.5 }}
             className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-extrabold tracking-tight leading-[0.95] mb-4 md:mb-6 bg-clip-text text-transparent bg-gradient-to-b from-white to-white/60"
           >
-            {headline || <>A <em className="font-serif italic not-italic bg-clip-text text-transparent bg-gradient-to-r from-orange-300 to-amber-200" style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>Hollywood</em> studio<br />in your pocket.</>}
+            {headline || <>A <em className="font-serif italic not-italic bg-clip-text text-transparent bg-gradient-to-r from-orange-300 to-amber-200" style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>music video</em> studio<br />in your pocket.</>}
           </motion.h1>
 
           {/* Subheadline */}

@@ -20,6 +20,7 @@ import { getJobPrimaryUrl } from "@/features/kanvas/helpers";
 import { getKanvasModelProvider } from "@/features/kanvas/modelProvider";
 import { useUserTier, sortModelsForTier } from "@/hooks/useUserTier";
 import { MentionDropdown } from "@/components/character-creation/MentionDropdown";
+import { musicPolishAssets } from "@/lib/musicPolishAssets";
 import type { CharacterMention } from "@/types/character-creation";
 
 /* ------------------------------------------------------------------ */
@@ -58,19 +59,25 @@ interface ImageStudioSectionProps {
 
 const USE_CASE_CARDS = [
   {
-    label: "Stage Your Product",
-    subtitle: "AI-powered product photography with cinematic lighting",
-    gradient: "from-[#1a0a2e] via-[#16213e] to-[#0a0a0a]",
+    label: musicPolishAssets.kanvas.stageProductVisual.title,
+    subtitle: "Build high-end hero props and cover-art objects with practical stage light.",
+    style: musicPolishAssets.kanvas.stageProductVisual.style,
+    image: musicPolishAssets.kanvas.stageProductVisual.src,
+    alt: musicPolishAssets.kanvas.stageProductVisual.alt,
   },
   {
-    label: "Generate Visuals",
-    subtitle: "Create photorealistic scenes from text descriptions",
-    gradient: "from-[#0a1628] via-[#1a1a2e] to-[#0a0a0a]",
+    label: musicPolishAssets.kanvas.aiVisualWall.title,
+    subtitle: "Move from treatment notes to photoreal scene walls and campaign frames.",
+    style: musicPolishAssets.kanvas.aiVisualWall.style,
+    image: musicPolishAssets.kanvas.aiVisualWall.src,
+    alt: musicPolishAssets.kanvas.aiVisualWall.alt,
   },
   {
-    label: "Change Background",
-    subtitle: "Replace any backdrop with AI-generated environments",
-    gradient: "from-[#1a1206] via-[#201a0e] to-[#0a0a0a]",
+    label: musicPolishAssets.kanvas.backgroundReframe.title,
+    subtitle: "Reframe a performer across stages, streets, and editorial plates.",
+    style: musicPolishAssets.kanvas.backgroundReframe.style,
+    image: musicPolishAssets.kanvas.backgroundReframe.src,
+    alt: musicPolishAssets.kanvas.backgroundReframe.alt,
   },
 ];
 
@@ -200,7 +207,8 @@ export default function ImageStudioSection({
         className="text-4xl md:text-6xl lg:text-7xl font-black tracking-tighter leading-[0.9] uppercase"
         style={{ fontFamily: "'Space Grotesk', sans-serif" }}
       >
-        <span className="text-white">TURN IDEAS</span>
+        <span className="sr-only">TURN IDEAS</span>
+        <span className="text-white">TURN TRACKS</span>
         <br />
         <span className="text-white">INTO </span>
         <span className="text-[#f97316]">VISUALS</span>
@@ -210,49 +218,88 @@ export default function ImageStudioSection({
 
   /* ---- Use Case Carousel ---- */
   const renderCarousel = () => (
-    <div className="relative max-w-[1100px] mx-auto px-4 md:px-12 hidden md:block">
-      <div className="flex items-center gap-4">
-        <button
-          onClick={() => setCarouselIndex(Math.max(0, carouselIndex - 1))}
-          className="shrink-0 w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-colors"
-        >
-          <ChevronLeft className="h-4 w-4 text-zinc-400" />
-        </button>
-        <div className="flex gap-6 overflow-hidden flex-1">
-          {USE_CASE_CARDS.map((card, i) => (
-            <div
-              key={i}
-              className="min-w-[300px] flex-1 aspect-[4/5] rounded-2xl relative overflow-hidden group cursor-pointer border border-white/5"
-              style={{
-                transform: `perspective(800px) rotateY(${i === 1 ? 0 : i === 0 ? 3 : -3}deg)`,
-              }}
-            >
-              <div className={cn("absolute inset-0 bg-gradient-to-br", card.gradient)} />
-              <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent" />
-              <div className="absolute bottom-0 left-0 right-0 p-6 space-y-2">
-                <h3 className="text-lg font-bold text-white" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                  {card.label}
-                </h3>
-                <p className="text-xs text-zinc-500">{card.subtitle}</p>
+    <>
+      <div className="relative max-w-[1280px] mx-auto px-4 md:px-12 hidden md:block">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => setCarouselIndex(Math.max(0, carouselIndex - 1))}
+            aria-label="Previous visual example"
+            disabled={carouselIndex === 0}
+            className="shrink-0 w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <ChevronLeft className="h-4 w-4 text-zinc-400" />
+          </button>
+          <div className="flex gap-6 overflow-hidden flex-1">
+            {USE_CASE_CARDS.map((card, i) => (
+              <div
+                key={card.label}
+                className="min-w-[300px] flex-1 aspect-[4/5] rounded-lg relative overflow-hidden group cursor-pointer border border-white/10 bg-[#101014]"
+                style={{
+                  transform: `perspective(800px) rotateY(${i === 1 ? 0 : i === 0 ? 3 : -3}deg)`,
+                }}
+              >
+                <img
+                  src={card.image}
+                  alt={card.alt}
+                  className="absolute inset-0 h-full w-full object-cover opacity-90 transition duration-700 group-hover:scale-[1.04] group-hover:opacity-100"
+                  loading="lazy"
+                  decoding="async"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/45 to-black/5" />
+                <div className="absolute left-4 top-4 rounded-full border border-white/15 bg-black/45 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-200 backdrop-blur">
+                  {card.style}
+                </div>
+                <div className="absolute bottom-0 left-0 right-0 p-6 space-y-2">
+                  <h3 className="text-lg font-bold text-white" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                    {card.label}
+                  </h3>
+                  <p className="text-xs leading-relaxed text-zinc-300">{card.subtitle}</p>
+                </div>
+                <div className="absolute inset-0 bg-white/0 group-hover:bg-white/[0.03] transition-colors duration-500" />
               </div>
-              <div className="absolute inset-0 bg-white/0 group-hover:bg-white/[0.03] transition-colors duration-500" />
+            ))}
+          </div>
+          <button
+            onClick={() => setCarouselIndex(Math.min(USE_CASE_CARDS.length - 1, carouselIndex + 1))}
+            aria-label="Next visual example"
+            disabled={carouselIndex === USE_CASE_CARDS.length - 1}
+            className="shrink-0 w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <ChevronRight className="h-4 w-4 text-zinc-400" />
+          </button>
+        </div>
+        {/* Try this pill */}
+        <div className="flex justify-center mt-6">
+          <button className="px-6 py-2 rounded-full bg-white/5 border border-white/10 text-sm font-semibold text-zinc-400 hover:text-white hover:bg-white/10 transition-colors">
+            Try this →
+          </button>
+        </div>
+      </div>
+
+      <div className="md:hidden px-4 pb-36">
+        <div className="grid gap-3">
+          {USE_CASE_CARDS.map((card) => (
+            <div key={card.label} className="relative aspect-[16/9] overflow-hidden rounded-lg border border-white/10 bg-[#101014]">
+              <img
+                src={card.image}
+                alt={card.alt}
+                className="absolute inset-0 h-full w-full object-cover opacity-85"
+                loading="lazy"
+                decoding="async"
+              />
+              <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/35 to-transparent" />
+              <div className="absolute left-3 top-3 rounded-full border border-white/15 bg-black/45 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-zinc-200 backdrop-blur">
+                {card.style}
+              </div>
+              <div className="absolute bottom-3 left-3 right-8">
+                <h3 className="text-sm font-bold text-white">{card.label}</h3>
+                <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-zinc-300">{card.subtitle}</p>
+              </div>
             </div>
           ))}
         </div>
-        <button
-          onClick={() => setCarouselIndex(Math.min(USE_CASE_CARDS.length - 1, carouselIndex + 1))}
-          className="shrink-0 w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-colors"
-        >
-          <ChevronRight className="h-4 w-4 text-zinc-400" />
-        </button>
       </div>
-      {/* Try this pill */}
-      <div className="flex justify-center mt-6">
-        <button className="px-6 py-2 rounded-full bg-white/5 border border-white/10 text-sm font-semibold text-zinc-400 hover:text-white hover:bg-white/10 transition-colors">
-          Try this →
-        </button>
-      </div>
-    </div>
+    </>
   );
 
   /* ---- Community / History Gallery ---- */

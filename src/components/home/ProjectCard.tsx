@@ -32,6 +32,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { musicPolishAssets } from '@/lib/musicPolishAssets';
 
 export interface Project {
   id: string;
@@ -61,6 +62,7 @@ export const ProjectCard = ({ project, onOpen, onDelete, onRename }: ProjectCard
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const formattedDate = formatDistanceToNow(new Date(project.updated_at), { addSuffix: true });
+  const fallbackPreview = musicPolishAssets.landing.platformDeliveryWall;
 
   useEffect(() => {
     const fetchProjectMedia = async () => {
@@ -130,10 +132,24 @@ export const ProjectCard = ({ project, onOpen, onDelete, onRename }: ProjectCard
           {/* Thumbnail */}
           <div className="w-[72px] h-[72px] rounded-lg overflow-hidden bg-surface-2 dark:bg-zinc-800 flex-shrink-0">
             {mediaUrl ? (
-              <img src={mediaUrl} alt={project.title} className="w-full h-full object-cover" />
+              <img
+                src={mediaUrl}
+                alt={project.title}
+                className="w-full h-full object-cover"
+                loading="lazy"
+                decoding="async"
+              />
             ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <Play className="w-6 h-6 text-[hsl(var(--primary))]" />
+              <div className="relative w-full h-full flex items-center justify-center">
+                <img
+                  src={fallbackPreview.src}
+                  alt=""
+                  className="absolute inset-0 h-full w-full object-cover opacity-70"
+                  loading="lazy"
+                  decoding="async"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
+                <Play className="relative w-6 h-6 text-[#f97316]" />
               </div>
             )}
           </div>
@@ -215,16 +231,21 @@ export const ProjectCard = ({ project, onOpen, onDelete, onRename }: ProjectCard
                   src={mediaUrl}
                   alt={project.title}
                   className="w-full h-full object-cover"
+                  loading="lazy"
+                  decoding="async"
                 />
               )
             ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <div
-                  className={cn(
-                    'w-16 h-16 rounded-2xl flex items-center justify-center',
-                    'bg-gradient-to-br from-[rgba(249,115,22,0.2)] to-[rgba(249,115,22,0.05)]'
-                  )}
-                >
+              <div className="relative w-full h-full flex items-center justify-center">
+                <img
+                  src={fallbackPreview.src}
+                  alt={fallbackPreview.alt}
+                  className="absolute inset-0 h-full w-full object-cover opacity-70"
+                  loading="lazy"
+                  decoding="async"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/35 to-transparent" />
+                <div className="relative w-16 h-16 rounded-2xl flex items-center justify-center border border-[#f97316]/25 bg-[#f97316]/15 backdrop-blur-sm">
                   <Play className="w-8 h-8 text-[#f97316]" />
                 </div>
               </div>

@@ -35,6 +35,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { useCharacterMention } from '@/hooks/useCharacterMention';
 import { sortBlueprintsForReference } from '@/lib/characterBlueprintReference';
+import { musicPolishAssets } from '@/lib/musicPolishAssets';
 import { normalizeReferenceTags } from '@/lib/referenceRegistry';
 import { appRoutes } from '@/lib/routes';
 import { toSlug, useCharacterCreationStore } from '@/lib/stores/character-creation-store';
@@ -73,6 +74,12 @@ const KIND_META: Record<StoreKind, { label: string; icon: LucideIcon; seed: stri
     accent: 'text-amber-300 border-amber-300/30 bg-amber-300/10',
   },
 };
+
+const BLUEPRINT_PRESETS = [
+  { kind: 'character', asset: musicPolishAssets.blueprints.vocalist },
+  { kind: 'location', asset: musicPolishAssets.blueprints.soundstage },
+  { kind: 'object', asset: musicPolishAssets.blueprints.microphone },
+] as const;
 
 function getAssetPreviewUrl(asset: ProjectAsset): string | null {
   if (asset.asset_type === 'image') {
@@ -139,7 +146,7 @@ function getLoadDiagnostic(error: string | null) {
 
 function BlueprintThumb({ blueprint }: { blueprint: CharacterBlueprint }) {
   return (
-    <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-white/[0.06] bg-zinc-950">
+    <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-white/[0.06] bg-zinc-950">
       {blueprint.imageUrl ? (
         <img src={blueprint.imageUrl} alt={blueprint.name} className="h-full w-full object-cover" loading="lazy" />
       ) : (
@@ -417,7 +424,7 @@ export function AuraAssetStore({ projects = [] }: AuraAssetStoreProps) {
           </div>
           <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">Blueprint Reference Library</h2>
           <p className="mt-1 max-w-2xl text-sm text-zinc-500">
-            Curate reusable anchors for Kanvas prompts without starting a generation job.
+            Curate artist, set, and prop anchors for music-video prompts without starting a generation job.
           </p>
         </div>
         <Button
@@ -432,7 +439,7 @@ export function AuraAssetStore({ projects = [] }: AuraAssetStoreProps) {
       </div>
 
       <div className="grid gap-5 2xl:grid-cols-[minmax(0,1.55fr)_440px]">
-        <section className="overflow-hidden rounded-3xl border border-white/10 bg-[#0c0c0f]/90 shadow-[0_22px_80px_rgba(0,0,0,0.28)]">
+        <section className="overflow-hidden rounded-lg border border-white/10 bg-[#0c0c0f]/90 shadow-[0_22px_80px_rgba(0,0,0,0.28)]">
           <div className="border-b border-white/[0.06] p-4">
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_130px_150px_170px]">
               <div className="relative">
@@ -524,24 +531,43 @@ export function AuraAssetStore({ projects = [] }: AuraAssetStoreProps) {
 
           <div className="p-4">
             {loadingAssets ? (
-              <div className="flex min-h-[360px] items-center justify-center rounded-3xl border border-white/[0.06] bg-black/20">
+              <div className="flex min-h-[360px] items-center justify-center rounded-lg border border-white/[0.06] bg-black/20">
                 <Loader2 className="h-6 w-6 animate-spin text-orange-300" />
               </div>
             ) : diagnostic ? (
-              <div className="flex min-h-[360px] flex-col items-center justify-center rounded-3xl border border-white/[0.08] bg-black/20 p-6 text-center">
+              <div className="flex min-h-[360px] flex-col items-center justify-center rounded-lg border border-white/[0.08] bg-black/20 p-6 text-center">
                 <AlertCircle className="mb-3 h-9 w-9 text-orange-300" />
                 <p className="text-sm font-semibold text-white">{diagnostic.title}</p>
                 <p className="mt-1 max-w-md text-xs leading-relaxed text-zinc-500">{diagnostic.body}</p>
               </div>
             ) : filteredAssets.length === 0 ? (
-              <div className="flex min-h-[360px] flex-col items-center justify-center rounded-3xl border border-dashed border-white/[0.09] bg-black/20 p-6 text-center">
+              <div className="flex min-h-[360px] flex-col items-center justify-center rounded-lg border border-dashed border-white/[0.09] bg-black/20 p-6 text-center">
+                <div className="mb-5 grid w-full max-w-2xl grid-cols-1 gap-3 sm:grid-cols-3">
+                  {BLUEPRINT_PRESETS.map(({ kind: presetKind, asset }) => (
+                    <div key={asset.title} className="overflow-hidden rounded-lg border border-white/[0.06] bg-[#111114] text-left">
+                      <div className="aspect-[4/3] bg-black">
+                        <img
+                          src={asset.src}
+                          alt={asset.alt}
+                          className="h-full w-full object-cover opacity-85"
+                          loading="lazy"
+                          decoding="async"
+                        />
+                      </div>
+                      <div className="p-3">
+                        <p className="text-xs font-semibold text-white">{asset.title}</p>
+                        <p className="mt-0.5 text-[10px] uppercase tracking-[0.16em] text-orange-200/70">{presetKind}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
                 <ImageIcon className="mb-3 h-10 w-10 text-zinc-600" />
                 <p className="text-sm font-semibold text-white">
                   {usableAssets.length === 0 ? 'No usable references yet.' : 'No matching references.'}
                 </p>
                 <p className="mt-1 max-w-sm text-xs text-zinc-500">
                   {usableAssets.length === 0
-                    ? 'Images and videos with preview frames will appear here after upload.'
+                    ? 'Upload or generate artist, location, and object references to turn them into reusable music-video anchors.'
                     : 'Adjust filters or search to broaden the reference set.'}
                 </p>
               </div>
@@ -634,7 +660,7 @@ export function AuraAssetStore({ projects = [] }: AuraAssetStoreProps) {
         </section>
 
         <aside className="space-y-5">
-          <section className="rounded-3xl border border-white/10 bg-[#0c0c0f]/90 p-4 shadow-[0_22px_80px_rgba(0,0,0,0.25)]">
+          <section className="rounded-lg border border-white/10 bg-[#0c0c0f]/90 p-4 shadow-[0_22px_80px_rgba(0,0,0,0.25)]">
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500">Create Blueprint</p>
@@ -731,7 +757,7 @@ export function AuraAssetStore({ projects = [] }: AuraAssetStoreProps) {
             </Button>
           </section>
 
-          <section className="rounded-3xl border border-white/10 bg-[#0c0c0f]/90 p-4 shadow-[0_22px_80px_rgba(0,0,0,0.25)]">
+          <section className="rounded-lg border border-white/10 bg-[#0c0c0f]/90 p-4 shadow-[0_22px_80px_rgba(0,0,0,0.25)]">
             <div className="mb-3 flex items-center justify-between">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500">Saved Blueprints</p>
