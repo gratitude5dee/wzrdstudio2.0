@@ -165,21 +165,23 @@ export function ProjectSetupVoiceBridge() {
         scope: 'project-setup',
         handler: async (input, context) => {
           if (activeTab === 'concept') {
-            const concept = projectData.concept?.trim();
+            // Read from ref to get the latest value (may have been set in the same tick)
+            const latestData = projectDataRef.current;
+            const concept = latestData.concept?.trim();
             if (!concept || concept.length < 12) {
               return invalid('Please give me at least a short logline before I move to storyline.', {
                 activeTab,
               });
             }
 
-            if (!context.confirmed && projectData.conceptOption === 'ai') {
+            if (!context.confirmed && latestData.conceptOption === 'ai') {
               return needsConfirmation('project_setup_next', input, 'generation');
             }
 
             const savedProjectId = await saveProjectData();
             if (!savedProjectId) return invalid('I could not save the project yet.');
 
-            if (projectData.conceptOption === 'ai') {
+            if (latestData.conceptOption === 'ai') {
               await generateStoryline(savedProjectId);
             }
             setActiveTab('storyline');
