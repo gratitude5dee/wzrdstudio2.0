@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { supabase } from '@/integrations/supabase/client';
@@ -71,6 +71,11 @@ export function ProjectSetupVoiceBridge() {
   } = useProjectContext();
   const { selectedTargets, selectTarget } = useVoiceSelection();
 
+  // Mutable ref so voice handlers always read the latest projectData,
+  // even when multiple tool calls arrive in the same tick before React re-renders.
+  const projectDataRef = useRef(projectData);
+  projectDataRef.current = projectData;
+
   const actions = useMemo<VoiceActionRegistration[]>(
     () => [
       {
@@ -115,6 +120,8 @@ export function ProjectSetupVoiceBridge() {
           const { tab, save, generateStoryline: shouldGenerateStoryline, finalize, ...fields } = payload;
           if (Object.keys(fields).length > 0) {
             updateProjectData(fields);
+            // Eagerly update ref so subsequent tool calls in the same tick see the new values
+            projectDataRef.current = { ...projectDataRef.current, ...fields };
           }
           if (isProjectSetupTab(tab)) {
             setActiveTab(tab);
@@ -158,21 +165,23 @@ export function ProjectSetupVoiceBridge() {
         scope: 'project-setup',
         handler: async (input, context) => {
           if (activeTab === 'concept') {
-            const concept = projectData.concept?.trim();
+            // Read from ref to get the latest value (may have been set in the same tick)
+            const latestData = projectDataRef.current;
+            const concept = latestData.concept?.trim();
             if (!concept || concept.length < 12) {
               return invalid('Please give me at least a short logline before I move to storyline.', {
                 activeTab,
               });
             }
 
-            if (!context.confirmed && projectData.conceptOption === 'ai') {
+            if (!context.confirmed && latestData.conceptOption === 'ai') {
               return needsConfirmation('project_setup_next', input, 'generation');
             }
 
             const savedProjectId = await saveProjectData();
             if (!savedProjectId) return invalid('I could not save the project yet.');
 
-            if (projectData.conceptOption === 'ai') {
+            if (latestData.conceptOption === 'ai') {
               await generateStoryline(savedProjectId);
             }
             setActiveTab('storyline');
