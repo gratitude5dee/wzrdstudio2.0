@@ -22,7 +22,7 @@ interface ProjectContextProps {
   isGenerating: boolean; 
   setIsGenerating: (generating: boolean) => void;
   isFinalizing: boolean; // New state for finalization process
-  generateStoryline: (projectId: string) => Promise<boolean>;
+  generateStoryline: (projectId: string, overrides?: Partial<ProjectData>) => Promise<boolean>;
   handleCreateProject: () => Promise<void>;
   finalizeProjectSetup: () => Promise<boolean>; // New method to invoke the orchestrator
   generationCompletedSignal: number;
@@ -223,7 +223,7 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
   };
 
   // Non-blocking storyline generation with streaming
-  const generateStoryline = async (currentProjectId: string): Promise<boolean> => {
+  const generateStoryline = async (currentProjectId: string, overrides?: Partial<ProjectData>): Promise<boolean> => {
     if (!user) {
       toast.error("Please log in to generate storylines");
       return false;
@@ -238,8 +238,9 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
       setIsGenerating(true);
       console.log(`Invoking generate-storylines for project: ${currentProjectId}`);
       
-      // Build structured concept payload for the edge function
-      const conceptPayload = buildConceptPayload(projectData);
+      // Build structured concept payload, merging overrides so voice-bridge eager state is used
+      const merged = overrides ? { ...projectData, ...overrides } : projectData;
+      const conceptPayload = buildConceptPayload(merged);
 
       // Non-blocking call - edge function returns immediately
       const { data, error } = await supabase.functions.invoke('generate-storylines', {
