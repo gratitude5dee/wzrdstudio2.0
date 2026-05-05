@@ -34,6 +34,7 @@ function isBenignError(event: RealtimeEvent): boolean {
   const err = event.error as Record<string, unknown> | undefined;
   if (err && typeof err === 'object') {
     if (err.code === 'input_audio_buffer_commit_empty') return true;
+    if (err.code === 'response_cancel_not_active') return true;
   }
   return false;
 }
