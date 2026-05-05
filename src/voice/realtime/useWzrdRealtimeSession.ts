@@ -84,6 +84,7 @@ function getFunctionCallsFromResponseDone(event: RealtimeEvent): RealtimeFunctio
 
 export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptions) {
   const transportRef = useRef<WebRTCTransport | null>(null);
+  const connectingRef = useRef<Promise<WebRTCTransport | undefined> | null>(null);
   const [status, setStatus] = useState<VoiceSessionStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const processedToolCallsRef = useRef<Set<string>>(new Set());
