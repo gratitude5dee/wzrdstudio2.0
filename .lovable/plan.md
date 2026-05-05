@@ -1,36 +1,30 @@
 
-# Fix Realtime Push-To-Talk Cancellation Error
+# Fix Voice Concept Display + Character Image Generation (via fal.ai)
 
-## Problem
-`pushToTalkStart` always calls `transport.interrupt()` which sends `response.cancel`, even when no assistant response is active. This produces repeated `response_cancel_not_active` errors. Additionally, `connect()` resolves before the data channel is open, causing dropped events.
+## Issue 1: Voice concept not appearing in the textarea
 
-## Changes
+The console shows `Unknown parameter: 'response.output_modalities'` from `webrtcTransport.ts:sendOutOfBandAudio()`. This error disrupts the Realtime session and may prevent tool calls from completing, so the concept never reaches the textarea.
 
-### 1. `src/voice/realtime/webrtcTransport.ts` — Wait for data channel open
+**Fix:** Remove `output_modalities` from the `response.create` payload in `sendOutOfBandAudio` (line 95 of `webrtcTransport.ts`). The session-level `modalities: ['text', 'audio']` already handles this.
 
-- Add a `_dcOpenPromise` / `_dcOpenResolve` pair inside `connect()`.
-- Resolve it from `dc.onopen`.
-- `await` the promise at the end of `connect()` so callers know the channel is ready.
-- Add a `waitUntilOpen()` public method for external use.
+## Issue 2: Character image generation failing — switch from GMI to fal.ai
 
-### 2. `src/voice/realtime/useWzrdRealtimeSession.ts` — Track response state and guard cancellation
+The edge function `generate-character-image` currently uses GMI Cloud (`executeGmiQueueModel`) which fails with `model nanobanana-2 does not exist`. The user wants to use **fal.ai** with `fal-ai/nano-banana-2` instead.
 
-- Add `responseActiveRef = useRef(false)` and `outputAudioActiveRef = useRef(false)`.
-- Set `responseActiveRef.current = true` on `response.created`.
-- Set it `false` on `response.done`, plus reset in the error handler for terminal errors.
-- Set `outputAudioActiveRef.current = true` on `response.audio.delta`.
-- Set it `false` on `response.audio.done` and `response.done`.
-- In `pushToTalkStart`:
-  - Always send `input_audio_buffer.clear`.
-  - Only call `transport.interrupt()` (which sends `response.cancel`) when `responseActiveRef.current === true`.
-  - Only send `output_audio_buffer.clear` when `outputAudioActiveRef.current === true`.
+**Fix:** Rewrite `generate-character-image/index.ts` to use `executeFalModel` and `pollFalStatus` from `_shared/falai-client.ts` instead of `executeGmiQueueModel`/`pollGmiQueueStatus`. Remove the `image-fallback.ts` resolver (not needed when we're hardcoding to fal nano-banana-2). Remove the GMI imports entirely.
 
-### 3. `src/voice/realtime/useWzrdRealtimeSession.ts` — Suppress benign race error
+### Changes to `generate-character-image/index.ts`:
+- Replace GMI imports with fal imports: `executeFalModel`, `pollFalStatus` from `falai-client.ts`
+- Keep the visual prompt generation step via GMI (`executeGmiChatCompletion` for text LLM is fine)
+- Replace the image generation step: use `executeFalModel('fal-ai/nano-banana-2', { prompt, image_size: { width: 1024, height: 1024 } }, 'queue')` 
+- Poll with `pollFalStatus` using the returned `requestId` and `statusUrl`
+- Extract the image URL from the fal response (`data.result?.images?.[0]?.url` or similar)
+- Remove the `resolveImageGenerationPlan` import and usage
 
-- In `isBenignError`, add `response_cancel_not_active` to the benign list so any remaining race doesn't flash a red error state.
+## Files to change
 
-## Files touched
-- `src/voice/realtime/webrtcTransport.ts`
-- `src/voice/realtime/useWzrdRealtimeSession.ts`
+1. **`src/voice/realtime/webrtcTransport.ts`** — Remove `output_modalities: ['audio']` from `sendOutOfBandAudio`.
 
-No database changes. No new dependencies.
+2. **`supabase/functions/generate-character-image/index.ts`** — Switch image generation from GMI Cloud to fal.ai `fal-ai/nano-banana-2`.
+
+3. Redeploy `generate-character-image` edge function.

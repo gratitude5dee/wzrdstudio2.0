@@ -92,7 +92,6 @@ export class WebRTCTransport {
       response: {
         conversation: 'none',
         metadata,
-        output_modalities: ['audio'],
         instructions,
       },
     });

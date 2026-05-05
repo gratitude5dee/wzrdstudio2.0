@@ -2,8 +2,8 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders, errorResponse, successResponse, handleCors } from '../_shared/response.ts';
 import { getCharacterVisualSystemPrompt, getCharacterVisualUserPrompt } from '../_shared/prompts.ts';
-import { executeGmiChatCompletion, executeGmiQueueModel, pollGmiQueueStatus } from '../_shared/gmi-client.ts';
-import { resolveImageGenerationPlan } from '../_shared/image-fallback.ts';
+import { executeGmiChatCompletion } from '../_shared/gmi-client.ts';
+import { submitToFalQueue } from '../_shared/falai-client.ts';
 
 interface RequestBody {
   character_id: string;
@@ -36,7 +36,7 @@ serve(async (req) => {
   );
 
   try {
-    const { character_id, project_id, style_reference_url, character_reference_url }: RequestBody = await req.json();
+    const { character_id, style_reference_url }: RequestBody = await req.json();
     if (!character_id) return errorResponse('character_id is required', 400);
 
     console.log(`Generating image for character ID: ${character_id}`);
@@ -67,7 +67,7 @@ serve(async (req) => {
       ? charData.project[0]
       : charData.project;
 
-    // 2. Generate Visual Prompt using GMI Cloud (Gemini 3.1 Flash-Lite)
+    // 2. Generate Visual Prompt using GMI Cloud LLM
     console.log(`Generating visual prompt for character: ${charData.name}`);
 
     const visualPromptSystem = getCharacterVisualSystemPrompt();
@@ -98,66 +98,29 @@ serve(async (req) => {
 
     console.log(`Generated visual prompt: ${visualPrompt}`);
 
-    // 3. Resolve image generation plan deterministically
-    const fallbackDecision = resolveImageGenerationPlan({
-      styleRefUrl: style_reference_url ?? null,
-      characterRefUrl: character_reference_url ?? null,
-      textPrompt: visualPrompt,
-      refModelId: 'seedream-5.0-lite',
-      defaultModelId: 'seedream-5.0-lite',
-      textToImageLadder: ['nanobanana-2', 'seedream-5.0-lite', 'seedream-4-0-250828'],
-    });
-    console.log(`[generate-character-image] Plan:`, fallbackDecision);
+    // 3. Generate Image using fal.ai nano-banana-2
+    console.log(`Calling fal.ai nano-banana-2 for image generation...`);
 
-    // 4. Generate Image using GMI Cloud (resolved model from plan)
-    const resolvedGmiModel = fallbackDecision.resolved_model;
-    console.log(`Calling GMI Cloud (${resolvedGmiModel}) for image generation...`);
+    const falResult = await submitToFalQueue<{ images: Array<{ url: string }>; description?: string }>(
+      'fal-ai/nano-banana-2',
+      {
+        prompt: visualPrompt,
+        resolution: '1K',
+        aspect_ratio: '1:1',
+        output_format: 'jpeg',
+        num_images: 1,
+      },
+      { pollInterval: 3000, maxAttempts: 60 }
+    );
 
-    const queueResult = await executeGmiQueueModel(resolvedGmiModel, {
-      prompt: visualPrompt,
-      size: "2048x2048",
-      output_format: "jpeg",
-      max_images: 1,
-      watermark: false,
-    });
-
-    if (!queueResult.success || !queueResult.requestId) {
-      console.error('GMI queue submission failed:', queueResult.error);
-      return errorResponse('Failed to submit image generation', 500);
+    if (!falResult.success || !falResult.data) {
+      console.error('fal.ai image generation failed:', falResult.error);
+      throw new Error(falResult.error || 'fal.ai image generation failed');
     }
 
-    console.log(`GMI request submitted: ${queueResult.requestId}`);
-
-    // Poll for completion
-    const MAX_POLLS = 60;
-    const POLL_INTERVAL = 3000;
-    let imageUrl: string | undefined;
-
-    for (let i = 0; i < MAX_POLLS; i++) {
-      await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL));
-      const status = await pollGmiQueueStatus(queueResult.requestId);
-
-      if (!status.success || !status.data) {
-        console.warn(`Poll error: ${status.error}`);
-        continue;
-      }
-
-      const s = status.data.status;
-      console.log(`Poll ${i + 1}: ${s}`);
-
-      if (s === 'success') {
-        imageUrl = status.data.outcome?.media_urls?.[0]?.url
-          || status.data.outcome?.thumbnail_image_url;
-        break;
-      }
-
-      if (s === 'failed' || s === 'cancelled') {
-        throw new Error(`GMI image generation ${s}`);
-      }
-    }
-
+    const imageUrl = falResult.data.images?.[0]?.url;
     if (!imageUrl) {
-      throw new Error('GMI image generation timed out');
+      throw new Error('No image URL in fal.ai response');
     }
 
     console.log(`Generated Image URL: ${imageUrl}`);
@@ -168,7 +131,6 @@ serve(async (req) => {
       character_id,
       image_url: imageUrl,
       visual_prompt: visualPrompt,
-      fallback_decision: fallbackDecision,
     };
 
     // Update character in background
