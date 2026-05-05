@@ -86,8 +86,8 @@ export function sortReferenceBlueprints<T extends {
 }>(blueprints: T[], options: ReferenceRankingOptions = {}): T[] {
   return [...blueprints].sort((left, right) => {
     const projectDelta =
-      blueprintProjectRank(left as CharacterBlueprint, options) -
-      blueprintProjectRank(right as CharacterBlueprint, options);
+      blueprintProjectRank(left as unknown as CharacterBlueprint, options) -
+      blueprintProjectRank(right as unknown as CharacterBlueprint, options);
     if (projectDelta !== 0) return projectDelta;
 
     const pinnedDelta = Number(Boolean(right.isFavorite)) - Number(Boolean(left.isFavorite));
