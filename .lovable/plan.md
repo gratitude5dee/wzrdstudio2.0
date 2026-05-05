@@ -1,31 +1,36 @@
 
-# Fix Realtime Voice Logline Save
+# Fix Realtime Push-To-Talk Cancellation Error
 
 ## Problem
-
-When the voice agent sets `concept` via `set_project_setup_fields`, the value is written to `projectDataRef.current` (eager) and `updateProjectData` (async React state). But `saveProjectData()` in `ProjectContext` reads from `projectData` (React state), which hasn't flushed yet. So the concept is lost on save.
-
-Secondary issue: the voice model may pass `logline`, `text`, or `prompt` instead of `concept`.
+`pushToTalkStart` always calls `transport.interrupt()` which sends `response.cancel`, even when no assistant response is active. This produces repeated `response_cancel_not_active` errors. Additionally, `connect()` resolves before the data channel is open, causing dropped events.
 
 ## Changes
 
-### 1. `src/components/project-setup/ProjectContext.tsx` — Accept overrides in `saveProjectData`
+### 1. `src/voice/realtime/webrtcTransport.ts` — Wait for data channel open
 
-- Change signature: `saveProjectData(overrides?: Partial<ProjectData>) => Promise<string | null>`
-- Update the interface and implementation to merge overrides: `const merged = { ...projectData, ...overrides }`
-- Use `merged` instead of `projectData` when building `projectPayload`
-- Same change for `generateStoryline`: accept optional `conceptOverride?: string` so the edge function receives the correct concept text
+- Add a `_dcOpenPromise` / `_dcOpenResolve` pair inside `connect()`.
+- Resolve it from `dc.onopen`.
+- `await` the promise at the end of `connect()` so callers know the channel is ready.
+- Add a `waitUntilOpen()` public method for external use.
 
-### 2. `src/components/project-setup/ProjectSetupVoiceBridge.tsx` — Normalize input and pass overrides
+### 2. `src/voice/realtime/useWzrdRealtimeSession.ts` — Track response state and guard cancellation
 
-- Add a small `normalizeConceptInput` helper that maps `logline`, `text`, `description`, `prompt` → `concept` (keeps all other known `ProjectData` keys)
-- In `set_project_setup_fields` handler: normalize input before calling `updateProjectData` and updating `projectDataRef`
-- Pass the normalized fields as overrides to `saveProjectData(fields)` and `generateStoryline(savedProjectId)` so they don't depend on React state
-- In `project_setup_next` handler (concept tab): pass `projectDataRef.current` as overrides to `saveProjectData({ ...projectDataRef.current })` so the eagerly-updated concept is saved
-- Accept inline `concept`/`logline` in `project_setup_next` input, merge into ref before save
+- Add `responseActiveRef = useRef(false)` and `outputAudioActiveRef = useRef(false)`.
+- Set `responseActiveRef.current = true` on `response.created`.
+- Set it `false` on `response.done`, plus reset in the error handler for terminal errors.
+- Set `outputAudioActiveRef.current = true` on `response.audio.delta`.
+- Set it `false` on `response.audio.done` and `response.done`.
+- In `pushToTalkStart`:
+  - Always send `input_audio_buffer.clear`.
+  - Only call `transport.interrupt()` (which sends `response.cancel`) when `responseActiveRef.current === true`.
+  - Only send `output_audio_buffer.clear` when `outputAudioActiveRef.current === true`.
 
-### 3. `src/voice/agent.ts` — Minor prompt reinforcement
+### 3. `src/voice/realtime/useWzrdRealtimeSession.ts` — Suppress benign race error
 
-- In the Concept Page instructions, add: "Always use the key `concept` (not `logline` or `text`) when calling set_project_setup_fields."
+- In `isBenignError`, add `response_cancel_not_active` to the benign list so any remaining race doesn't flash a red error state.
 
-No database or edge function changes needed.
+## Files touched
+- `src/voice/realtime/webrtcTransport.ts`
+- `src/voice/realtime/useWzrdRealtimeSession.ts`
+
+No database changes. No new dependencies.
