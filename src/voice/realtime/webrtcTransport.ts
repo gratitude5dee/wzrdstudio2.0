@@ -202,6 +202,7 @@ export class WebRTCTransport {
       await this._dcOpenPromise;
       this._dcOpenPromise = null;
     }
+  }
 
   /** Close the connection and release all resources. */
   close(): void {
