@@ -283,7 +283,7 @@ const StoryboardPage = () => {
     try {
       const { error } = await supabase
         .from('scenes')
-        .update(updates)
+        .update(updates as Record<string, unknown>)
         .eq('id', sceneId);
       if (error) throw error;
 
