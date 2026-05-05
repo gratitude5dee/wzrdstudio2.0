@@ -1,39 +1,42 @@
 
-# Voice Selection UI Integration for Storyboard Timeline
+# Proactive Voice Agent Flow
 
-## What's already done
-
-All voice bridges, action handlers, prompt, registry, transport, and GA API format are fully implemented. Glow rings work on CharacterCard and BreakdownTab scene cards. The `VoiceSelectionContext` values (`expandedShotId`, `selectedTargets`, `isSelected`) are imported in `ShotsRow` but never consumed.
-
-## What's missing
-
-The storyboard timeline doesn't visually reflect voice selection state:
-1. **ShotCard** has no `isVoiceSelected` prop or glow ring styling
-2. **ShotsRow** imports voice selection but never passes it to ShotCard or uses `expandedShotId` to auto-expand a shot
-3. Shot cards have no `data-voice-shot-id` attribute for scroll-into-view targeting
+## Problem
+The voice agent waits passively for explicit commands instead of driving the flow. On the concept page, it should take any rough idea, craft a logline, fill it in, and ask to advance — all within seconds.
 
 ## Changes
 
-### 1. ShotCard -- Add voice glow ring
+### 1. Rewrite voice instructions in `src/voice/agent.ts`
 
-File: `src/components/storyboard/shot/ShotCard.tsx`
+Replace the `# Conversation Flow` and `# Examples` sections with proactive, page-specific instructions:
 
-- Add `isVoiceSelected?: boolean` prop
-- Add `data-voice-shot-id={shot.id}` attribute to the root element
-- When `isVoiceSelected` is true, apply an orange glow ring (matching the CharacterCard pattern: `ring-2 ring-orange-500/60 shadow-[0_0_12px_rgba(249,115,22,0.3)]`)
+**Add new section: `# Pacing — Move Fast`**
+- Act immediately when the user provides enough info — fill fields, then ask one short confirmation to advance.
+- Never wait for explicit "fill the field" commands. If you have data, fill it.
+- Treat "yes", "sure", "go ahead", "next" as immediate confirmation to advance.
+- Goal: each page should take seconds, not minutes.
 
-### 2. ShotsRow -- Wire voice state to ShotCard
+**Add `# Page-Specific Flow — Be Proactive`** with subsections:
 
-File: `src/components/storyboard/ShotsRow.tsx`
+- **Concept Page**: When the user describes ANY idea, immediately craft a polished logline, call `set_project_setup_fields` with `{ concept, title }`, read it back, and ask "Want me to move to storyline?" If confirmed, call `project_setup_next`. Target: under 30 seconds.
 
-- Pass `isVoiceSelected={selectedTargets.shot?.id === shot.id}` to each ShotCard
-- Use `expandedShotId` to auto-expand the voice-selected shot (if the component has an expand/detail mechanism)
-- Use `selectTarget` to set voice selection when a shot is clicked (if not already handled by the page bridge)
+- **Storyline Page**: After generation completes, summarize key beats in 1-2 sentences and ask to advance to Settings & Cast.
 
-### 3. Scroll-into-view targeting
+- **Settings & Cast Page**: Announce characters briefly, ask if user wants edits or to move on. On "next", advance immediately.
 
-The `scrollVoiceTargetIntoView` calls in the StoryboardPage bridge already reference `[data-voice-shot-id="..."]` -- adding that data attribute to ShotCard completes the wiring.
+- **Breakdown Page**: Summarize scene count, ask "Ready to storyboard?" On confirmation, call `breakdown_start_storyboard`.
+
+- **Timeline Page**: Ask if user wants to generate all images or review individual shots. Act on response immediately.
+
+**Update examples** to show the proactive pattern:
+- User: "a story about a lonely robot chef" -> Agent immediately crafts logline, fills concept+title, reads it back, asks to advance.
+- User: "yes" -> `project_setup_next` called instantly.
+
+**Add explicit English language instruction**: "ALWAYS speak in English."
+
+### 2. No backend or action handler changes needed
+
+The GPT-4o Realtime model itself generates the logline from the user's raw idea — it's a text transformation the model does natively. The existing `set_project_setup_fields` action already accepts `concept` and `title` fields. The existing `project_setup_next` action already handles page advancement. No new edge functions or action registrations are required.
 
 ## Outcome
-
-When the voice assistant selects a shot (e.g. "select shot 3"), the corresponding ShotCard will glow orange, scroll into view, and auto-expand if applicable.
+The voice agent becomes a fast, proactive operator that drives users through each page in seconds rather than waiting for explicit step-by-step commands. The concept page flow becomes: user speaks idea -> agent fills logline -> user confirms -> agent advances to storyline.
