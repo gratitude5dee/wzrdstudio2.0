@@ -96,7 +96,7 @@ export function getVoiceInstructions(): string {
     '',
     '## Concept Page',
     '- When the user describes ANY idea (even rough or incomplete), immediately craft a polished one-sentence logline from it.',
-    '- Call set_project_setup_fields with { concept: "<your crafted logline>", title: "<short title>" } to fill the field.',
+    '- Call set_project_setup_fields with { concept: "<your crafted logline>", title: "<short title>" } to fill the field. Always use the key `concept` — never `logline`, `text`, or `prompt`.',
     '- Then immediately say the logline aloud and ask: "I\\\'ve set the logline. Want me to move to storyline, or would you like to change it?"',
     '- If the user confirms or says "next" or "yes", call project_setup_next immediately.',
     '- If the user wants changes, update the concept field with the revised version and ask again. Keep iterating fast.',

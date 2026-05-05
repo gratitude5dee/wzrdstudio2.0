@@ -13,7 +13,7 @@ interface ProjectContextProps {
   updateProjectData: (data: Partial<ProjectData>) => void;
   activeTab: ProjectSetupTab;
   setActiveTab: (tab: ProjectSetupTab) => void;
-  saveProjectData: () => Promise<string | null>;
+  saveProjectData: (overrides?: Partial<ProjectData>) => Promise<string | null>;
   projectId: string | null;
   getVisibleTabs: () => ProjectSetupTab[];
   previousOption: 'ai' | 'manual';
@@ -22,7 +22,7 @@ interface ProjectContextProps {
   isGenerating: boolean; 
   setIsGenerating: (generating: boolean) => void;
   isFinalizing: boolean; // New state for finalization process
-  generateStoryline: (projectId: string) => Promise<boolean>;
+  generateStoryline: (projectId: string, overrides?: Partial<ProjectData>) => Promise<boolean>;
   handleCreateProject: () => Promise<void>;
   finalizeProjectSetup: () => Promise<boolean>; // New method to invoke the orchestrator
   generationCompletedSignal: number;
@@ -148,45 +148,48 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
   };
 
   // Save project data to Supabase
-  const saveProjectData = async (): Promise<string | null> => {
+  const saveProjectData = async (overrides?: Partial<ProjectData>): Promise<string | null> => {
     if (!user) {
       toast.error("Please log in to create a project");
       return null;
     }
 
+    // Merge overrides so voice-bridge can pass eager state that hasn't flushed to React yet
+    const merged = overrides ? { ...projectData, ...overrides } : projectData;
+
     let currentProjectId = projectId;
     try {
-      console.log('Saving project data:', projectData);
+      console.log('Saving project data:', merged);
       
       const projectPayload = {
         user_id: user.id,
-        title: projectData.title || 'Untitled Project',
-        concept_text: projectData.concept,
-        concept_option: projectData.conceptOption,
-        format: projectData.format,
-        custom_format_description: projectData.customFormat,
-        genre: projectData.genre,
-        tone: projectData.tone,
-        add_voiceover: projectData.addVoiceover,
-        special_requests: projectData.specialRequests,
-        product_name: projectData.product,
-        target_audience: projectData.targetAudience,
-        main_message: projectData.mainMessage,
-        call_to_action: projectData.callToAction,
-        ad_brief_data: projectData.adBrief,
-        music_video_data: projectData.musicVideoData,
-        infotainment_data: projectData.infotainmentData,
-        short_film_data: projectData.shortFilmData,
-        voiceover_id: projectData.voiceoverId,
-        voiceover_name: projectData.voiceoverName,
-        voiceover_preview_url: projectData.voiceoverPreviewUrl,
-        style_reference_asset_id: projectData.styleReferenceAssetId,
+        title: merged.title || 'Untitled Project',
+        concept_text: merged.concept,
+        concept_option: merged.conceptOption,
+        format: merged.format,
+        custom_format_description: merged.customFormat,
+        genre: merged.genre,
+        tone: merged.tone,
+        add_voiceover: merged.addVoiceover,
+        special_requests: merged.specialRequests,
+        product_name: merged.product,
+        target_audience: merged.targetAudience,
+        main_message: merged.mainMessage,
+        call_to_action: merged.callToAction,
+        ad_brief_data: merged.adBrief,
+        music_video_data: merged.musicVideoData,
+        infotainment_data: merged.infotainmentData,
+        short_film_data: merged.shortFilmData,
+        voiceover_id: merged.voiceoverId,
+        voiceover_name: merged.voiceoverName,
+        voiceover_preview_url: merged.voiceoverPreviewUrl,
+        style_reference_asset_id: merged.styleReferenceAssetId,
         // Add settings fields
-        aspect_ratio: projectData.aspectRatio,
-        video_style: projectData.videoStyle,
-        cinematic_inspiration: projectData.cinematicInspiration,
+        aspect_ratio: merged.aspectRatio,
+        video_style: merged.videoStyle,
+        cinematic_inspiration: merged.cinematicInspiration,
         // Custom format meta prompts (only persisted when format === 'custom')
-        custom_meta_prompts: projectData.format === 'custom' ? (projectData.customMetaPrompts ?? null) : null,
+        custom_meta_prompts: merged.format === 'custom' ? (merged.customMetaPrompts ?? null) : null,
       };
       
       console.log('Project payload:', projectPayload);
@@ -220,7 +223,7 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
   };
 
   // Non-blocking storyline generation with streaming
-  const generateStoryline = async (currentProjectId: string): Promise<boolean> => {
+  const generateStoryline = async (currentProjectId: string, overrides?: Partial<ProjectData>): Promise<boolean> => {
     if (!user) {
       toast.error("Please log in to generate storylines");
       return false;
@@ -235,8 +238,9 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
       setIsGenerating(true);
       console.log(`Invoking generate-storylines for project: ${currentProjectId}`);
       
-      // Build structured concept payload for the edge function
-      const conceptPayload = buildConceptPayload(projectData);
+      // Build structured concept payload, merging overrides so voice-bridge eager state is used
+      const merged = overrides ? { ...projectData, ...overrides } : projectData;
+      const conceptPayload = buildConceptPayload(merged);
 
       // Non-blocking call - edge function returns immediately
       const { data, error } = await supabase.functions.invoke('generate-storylines', {

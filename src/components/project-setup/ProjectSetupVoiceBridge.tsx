@@ -55,6 +55,29 @@ type SceneVoiceUpdates = Partial<{
   voiceover: string;
 }>;
 
+/** Maps voice-model aliases (logline, text, prompt, description) → canonical `concept`. */
+function normalizeConceptInput(raw: Record<string, unknown>): Partial<ProjectData> {
+  const result: Record<string, unknown> = {};
+  const CONCEPT_ALIASES = ['logline', 'text', 'description', 'prompt'];
+  const KNOWN_KEYS: (keyof ProjectData)[] = [
+    'concept', 'title', 'format', 'genre', 'tone', 'customFormat',
+    'specialRequests', 'addVoiceover', 'conceptOption', 'product',
+    'targetAudience', 'mainMessage', 'callToAction', 'aspectRatio',
+    'videoStyle', 'cinematicInspiration', 'styleReferenceUrl',
+    'adBrief', 'musicVideoData', 'infotainmentData', 'shortFilmData',
+    'voiceoverId', 'voiceoverName', 'voiceoverPreviewUrl',
+  ];
+
+  for (const [key, value] of Object.entries(raw)) {
+    if (CONCEPT_ALIASES.includes(key) && typeof value === 'string') {
+      if (!result.concept) result.concept = value;
+    } else if (KNOWN_KEYS.includes(key as keyof ProjectData)) {
+      result[key] = value;
+    }
+  }
+  return result as Partial<ProjectData>;
+}
+
 export function ProjectSetupVoiceBridge() {
   const navigate = useNavigate();
   const {
@@ -110,17 +133,19 @@ export function ProjectSetupVoiceBridge() {
         name: 'set_project_setup_fields',
         scope: 'project-setup',
         handler: async (input, context) => {
-          const payload = input as Partial<ProjectData> & {
+          const raw = input as Record<string, unknown>;
+          const { tab, save, generateStoryline: shouldGenerateStoryline, finalize, ...rawFields } = raw as Record<string, unknown> & {
             tab?: ProjectSetupTab;
             save?: boolean;
             generateStoryline?: boolean;
             finalize?: boolean;
           };
 
-          const { tab, save, generateStoryline: shouldGenerateStoryline, finalize, ...fields } = payload;
+          // Normalize voice aliases (logline, text, prompt → concept)
+          const fields = normalizeConceptInput(rawFields);
+
           if (Object.keys(fields).length > 0) {
             updateProjectData(fields);
-            // Eagerly update ref so subsequent tool calls in the same tick see the new values
             projectDataRef.current = { ...projectDataRef.current, ...fields };
           }
           if (isProjectSetupTab(tab)) {
@@ -143,10 +168,11 @@ export function ProjectSetupVoiceBridge() {
 
           let savedProjectId = projectId;
           if (save || shouldGenerateStoryline || finalize) {
-            savedProjectId = await saveProjectData();
+            // Pass the eager fields as overrides so they're saved even if React state hasn't flushed
+            savedProjectId = await saveProjectData(fields);
           }
           if (shouldGenerateStoryline && savedProjectId) {
-            await generateStoryline(savedProjectId);
+            await generateStoryline(savedProjectId, fields);
           }
           if (finalize) {
             await finalizeProjectSetup();
@@ -156,7 +182,7 @@ export function ProjectSetupVoiceBridge() {
             ok: true,
             status: 'completed',
             message: `Project setup updated on ${tab ?? activeTab}.`,
-            data: { projectId: savedProjectId, projectData },
+            data: { projectId: savedProjectId, projectData: projectDataRef.current },
           };
         },
       },
@@ -165,7 +191,14 @@ export function ProjectSetupVoiceBridge() {
         scope: 'project-setup',
         handler: async (input, context) => {
           if (activeTab === 'concept') {
-            // Read from ref to get the latest value (may have been set in the same tick)
+            // Accept inline concept/logline in the input and merge into ref
+            const rawInput = (input as Record<string, unknown>) ?? {};
+            const inlineFields = normalizeConceptInput(rawInput);
+            if (Object.keys(inlineFields).length > 0) {
+              updateProjectData(inlineFields);
+              projectDataRef.current = { ...projectDataRef.current, ...inlineFields };
+            }
+
             const latestData = projectDataRef.current;
             const concept = latestData.concept?.trim();
             if (!concept || concept.length < 12) {
@@ -178,11 +211,13 @@ export function ProjectSetupVoiceBridge() {
               return needsConfirmation('project_setup_next', input, 'generation');
             }
 
-            const savedProjectId = await saveProjectData();
+            // Pass eager ref state as overrides so the concept is saved even if React hasn't flushed
+            const overrides: Partial<ProjectData> = { ...inlineFields, concept: latestData.concept };
+            const savedProjectId = await saveProjectData(overrides);
             if (!savedProjectId) return invalid('I could not save the project yet.');
 
             if (latestData.conceptOption === 'ai') {
-              await generateStoryline(savedProjectId);
+              await generateStoryline(savedProjectId, overrides);
             }
             setActiveTab('storyline');
             return completed('Storyline is open and generation has started.', {
