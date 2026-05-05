@@ -168,7 +168,34 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
         }
       };
 
-      // Error handling
+      // --- Wire event handlers BEFORE connecting ---
+
+      // Audio playback events
+      transport.on('response.audio.delta', () => setStatus('speaking'));
+      transport.on('response.audio_transcript.delta', () => setStatus('speaking'));
+      transport.on('response.audio.done', () => {
+        // Will get response.done shortly after
+      });
+
+      // response.done is the SOLE entry point for tool execution.
+      // We removed the per-call response.function_call_arguments.done handler
+      // to prevent concurrent execution of multi-tool responses.
+      transport.on('response.done', (event) => {
+        const toolCalls = getFunctionCallsFromResponseDone(event);
+        if (toolCalls.length > 0) {
+          void (async () => {
+            for (const call of toolCalls) {
+              await executeAndEmitOutput(call);
+            }
+            // Send ONE response.create after all outputs are submitted
+            transport.send({ type: 'response.create' });
+          })();
+          return;
+        }
+        setStatus('connected');
+      });
+
+
       transport.on('error', (event) => {
         if (isBenignError(event)) {
           console.debug('[Voice] benign error suppressed:', event);
