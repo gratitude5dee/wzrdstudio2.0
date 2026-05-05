@@ -34,6 +34,7 @@ export const ShotCard: React.FC<ShotCardProps> = ({
   onConnectionPointClick,
   connectedPoints = { left: false, right: false },
   isSelected = false,
+  isVoiceSelected = false,
   isExpanded: controlledExpanded,
   onExpandedChange,
 }) => {
