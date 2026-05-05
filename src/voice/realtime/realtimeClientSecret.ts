@@ -1,7 +1,36 @@
 import { supabase } from '@/integrations/supabase/client';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/integrations/supabase/config';
 
+export interface RealtimeSessionInfo {
+  clientSecret: string;
+  model: string | null;
+}
+
 export function extractRealtimeClientSecret(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const record = payload as Record<string, unknown>;
+
+  if (typeof record.value === 'string' && record.value.startsWith('ek_')) {
+    return record.value;
+  }
+
+  const nested = record.client_secret;
+  if (nested && typeof nested === 'object') {
+    const value = (nested as Record<string, unknown>).value;
+    if (typeof value === 'string' && value.startsWith('ek_')) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+export function extractRealtimeModel(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const record = payload as Record<string, unknown>;
+  if (typeof record.model === 'string') return record.model;
+  return null;
+}
   if (!payload || typeof payload !== 'object') return null;
   const record = payload as Record<string, unknown>;
 
