@@ -55,6 +55,29 @@ type SceneVoiceUpdates = Partial<{
   voiceover: string;
 }>;
 
+/** Maps voice-model aliases (logline, text, prompt, description) → canonical `concept`. */
+function normalizeConceptInput(raw: Record<string, unknown>): Partial<ProjectData> {
+  const result: Record<string, unknown> = {};
+  const CONCEPT_ALIASES = ['logline', 'text', 'description', 'prompt'];
+  const KNOWN_KEYS: (keyof ProjectData)[] = [
+    'concept', 'title', 'format', 'genre', 'tone', 'customFormat',
+    'specialRequests', 'addVoiceover', 'conceptOption', 'product',
+    'targetAudience', 'mainMessage', 'callToAction', 'aspectRatio',
+    'videoStyle', 'cinematicInspiration', 'styleReferenceUrl',
+    'adBrief', 'musicVideoData', 'infotainmentData', 'shortFilmData',
+    'voiceoverId', 'voiceoverName', 'voiceoverPreviewUrl',
+  ];
+
+  for (const [key, value] of Object.entries(raw)) {
+    if (CONCEPT_ALIASES.includes(key) && typeof value === 'string') {
+      if (!result.concept) result.concept = value;
+    } else if (KNOWN_KEYS.includes(key as keyof ProjectData)) {
+      result[key] = value;
+    }
+  }
+  return result as Partial<ProjectData>;
+}
+
 export function ProjectSetupVoiceBridge() {
   const navigate = useNavigate();
   const {
