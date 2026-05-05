@@ -1190,6 +1190,9 @@ export default function KanvasPage() {
         elementIds: resolved.elementIds,
         referenceAssetIds: resolved.referenceAssetIds,
         referenceImageUrls: resolved.referenceImageUrls,
+        referenceAssets: resolved.referenceAssets,
+        referenceBlueprintIds: resolved.references.map((reference) => reference.blueprintId),
+        warnings: resolved.warnings,
       };
     }
 
@@ -1198,6 +1201,9 @@ export default function KanvasPage() {
       elementIds: undefined,
       referenceAssetIds: resolved.referenceAssetIds,
       referenceImageUrls: resolved.referenceImageUrls,
+      referenceAssets: resolved.referenceAssets,
+      referenceBlueprintIds: resolved.references.map((reference) => reference.blueprintId),
+      warnings: resolved.warnings,
     };
   }
 
@@ -1220,6 +1226,9 @@ export default function KanvasPage() {
         prompt: resolvedPrompt.prompt,
         settings: imageSettings,
         imageIds,
+        referenceAssets: resolvedPrompt.referenceAssets,
+        referenceBlueprintIds: resolvedPrompt.referenceBlueprintIds,
+        generationRole: "primary",
       });
     }
 
@@ -1258,6 +1267,9 @@ export default function KanvasPage() {
             ? effectiveReferenceId
             : undefined,
         elementIds: resolvedPrompt.elementIds,
+        referenceAssets: resolvedPrompt.referenceAssets,
+        referenceBlueprintIds: resolvedPrompt.referenceBlueprintIds,
+        generationRole: "primary",
       });
     }
 
@@ -1281,6 +1293,9 @@ export default function KanvasPage() {
         cinema: cinemaCameraSettings,
         elementIds: resolvedPrompt.elementIds,
         imageIds: cinemaReferenceIds,
+        referenceAssets: resolvedPrompt.referenceAssets,
+        referenceBlueprintIds: resolvedPrompt.referenceBlueprintIds,
+        generationRole: "world_reference",
       });
     }
 

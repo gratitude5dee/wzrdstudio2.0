@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { rowToBlueprint, rowToImage } from '@/services/characterBlueprintService';
+import { buildProjectCharacterBlueprintInput, rowToBlueprint, rowToImage } from '@/services/characterBlueprintService';
 import type { Database } from '@/integrations/supabase/types';
 
 type BlueprintRow = Database['public']['Tables']['character_blueprints']['Row'] & Record<string, any>;
@@ -37,15 +37,68 @@ const baseBlueprintRow: BlueprintRow = {
 };
 
 describe('characterBlueprintService row mappers', () => {
+  it('builds stable blueprint input from a project setup character', () => {
+    const input = buildProjectCharacterBlueprintInput({
+      id: 'character-1',
+      name: 'Nova Pilot',
+      project_id: 'project-1',
+      description: 'Lead pilot with a silver flight suit.',
+      image_url: 'https://cdn.example.com/nova.png',
+      anchor_asset_ids: ['asset-1'],
+      identity_profile: {
+        tags: ['Hero', 'Pilot'],
+        visual_prompt: 'amber visor, silver flight suit',
+      },
+      consistency_summary: {
+        palette: 'orange and steel',
+      },
+    });
+
+    expect(input).toMatchObject({
+      name: 'Nova Pilot',
+      slug: 'nova-pilot',
+      kind: 'character',
+      projectId: 'project-1',
+      promptFragment: expect.stringContaining('Lead pilot'),
+      tags: ['hero', 'pilot'],
+      referenceImages: [
+        expect.objectContaining({
+          assetId: 'asset-1',
+          imageUrl: 'https://cdn.example.com/nova.png',
+          generationRole: 'primary',
+        }),
+      ],
+    });
+  });
+
   it('maps location blueprints with reference metadata and reusable element fields', () => {
-    const blueprint = rowToBlueprint(baseBlueprintRow, {
+    const blueprint = rowToBlueprint({
+      ...baseBlueprintRow,
+      tags: ['Hero', 'pilot'],
+      location_metadata: {
+        place_name: 'Neon Bazaar',
+        address: '12 Market Way',
+        lat: 40.71,
+        lng: -74.0,
+        source: 'manual',
+      },
+    }, {
       referenceAssetIds: ['asset-1'],
       referenceImageUrls: ['https://cdn.example.com/reference.png'],
+      referenceAssets: [{
+        assetId: 'asset-1',
+        url: 'https://cdn.example.com/reference.png',
+        type: 'image',
+        role: 'primary',
+      }],
     });
 
     expect(blueprint.kind).toBe('location');
     expect(blueprint.referenceAssetIds).toEqual(['asset-1']);
     expect(blueprint.referenceImageUrls).toEqual(['https://cdn.example.com/reference.png']);
+    expect(blueprint.referenceAssets?.[0]?.role).toBe('primary');
+    expect(blueprint.tags).toEqual(['hero', 'pilot']);
+    expect(blueprint.locationMetadata?.placeName).toBe('Neon Bazaar');
     expect(blueprint.gmiElementId).toBe('element-1');
   });
 
@@ -66,11 +119,15 @@ describe('characterBlueprintService row mappers', () => {
       is_primary: true,
       label: 'front reference',
       sort_order: 0,
+      generation_role: 'primary',
+      generation_metadata: { model: 'fal-ai/nano-banana-2' },
       variant: null,
     } satisfies BlueprintImageRow);
 
     expect(image.assetId).toBe('asset-1');
     expect(image.isPrimary).toBe(true);
     expect(image.label).toBe('front reference');
+    expect(image.generationRole).toBe('primary');
+    expect(image.generationMetadata?.model).toBe('fal-ai/nano-banana-2');
   });
 });

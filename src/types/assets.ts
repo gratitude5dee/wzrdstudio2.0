@@ -50,6 +50,14 @@ export interface MediaMetadata {
   [key: string]: any;
 }
 
+export interface RegistryModelMetadata {
+  modelId?: string;
+  provider?: string;
+  source?: string;
+  generationRole?: string;
+  [key: string]: any;
+}
+
 export interface ProjectAsset {
   id: string;
   user_id: string;
@@ -73,6 +81,8 @@ export interface ProjectAsset {
 
   // Metadata
   media_metadata: MediaMetadata;
+  tags?: string[];
+  model_metadata?: RegistryModelMetadata;
 
   // Processing
   processing_status: ProcessingStatus;
@@ -152,6 +162,7 @@ export interface AssetFilters {
   visibility?: AssetVisibility[];
   processingStatus?: ProcessingStatus[];
   searchQuery?: string;
+  tags?: string[];
   dateFrom?: string;
   dateTo?: string;
   sortBy?: "created_at" | "updated_at" | "file_name" | "file_size_bytes";

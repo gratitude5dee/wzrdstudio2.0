@@ -13,6 +13,7 @@ import type {
   AssetUsage,
   ProjectAsset,
 } from "@/types/assets";
+import { normalizeReferenceTags } from "@/lib/referenceRegistry";
 
 type ProjectAssetRow = any;
 type ProjectAssetUpdate = any;
@@ -50,6 +51,8 @@ function normalizeAssetRow(row: ProjectAssetRow): ProjectAsset {
   const cdnUrl = asString(row.cdn_url) ?? asString(row.url) ?? asString(metadata.url);
   const thumbnailUrl = asString(row.thumbnail_url) ?? asString(metadata.thumbnail_url);
   const previewUrl = asString(row.preview_url) ?? asString(metadata.preview_url);
+  const tags = normalizeReferenceTags(row.tags ?? metadata.tags);
+  const modelMetadata = asRecord(metadata.model_metadata ?? metadata.modelMetadata);
 
   return {
     id: row.id,
@@ -66,6 +69,8 @@ function normalizeAssetRow(row: ProjectAssetRow): ProjectAsset {
     storage_path: row.storage_path ?? asString(metadata.storage_path) ?? '',
     cdn_url: cdnUrl,
     media_metadata: metadata,
+    ...(tags.length > 0 ? { tags } : {}),
+    ...(Object.keys(modelMetadata).length > 0 ? { model_metadata: modelMetadata } : {}),
     processing_status: (row.processing_status ?? metadata.processing_status ?? 'completed') as ProjectAsset["processing_status"],
     processing_error: row.processing_error ?? null,
     thumbnail_bucket: row.thumbnail_bucket ?? metadata.thumbnail_bucket ?? null,
@@ -93,8 +98,26 @@ function matchesAssetFilters(asset: ProjectAsset, filters: AssetFilters): boolea
   if (!filters.includeArchived && !filters.onlyArchived && asset.is_archived) return false;
   if (filters.searchQuery?.trim()) {
     const term = filters.searchQuery.trim().toLowerCase();
-    const haystack = `${asset.original_file_name} ${asset.file_name} ${asset.cdn_url ?? ""}`.toLowerCase();
-    if (!haystack.includes(term)) return false;
+    const normalizedTagQuery = term.startsWith("@") ? term.slice(1) : term;
+    const haystack = [
+      asset.original_file_name,
+      asset.file_name,
+      asset.cdn_url ?? "",
+      ...(asset.tags ?? []),
+      asset.media_metadata.prompt_fragment,
+      asset.media_metadata.promptFragment,
+      asset.media_metadata.blueprint_name,
+      asset.media_metadata.blueprintName,
+      asset.media_metadata.slug,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    if (!haystack.includes(term) && !asset.tags?.some((tag) => tag.includes(normalizedTagQuery))) return false;
+  }
+  if (filters.tags?.length) {
+    const wantedTags = normalizeReferenceTags(filters.tags);
+    if (!wantedTags.every((tag) => asset.tags?.includes(tag))) return false;
   }
   return true;
 }
@@ -175,6 +198,7 @@ function buildProjectAssetUpdate(updates: Partial<ProjectAsset>): ProjectAssetUp
   if (updates.storage_path !== undefined) payload.storage_path = updates.storage_path;
   if (updates.cdn_url !== undefined) payload.cdn_url = updates.cdn_url;
   if (updates.media_metadata !== undefined) payload.media_metadata = updates.media_metadata;
+  if (updates.tags !== undefined) payload.tags = normalizeReferenceTags(updates.tags);
   if (updates.processing_status !== undefined) payload.processing_status = updates.processing_status;
   if (updates.processing_error !== undefined) payload.processing_error = updates.processing_error;
   if (updates.thumbnail_bucket !== undefined) payload.thumbnail_bucket = updates.thumbnail_bucket;

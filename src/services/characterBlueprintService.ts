@@ -6,6 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type { Database, Json } from '@/integrations/supabase/types';
 import type { CharacterBlueprint, CharacterBlueprintImage, CharacterKind } from '@/types/character-creation';
 import { toSlug } from '@/lib/stores/character-creation-store';
+import { normalizeReferenceTags, type RegistryReferenceAsset } from '@/lib/referenceRegistry';
 import { unifiedGenerationService } from '@/services/unifiedGenerationService';
 import { getDefaultModelForTier, type UserTier } from '@/hooks/useUserTier';
 import { extractGmiElementId } from '@/lib/gmiCloud';
@@ -17,20 +18,64 @@ type CharacterBlueprintUpdate = Database['public']['Tables']['character_blueprin
 type CharacterBlueprintImageRow = Database['public']['Tables']['character_blueprint_images']['Row'];
 type CharacterBlueprintImageInsert = Database['public']['Tables']['character_blueprint_images']['Insert'];
 
-interface BlueprintReferenceInput {
+export interface BlueprintReferenceInput {
   assetId?: string | null;
   imageUrl: string;
   label?: string | null;
+  generationRole?: string | null;
+  generationMetadata?: Record<string, unknown>;
   isPrimary?: boolean;
+}
+
+interface ProjectSetupCharacterRow {
+  id: string;
+  name: string;
+  project_id: string;
+  description?: string | null;
+  image_url?: string | null;
+  anchor_asset_ids?: string[] | null;
+  identity_profile?: unknown;
+  consistency_summary?: unknown;
+}
+
+interface ProjectCharacterBlueprintInput {
+  name: string;
+  slug: string;
+  kind: CharacterBlueprint['kind'];
+  projectId: string;
+  traits: CharacterBlueprint['traits'];
+  faceDetails: CharacterBlueprint['faceDetails'];
+  bodyDetails: CharacterBlueprint['bodyDetails'];
+  styleDetails: CharacterBlueprint['styleDetails'];
+  promptFragment: string;
+  tags: string[];
+  imageUrl: string | null;
+  thumbnailUrl: string | null;
+  referenceImages: BlueprintReferenceInput[];
 }
 
 interface BlueprintReferenceSummary {
   referenceAssetIds: string[];
   referenceImageUrls: string[];
+  referenceAssets: RegistryReferenceAsset[];
 }
 
 function toJson(value: unknown): Json {
   return (value ?? {}) as Json;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function asString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value : null;
+}
+
+function asNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 function normalizeKind(value: string | null | undefined): CharacterKind {
@@ -47,6 +92,88 @@ function normalizeKind(value: string | null | undefined): CharacterKind {
   return 'character';
 }
 
+function normalizeLocationMetadata(value: unknown): CharacterBlueprint['locationMetadata'] {
+  const metadata = asRecord(value);
+  if (Object.keys(metadata).length === 0) {
+    return undefined;
+  }
+
+  return {
+    placeName: asString(metadata.place_name) ?? asString(metadata.placeName),
+    address: asString(metadata.address),
+    lat: asNumber(metadata.lat),
+    lng: asNumber(metadata.lng),
+    placeId: asString(metadata.place_id) ?? asString(metadata.placeId),
+    source: asString(metadata.source),
+  };
+}
+
+function inferReferenceAssetType(url: string): RegistryReferenceAsset['type'] {
+  const path = url.split('?')[0]?.toLowerCase() ?? '';
+  if (/\.(glb|gltf|obj|fbx|usdz)$/.test(path)) return 'model';
+  if (/\.(mp4|mov|webm|m4v)$/.test(path)) return 'video';
+  return 'image';
+}
+
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+function compactText(parts: Array<string | null | undefined>): string {
+  return parts
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part))
+    .join(', ');
+}
+
+export function buildProjectCharacterBlueprintInput(character: ProjectSetupCharacterRow): ProjectCharacterBlueprintInput {
+  const identityProfile = asRecord(character.identity_profile);
+  const consistencySummary = asRecord(character.consistency_summary);
+  const visualPrompt =
+    asString(identityProfile.visual_prompt) ??
+    asString(identityProfile.visualPrompt) ??
+    asString(consistencySummary.visual_prompt) ??
+    asString(consistencySummary.visualPrompt);
+  const promptFragment = compactText([
+    character.description,
+    visualPrompt,
+    asString(consistencySummary.summary),
+  ]) || character.name;
+  const tags = normalizeReferenceTags(asStringArray(identityProfile.tags));
+  const imageUrl = asString(character.image_url);
+  const anchorAssetIds = asStringArray(character.anchor_asset_ids);
+
+  return {
+    name: character.name,
+    slug: toSlug(character.name),
+    kind: 'character',
+    projectId: character.project_id,
+    traits: {},
+    faceDetails: {},
+    bodyDetails: {},
+    styleDetails: {
+      customPrompt: visualPrompt ?? undefined,
+    },
+    promptFragment,
+    tags,
+    imageUrl,
+    thumbnailUrl: imageUrl,
+    referenceImages: imageUrl
+      ? [{
+          assetId: anchorAssetIds[0] ?? null,
+          imageUrl,
+          label: 'Project setup reference',
+          generationRole: 'primary',
+          generationMetadata: {
+            source: 'project_setup',
+            characterId: character.id,
+          },
+          isPrimary: true,
+        }]
+      : [],
+  };
+}
+
 function summarizeReferences(images: CharacterBlueprintImage[]): BlueprintReferenceSummary {
   const referenceAssetIds = Array.from(
     new Set(images.map((image) => image.assetId).filter((assetId): assetId is string => Boolean(assetId))),
@@ -54,7 +181,14 @@ function summarizeReferences(images: CharacterBlueprintImage[]): BlueprintRefere
   const referenceImageUrls = Array.from(
     new Set(images.map((image) => image.imageUrl).filter(Boolean)),
   );
-  return { referenceAssetIds, referenceImageUrls };
+  const referenceAssets = images.map((image) => ({
+    assetId: image.assetId ?? undefined,
+    url: image.imageUrl,
+    type: inferReferenceAssetType(image.imageUrl),
+    role: image.generationRole ?? image.label ?? (image.isPrimary ? 'primary' : 'reference'),
+  }));
+
+  return { referenceAssetIds, referenceImageUrls, referenceAssets };
 }
 
 function attachReferenceSummary(
@@ -97,6 +231,7 @@ async function listBlueprintImagesForBlueprints(blueprintIds: string[]): Promise
 export function rowToBlueprint(row: CharacterBlueprintRow & Record<string, any>, references: BlueprintReferenceSummary = {
   referenceAssetIds: [],
   referenceImageUrls: [],
+  referenceAssets: [],
 }): CharacterBlueprint {
   return {
     id: row.id,
@@ -110,10 +245,13 @@ export function rowToBlueprint(row: CharacterBlueprintRow & Record<string, any>,
     bodyDetails: (row.body_details as CharacterBlueprint['bodyDetails']) ?? {},
     styleDetails: (row.style_details as CharacterBlueprint['styleDetails']) ?? {},
     promptFragment: row.prompt_fragment ?? '',
+    tags: normalizeReferenceTags(row.tags),
+    locationMetadata: normalizeLocationMetadata(row.location_metadata),
     imageUrl: row.image_url ?? null,
     thumbnailUrl: row.thumbnail_url ?? null,
     referenceAssetIds: references.referenceAssetIds,
     referenceImageUrls: references.referenceImageUrls,
+    referenceAssets: references.referenceAssets,
     gmiElementId: row.gmi_element_id ?? null,
     gmiElementRequestId: row.gmi_element_request_id ?? null,
     gmiElementStatus: row.gmi_element_status ?? null,
@@ -133,6 +271,8 @@ export function rowToImage(row: CharacterBlueprintImageRow & Record<string, any>
     assetId: row.asset_id ?? null,
     imageUrl: row.image_url,
     label: row.label ?? null,
+    generationRole: row.generation_role ?? row.variant ?? null,
+    generationMetadata: asRecord(row.generation_metadata ?? row.generation_params),
     isPrimary: row.is_primary ?? false,
     sortOrder: row.sort_order ?? 0,
     createdAt: row.created_at ?? new Date().toISOString(),
@@ -186,6 +326,8 @@ export async function createBlueprint(input: {
   bodyDetails: CharacterBlueprint['bodyDetails'];
   styleDetails: CharacterBlueprint['styleDetails'];
   promptFragment: string;
+  tags?: string[];
+  locationMetadata?: CharacterBlueprint['locationMetadata'];
   imageUrl?: string | null;
   thumbnailUrl?: string | null;
   projectId?: string | null;
@@ -213,9 +355,11 @@ export async function createBlueprint(input: {
       body_details: toJson(input.bodyDetails),
       style_details: toJson(input.styleDetails),
       prompt_fragment: input.promptFragment,
+      tags: normalizeReferenceTags(input.tags),
+      location_metadata: toJson(input.locationMetadata),
       image_url: input.imageUrl ?? primaryReference?.imageUrl ?? null,
       thumbnail_url: input.thumbnailUrl ?? primaryReference?.imageUrl ?? null,
-    } satisfies CharacterBlueprintInsert)
+    } as CharacterBlueprintInsert & Record<string, unknown>)
     .select('*')
     .single();
 
@@ -229,6 +373,8 @@ export async function createBlueprint(input: {
       assetId: reference.assetId,
       imageUrl: reference.imageUrl,
       label: reference.label ?? null,
+      generationRole: reference.generationRole ?? (reference.isPrimary ?? index === 0 ? 'primary' : 'reference'),
+      generationMetadata: reference.generationMetadata,
       isPrimary: reference.isPrimary ?? index === 0,
       sortOrder: index,
     });
@@ -236,6 +382,83 @@ export async function createBlueprint(input: {
   }
 
   return attachReferenceSummary(blueprint, insertedReferences);
+}
+
+async function appendMissingReferenceImages(
+  blueprint: CharacterBlueprint,
+  references: BlueprintReferenceInput[],
+): Promise<CharacterBlueprintImage[]> {
+  const existingImages = await listBlueprintImages(blueprint.id);
+  const knownUrls = new Set(existingImages.map((image) => image.imageUrl));
+  const insertedImages: CharacterBlueprintImage[] = [];
+
+  for (const [index, reference] of references.entries()) {
+    if (knownUrls.has(reference.imageUrl)) continue;
+    insertedImages.push(await addBlueprintImage({
+      blueprintId: blueprint.id,
+      assetId: reference.assetId,
+      imageUrl: reference.imageUrl,
+      label: reference.label ?? null,
+      generationRole: reference.generationRole ?? 'reference',
+      generationMetadata: reference.generationMetadata,
+      isPrimary: reference.isPrimary ?? existingImages.length + insertedImages.length === 0,
+      sortOrder: existingImages.length + index,
+    }));
+  }
+
+  return [...existingImages, ...insertedImages];
+}
+
+export async function upsertProjectCharacterBlueprints(projectId: string): Promise<CharacterBlueprint[]> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) throw new Error('Not authenticated');
+
+  const { data: characters, error: charactersError } = await supabase
+    .from('characters')
+    .select('*')
+    .eq('project_id', projectId)
+    .order('created_at', { ascending: true });
+
+  if (charactersError) throw charactersError;
+
+  const blueprints: CharacterBlueprint[] = [];
+  for (const character of (characters ?? []) as unknown as ProjectSetupCharacterRow[]) {
+    const input = buildProjectCharacterBlueprintInput(character);
+    const { data: existing, error: existingError } = await supabase
+      .from('character_blueprints')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('project_id', projectId)
+      .eq('slug', input.slug)
+      .maybeSingle();
+
+    if (existingError) throw existingError;
+
+    if (existing) {
+      const updated = await updateBlueprintRecord(existing.id, {
+        name: input.name,
+        kind: input.kind,
+        traits: input.traits,
+        faceDetails: input.faceDetails,
+        bodyDetails: input.bodyDetails,
+        styleDetails: input.styleDetails,
+        promptFragment: input.promptFragment,
+        tags: input.tags,
+        imageUrl: input.imageUrl ?? existing.image_url ?? null,
+        thumbnailUrl: input.thumbnailUrl ?? existing.thumbnail_url ?? null,
+      });
+      const images = await appendMissingReferenceImages(updated, input.referenceImages);
+      blueprints.push(attachReferenceSummary(updated, images));
+      continue;
+    }
+
+    blueprints.push(await createBlueprint(input));
+  }
+
+  return blueprints;
 }
 
 // ---------------------------------------------------------------------------
@@ -252,6 +475,8 @@ export async function updateBlueprintRecord(
     bodyDetails: CharacterBlueprint['bodyDetails'];
     styleDetails: CharacterBlueprint['styleDetails'];
     promptFragment: string;
+    tags: string[];
+    locationMetadata: CharacterBlueprint['locationMetadata'];
     imageUrl: string | null;
     thumbnailUrl: string | null;
     gmiElementId: string | null;
@@ -274,6 +499,8 @@ export async function updateBlueprintRecord(
   if (updates.bodyDetails !== undefined) payload.body_details = toJson(updates.bodyDetails);
   if (updates.styleDetails !== undefined) payload.style_details = toJson(updates.styleDetails);
   if (updates.promptFragment !== undefined) payload.prompt_fragment = updates.promptFragment;
+  if (updates.tags !== undefined) (payload as any).tags = normalizeReferenceTags(updates.tags);
+  if (updates.locationMetadata !== undefined) (payload as any).location_metadata = toJson(updates.locationMetadata);
   if (updates.imageUrl !== undefined) payload.image_url = updates.imageUrl;
   if (updates.thumbnailUrl !== undefined) payload.thumbnail_url = updates.thumbnailUrl;
   if (updates.gmiElementId !== undefined) (payload as any).gmi_element_id = updates.gmiElementId;
@@ -352,6 +579,8 @@ export async function addBlueprintImage(input: {
   assetId?: string | null;
   imageUrl: string;
   label?: string | null;
+  generationRole?: string | null;
+  generationMetadata?: Record<string, unknown>;
   isPrimary?: boolean;
   sortOrder?: number;
 }): Promise<CharacterBlueprintImage> {
@@ -361,6 +590,8 @@ export async function addBlueprintImage(input: {
       blueprint_id: input.blueprintId,
       image_url: input.imageUrl,
       label: input.label ?? null,
+      generation_role: input.generationRole ?? null,
+      generation_metadata: input.generationMetadata ?? {},
       is_primary: input.isPrimary ?? false,
       sort_order: input.sortOrder ?? 0,
       ...(input.assetId ? { asset_id: input.assetId } : {}),

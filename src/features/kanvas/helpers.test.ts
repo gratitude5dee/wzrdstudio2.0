@@ -84,6 +84,33 @@ describe("kanvas helpers", () => {
     });
   });
 
+  it("preserves registry reference payloads alongside asset selections", () => {
+    const request = buildImageRequest({
+      modelId: "fal-ai/nano-banana-pro/edit",
+      prompt: "Use @nova-pilot",
+      imageIds: ["asset-image-1"],
+      referenceAssets: [{
+        assetId: "asset-image-1",
+        url: "https://cdn.example.com/nova.png",
+        type: "image",
+        role: "primary",
+      }],
+      referenceBlueprintIds: ["blueprint-1"],
+      generationRole: "character_sheet",
+    });
+
+    expect(request).toMatchObject({
+      referenceAssets: [{
+        assetId: "asset-image-1",
+        url: "https://cdn.example.com/nova.png",
+        type: "image",
+        role: "primary",
+      }],
+      referenceBlueprintIds: ["blueprint-1"],
+      generationRole: "character_sheet",
+    });
+  });
+
   it("builds video and lipsync request payloads for the correct modes", () => {
     expect(
       buildVideoRequest({

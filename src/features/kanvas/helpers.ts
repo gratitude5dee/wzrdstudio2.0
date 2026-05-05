@@ -16,6 +16,7 @@ import type {
   KanvasTextToImageRequest,
   KanvasTextToVideoRequest,
 } from "@/features/kanvas/types";
+import type { RegistryReferenceAsset } from "@/lib/referenceRegistry";
 
 type GenerationJobRow = any;
 
@@ -182,6 +183,9 @@ export function buildImageRequest(input: {
   prompt: string;
   settings?: Record<string, unknown>;
   imageIds: string[];
+  referenceAssets?: RegistryReferenceAsset[];
+  referenceBlueprintIds?: string[];
+  generationRole?: string;
 }): KanvasTextToImageRequest | KanvasImageToImageRequest {
   if (input.imageIds.length > 0) {
     return {
@@ -191,6 +195,9 @@ export function buildImageRequest(input: {
       modelId: input.modelId,
       prompt: input.prompt.trim() || undefined,
       settings: input.settings,
+      referenceAssets: input.referenceAssets,
+      referenceBlueprintIds: input.referenceBlueprintIds,
+      generationRole: input.generationRole,
       assetSelections: {
         imageIds: input.imageIds,
       },
@@ -204,6 +211,9 @@ export function buildImageRequest(input: {
     modelId: input.modelId,
     prompt: input.prompt,
     settings: input.settings,
+    referenceAssets: input.referenceAssets,
+    referenceBlueprintIds: input.referenceBlueprintIds,
+    generationRole: input.generationRole,
   };
 }
 
@@ -216,6 +226,9 @@ export function buildVideoRequest(input: {
   imageId?: string | null;
   referenceAssetId?: string | null;
   elementIds?: string[];
+  referenceAssets?: RegistryReferenceAsset[];
+  referenceBlueprintIds?: string[];
+  generationRole?: string;
 }): KanvasTextToVideoRequest | KanvasImageToVideoRequest | KanvasReferenceToVideoRequest {
   if (input.mode === "reference-to-video" || input.referenceAssetId) {
     const assetId = input.referenceAssetId ?? input.imageId;
@@ -231,6 +244,9 @@ export function buildVideoRequest(input: {
       prompt: input.prompt.trim() || undefined,
       settings: input.settings,
       elementIds: input.elementIds,
+      referenceAssets: input.referenceAssets,
+      referenceBlueprintIds: input.referenceBlueprintIds,
+      generationRole: input.generationRole,
       assetSelections: {
         assetId,
       },
@@ -246,6 +262,9 @@ export function buildVideoRequest(input: {
       prompt: input.prompt.trim() || undefined,
       settings: input.settings,
       elementIds: input.elementIds,
+      referenceAssets: input.referenceAssets,
+      referenceBlueprintIds: input.referenceBlueprintIds,
+      generationRole: input.generationRole,
       assetSelections: {
         imageId: input.imageId,
       },
@@ -260,6 +279,9 @@ export function buildVideoRequest(input: {
     prompt: input.prompt,
     settings: input.settings,
     elementIds: input.elementIds,
+    referenceAssets: input.referenceAssets,
+    referenceBlueprintIds: input.referenceBlueprintIds,
+    generationRole: input.generationRole,
   };
 }
 
@@ -271,6 +293,9 @@ export function buildCinemaRequest(input: {
   cinema: KanvasCinemaSettings;
   elementIds?: string[];
   imageIds?: string[];
+  referenceAssets?: RegistryReferenceAsset[];
+  referenceBlueprintIds?: string[];
+  generationRole?: string;
 }): KanvasCinemaRequest {
   return {
     studio: "cinema",
@@ -280,6 +305,9 @@ export function buildCinemaRequest(input: {
     prompt: input.prompt,
     settings: input.settings,
     elementIds: input.elementIds,
+    referenceAssets: input.referenceAssets,
+    referenceBlueprintIds: input.referenceBlueprintIds,
+    generationRole: input.generationRole,
     cinema: input.cinema,
     assetSelections: input.imageIds?.length ? { imageIds: input.imageIds } : undefined,
   };

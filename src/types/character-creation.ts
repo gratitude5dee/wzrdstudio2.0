@@ -65,6 +65,22 @@ export interface CharacterStyleDetails {
   customPrompt?: string;
 }
 
+export interface LocationMetadata {
+  placeName?: string | null;
+  address?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  placeId?: string | null;
+  source?: string | null;
+}
+
+export interface BlueprintReferenceAsset {
+  assetId?: string;
+  url: string;
+  type: 'image' | 'video' | 'model';
+  role: string;
+}
+
 // ---- Builder Step Definitions -----------------------------------------------
 
 export type BuilderStep =
@@ -115,10 +131,13 @@ export interface CharacterBlueprint {
   bodyDetails: CharacterBodyDetails;
   styleDetails: CharacterStyleDetails;
   promptFragment: string;
+  tags?: string[];
+  locationMetadata?: LocationMetadata;
   imageUrl: string | null;
   thumbnailUrl: string | null;
   referenceAssetIds: string[];
   referenceImageUrls: string[];
+  referenceAssets?: BlueprintReferenceAsset[];
   gmiElementId?: string | null;
   gmiElementRequestId?: string | null;
   gmiElementStatus?: string | null;
@@ -136,6 +155,8 @@ export interface CharacterBlueprintImage {
   assetId: string | null;
   imageUrl: string;
   label: string | null;
+  generationRole?: string | null;
+  generationMetadata?: Record<string, unknown>;
   isPrimary: boolean;
   sortOrder: number;
   createdAt: string;
@@ -147,14 +168,18 @@ export interface CharacterMention {
   id: string;
   name: string;
   slug: string;
+  projectId?: string | null;
   imageUrl: string | null;
   promptFragment: string;
   kind: CharacterKind;
+  tags?: string[];
+  roles?: string[];
   isPinned: boolean;
   usageCount: number;
   updatedAt: string;
   referenceAssetIds: string[];
   referenceImageUrls: string[];
+  referenceAssets?: BlueprintReferenceAsset[];
   gmiElementId?: string | null;
 }
 
@@ -190,8 +215,11 @@ export interface ResolvedCharacterRef {
   name: string;
   imageUrl: string | null;
   promptFragment: string;
+  kind?: CharacterKind;
+  tags?: string[];
   referenceAssetIds: string[];
   referenceImageUrls: string[];
+  referenceAssets?: BlueprintReferenceAsset[];
   gmiElementId?: string | null;
 }
 

@@ -53,7 +53,7 @@ export interface ReferenceAsset {
   /** URL of the reference asset */
   url: string;
   /** Type of the reference asset */
-  type: 'image' | 'video' | 'audio' | 'text';
+  type: 'image' | 'video' | 'audio' | 'text' | 'model';
   /** Role of this asset in generation (e.g., 'input_image', 'style_reference') */
   role?: string;
 }

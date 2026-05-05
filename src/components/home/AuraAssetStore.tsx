@@ -35,6 +35,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { useCharacterMention } from '@/hooks/useCharacterMention';
 import { sortBlueprintsForReference } from '@/lib/characterBlueprintReference';
+import { normalizeReferenceTags } from '@/lib/referenceRegistry';
 import { appRoutes } from '@/lib/routes';
 import { toSlug, useCharacterCreationStore } from '@/lib/stores/character-creation-store';
 import { cn } from '@/lib/utils';
@@ -105,9 +106,9 @@ function getCommonProjectId(assets: ProjectAsset[]): string | null {
   return assets.every((asset) => (asset.project_id ?? null) === first) ? first : null;
 }
 
-function buildKanvasHref(studio: 'image' | 'video' | 'cinema' | 'character-creation', slug?: string) {
+function buildKanvasHref(studio: 'image' | 'video' | 'cinema' | 'character-creation' | 'worldview', slug?: string, suffix = '') {
   const params = new URLSearchParams({ studio });
-  if (slug) params.set('prompt', `@${slug} `);
+  if (slug) params.set('prompt', `@${slug} ${suffix}`.trimEnd());
   return `${appRoutes.kanvas}?${params.toString()}`;
 }
 
@@ -179,6 +180,7 @@ export function AuraAssetStore({ projects = [] }: AuraAssetStoreProps) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [kind, setKind] = useState<StoreKind>('character');
   const [name, setName] = useState('');
+  const [tagInput, setTagInput] = useState('');
   const [promptAnchor, setPromptAnchor] = useState(KIND_META.character.seed);
   const [referenceLabels, setReferenceLabels] = useState<Record<string, string>>({});
   const [finalizeSource, setFinalizeSource] = useState<{
@@ -204,14 +206,41 @@ export function AuraAssetStore({ projects = [] }: AuraAssetStoreProps) {
       if (projectFilter !== 'all' && asset.project_id !== projectFilter) return false;
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
-        const haystack = `${asset.original_file_name} ${asset.file_name} ${asset.asset_category}`.toLowerCase();
-        if (!haystack.includes(query)) return false;
+        const normalizedTagQuery = query.startsWith('@') ? query.slice(1) : query;
+        const haystack = [
+          asset.original_file_name,
+          asset.file_name,
+          asset.asset_category,
+          ...(asset.tags ?? []),
+          asset.media_metadata.prompt_fragment,
+          asset.media_metadata.slug,
+        ].filter(Boolean).join(' ').toLowerCase();
+        if (!haystack.includes(query) && !asset.tags?.some((tag) => tag.includes(normalizedTagQuery))) return false;
       }
       return true;
     });
   }, [categoryFilter, projectFilter, searchQuery, typeFilter, usableAssets]);
 
-  const sortedBlueprints = useMemo(() => sortBlueprintsForReference(blueprints), [blueprints]);
+  const sortedBlueprints = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    const normalizedTagQuery = query.startsWith('@') ? query.slice(1) : query;
+    const filteredBlueprints = query
+      ? blueprints.filter((blueprint) => {
+          const haystack = [
+            blueprint.name,
+            blueprint.slug,
+            blueprint.kind,
+            blueprint.promptFragment,
+            getAssetProjectLabel({ project_id: blueprint.projectId } as ProjectAsset, projects),
+            ...(blueprint.tags ?? []),
+            ...(blueprint.referenceAssets?.map((asset) => asset.role) ?? []),
+          ].filter(Boolean).join(' ').toLowerCase();
+          return haystack.includes(query) || blueprint.tags?.some((tag) => tag.includes(normalizedTagQuery));
+        })
+      : blueprints;
+
+    return sortBlueprintsForReference(filteredBlueprints);
+  }, [blueprints, projects, searchQuery]);
   const pinnedCount = useMemo(() => blueprints.filter((blueprint) => blueprint.isFavorite).length, [blueprints]);
   const slugPreview = toSlug(name);
   const diagnostic = getLoadDiagnostic(error);
@@ -332,6 +361,12 @@ export function AuraAssetStore({ projects = [] }: AuraAssetStoreProps) {
           assetId: asset.id,
           imageUrl,
           label: referenceLabels[asset.id] ?? asset.original_file_name,
+          generationRole: index === 0 ? 'primary' : 'reference',
+          generationMetadata: {
+            source: 'aura_asset_store',
+            assetType: asset.asset_type,
+            assetCategory: asset.asset_category,
+          },
           isPrimary: index === 0,
         };
       })
@@ -352,12 +387,14 @@ export function AuraAssetStore({ projects = [] }: AuraAssetStoreProps) {
         bodyDetails: {},
         styleDetails: { customPrompt: promptAnchor.trim() },
         promptFragment: promptAnchor.trim(),
+        tags: normalizeReferenceTags(tagInput.split(/[,\s]+/)),
         projectId: getCommonProjectId(selectedAssets),
         referenceImages,
       });
 
       addBlueprint(blueprint);
       setSelectedIds([]);
+      setTagInput('');
       setReferenceLabels({});
       setName('');
       setPromptAnchor(KIND_META[kind].seed);
@@ -637,6 +674,12 @@ export function AuraAssetStore({ projects = [] }: AuraAssetStoreProps) {
               <p className="text-xs text-zinc-500">
                 Mention slug: <span className="font-mono text-orange-300">@{slugPreview || 'name'}</span>
               </p>
+              <Input
+                value={tagInput}
+                onChange={(event) => setTagInput(event.target.value)}
+                placeholder="Tags, e.g. hero, pilot, close-up"
+                className="h-10 rounded-2xl border-white/10 bg-black/40 text-white placeholder:text-zinc-600 focus-visible:ring-orange-400/25"
+              />
             </div>
 
             <div className="relative mt-4">
@@ -715,6 +758,20 @@ export function AuraAssetStore({ projects = [] }: AuraAssetStoreProps) {
                         </div>
                         <p className="truncate font-mono text-xs text-orange-300">@{blueprint.slug}</p>
                         <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-zinc-500">{blueprint.promptFragment}</p>
+                        {(blueprint.tags?.length || blueprint.referenceAssets?.length) ? (
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {(blueprint.tags ?? []).slice(0, 4).map((tag) => (
+                              <span key={tag} className="rounded-full bg-white/[0.04] px-2 py-0.5 text-[10px] text-zinc-400">
+                                @{tag}
+                              </span>
+                            ))}
+                            {Array.from(new Set((blueprint.referenceAssets ?? []).map((asset) => asset.role))).slice(0, 3).map((role) => (
+                              <span key={role} className="rounded-full bg-orange-300/10 px-2 py-0.5 text-[10px] text-orange-200">
+                                {role}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
                       <button
                         type="button"
@@ -752,6 +809,34 @@ export function AuraAssetStore({ projects = [] }: AuraAssetStoreProps) {
                       <Button size="sm" variant="outline" className="h-8 rounded-xl border-white/10 bg-black/20 text-xs text-zinc-300 hover:bg-white/[0.06]" onClick={() => navigate(buildKanvasHref('cinema', blueprint.slug))}>
                         Cinema
                       </Button>
+                      {blueprint.kind === 'character' && (
+                        <>
+                          <Button size="sm" variant="outline" className="h-8 rounded-xl border-white/10 bg-black/20 text-xs text-zinc-300 hover:bg-white/[0.06]" onClick={() => navigate(buildKanvasHref('image', blueprint.slug, 'character sheet'))}>
+                            Sheet
+                          </Button>
+                          <Button size="sm" variant="outline" className="h-8 rounded-xl border-white/10 bg-black/20 text-xs text-zinc-300 hover:bg-white/[0.06]" onClick={() => navigate(buildKanvasHref('image', blueprint.slug, 'T-pose reference'))}>
+                            T-pose
+                          </Button>
+                          <Button size="sm" variant="outline" className="h-8 rounded-xl border-white/10 bg-black/20 text-xs text-zinc-300 hover:bg-white/[0.06]" onClick={() => navigate(buildKanvasHref('image', blueprint.slug, 'five angle character turnaround'))}>
+                            5 Angle
+                          </Button>
+                        </>
+                      )}
+                      {(blueprint.kind === 'object' || blueprint.kind === 'vehicle') && (
+                        <>
+                          <Button size="sm" variant="outline" className="h-8 rounded-xl border-white/10 bg-black/20 text-xs text-zinc-300 hover:bg-white/[0.06]" onClick={() => navigate(buildKanvasHref('image', blueprint.slug, 'object sheet'))}>
+                            Object Sheet
+                          </Button>
+                          <Button size="sm" variant="outline" className="h-8 rounded-xl border-white/10 bg-black/20 text-xs text-zinc-300 hover:bg-white/[0.06]" onClick={() => navigate(buildKanvasHref('image', blueprint.slug, 'five angle object turnaround'))}>
+                            5 Angle
+                          </Button>
+                        </>
+                      )}
+                      {(blueprint.kind === 'location' || blueprint.kind === 'environment') && (
+                        <Button size="sm" variant="outline" className="h-8 rounded-xl border-white/10 bg-black/20 text-xs text-zinc-300 hover:bg-white/[0.06]" onClick={() => navigate(buildKanvasHref('worldview', blueprint.slug, 'generate world'))}>
+                          World
+                        </Button>
+                      )}
                     </div>
                   </div>
                 ))

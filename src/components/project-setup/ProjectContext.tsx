@@ -7,6 +7,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { extractInsufficientCreditsError, routeToBillingTopUp } from '@/lib/billing-errors';
 import { buildConceptPayload } from '@/services/conceptPayloadService';
 import { DEFAULT_EVALUATION_THRESHOLDS } from '@/lib/evaluation';
+import { upsertProjectCharacterBlueprints } from '@/services/characterBlueprintService';
 
 interface ProjectContextProps {
   projectData: ProjectData;
@@ -351,6 +352,8 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
       if (!finalSaveId) {
         throw new Error("Failed to save final project settings.");
       }
+
+      await upsertProjectCharacterBlueprints(projectId);
 
       console.log(`Invoking finalize-project-setup for project: ${projectId}`);
       

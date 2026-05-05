@@ -13,6 +13,7 @@ import type {
   CharacterTraits,
 } from '@/types/character-creation';
 import { sortBlueprintsForReference } from '@/lib/characterBlueprintReference';
+import type { ReferenceRankingOptions } from '@/lib/referenceRegistry';
 
 // ---------------------------------------------------------------------------
 // Defaults
@@ -120,8 +121,8 @@ interface CharacterCreationActions {
   setGenerating: (generating: boolean) => void;
 
   // @mention helpers
-  getMentionList: () => CharacterMention[];
-  findBySlug: (slug: string) => CharacterBlueprint | undefined;
+  getMentionList: (options?: ReferenceRankingOptions) => CharacterMention[];
+  findBySlug: (slug: string, options?: ReferenceRankingOptions) => CharacterBlueprint | undefined;
 
   // Reset
   resetDraft: () => void;
@@ -283,26 +284,30 @@ export const useCharacterCreationStore = create<CharacterCreationState & Charact
 
     // -- @Mention helpers ---------------------------------------------------
 
-    getMentionList: () => {
-      return sortBlueprintsForReference(get().blueprints).map((b) => ({
+    getMentionList: (options) => {
+      return sortBlueprintsForReference(get().blueprints, options).map((b) => ({
         id: b.id,
         name: b.name,
         slug: b.slug,
+        projectId: b.projectId,
         imageUrl: b.imageUrl,
         promptFragment: b.promptFragment,
         kind: b.kind,
+        tags: b.tags,
+        roles: b.referenceAssets?.map((asset) => asset.role),
         isPinned: b.isFavorite,
         usageCount: b.usageCount,
         updatedAt: b.updatedAt,
         referenceAssetIds: b.referenceAssetIds,
         referenceImageUrls: b.referenceImageUrls,
+        referenceAssets: b.referenceAssets,
         gmiElementId: b.gmiElementId,
       }));
     },
 
-    findBySlug: (slug) => {
+    findBySlug: (slug, options) => {
       const normalised = slug.toLowerCase().replace(/^@/, '');
-      return get().blueprints.find((b) => b.slug === normalised);
+      return sortBlueprintsForReference(get().blueprints, options).find((b) => b.slug === normalised);
     },
 
     // -- Reset --------------------------------------------------------------

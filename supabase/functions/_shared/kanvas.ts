@@ -66,6 +66,13 @@ export interface KanvasAssetRecord {
   metadata: Record<string, unknown>;
 }
 
+export interface KanvasReferenceAsset {
+  assetId?: string;
+  url: string;
+  type: KanvasAssetType | 'model';
+  role: string;
+}
+
 export interface KanvasCinemaSettings {
   camera: string;
   lens: string;
@@ -78,6 +85,9 @@ export interface KanvasGenerationBase {
   modelId: string;
   settings?: Record<string, unknown>;
   elementIds?: string[];
+  referenceAssets?: KanvasReferenceAsset[];
+  referenceBlueprintIds?: string[];
+  generationRole?: string;
 }
 
 export interface KanvasTextToImageRequest extends KanvasGenerationBase {
@@ -255,6 +265,23 @@ export interface KanvasJobRepository {
   insertJob(job: KanvasJobInsert): Promise<KanvasJobRecord>;
   updateJob(jobId: string, updates: KanvasJobUpdate): Promise<KanvasJobRecord>;
   getJob(jobId: string, userId: string): Promise<KanvasJobRecord | null>;
+  saveGeneratedAsset?(input: {
+    userId: string;
+    projectId: string | null;
+    jobId: string;
+    modelId: string;
+    mediaType: KanvasMediaType;
+    url: string;
+    thumbnailUrl?: string | null;
+    generationRole?: string | null;
+  }): Promise<string | null>;
+  linkBlueprintImage?(input: {
+    blueprintId: string;
+    assetId: string | null;
+    imageUrl: string;
+    generationRole: string;
+    generationMetadata: Record<string, unknown>;
+  }): Promise<void>;
 }
 
 export interface KanvasReservation {
@@ -1270,22 +1297,26 @@ export function buildCinemaPrompt(prompt: string, cinema: KanvasCinemaSettings):
 }
 
 export function collectAssetIds(request: KanvasGenerationRequest): string[] {
+  const referenceAssetIds = (request.referenceAssets ?? [])
+    .map((asset) => asset.assetId)
+    .filter((assetId): assetId is string => typeof assetId === 'string' && assetId.length > 0);
+
   switch (request.mode) {
     case 'image-to-image':
-      return request.assetSelections.imageIds;
+      return Array.from(new Set([...request.assetSelections.imageIds, ...referenceAssetIds]));
     case 'image-to-video':
-      return [request.assetSelections.imageId];
+      return Array.from(new Set([request.assetSelections.imageId, ...referenceAssetIds]));
     case 'reference-to-video':
-      return [request.assetSelections.assetId];
+      return Array.from(new Set([request.assetSelections.assetId, ...referenceAssetIds]));
     case 'cinematic-image':
-      return request.assetSelections?.imageIds ?? [];
+      return Array.from(new Set([...(request.assetSelections?.imageIds ?? []), ...referenceAssetIds]));
     case 'talking-head':
-      return [request.assetSelections.audioId, request.assetSelections.imageId]
+      return [request.assetSelections.audioId, request.assetSelections.imageId, ...referenceAssetIds]
         .filter((assetId): assetId is string => typeof assetId === 'string' && assetId.length > 0);
     case 'lip-sync':
-      return [request.assetSelections.videoId, request.assetSelections.audioId];
+      return Array.from(new Set([request.assetSelections.videoId, request.assetSelections.audioId, ...referenceAssetIds]));
     default:
-      return [];
+      return referenceAssetIds;
   }
 }
 
@@ -1316,6 +1347,13 @@ function findAllAssets(assets: KanvasAssetRecord[], type: KanvasAssetType): Kanv
   return assets.filter((asset) => asset.assetType === type);
 }
 
+function findReferenceUrls(request: KanvasGenerationRequest, type: KanvasAssetType): string[] {
+  return (request.referenceAssets ?? [])
+    .filter((asset) => asset.type === type)
+    .map((asset) => asset.url)
+    .filter((url): url is string => typeof url === 'string' && url.length > 0);
+}
+
 export function buildFalInput(
   request: KanvasGenerationRequest,
   model: KanvasStudioModel,
@@ -1338,38 +1376,47 @@ export function buildFalInput(
 
   switch (request.mode) {
     case 'image-to-image': {
-      const imageUrls = findAllAssets(assets, 'image').map((asset) => asset.url);
+      const imageUrls = Array.from(new Set([
+        ...findAllAssets(assets, 'image').map((asset) => asset.url),
+        ...findReferenceUrls(request, 'image'),
+      ]));
       input.image_urls = imageUrls;
       break;
     }
     case 'image-to-video': {
       const imageAsset = findFirstAsset(assets, 'image');
-      if (!imageAsset) {
+      const imageUrl = imageAsset?.url ?? findReferenceUrls(request, 'image')[0];
+      if (!imageUrl) {
         throw new Error('Image-to-video requests require a reference image.');
       }
-      input.image_url = imageAsset.url;
+      input.image_url = imageUrl;
       break;
     }
     case 'reference-to-video': {
       const imageAsset = findFirstAsset(assets, 'image');
       const videoAsset = findFirstAsset(assets, 'video');
+      const imageUrl = imageAsset?.url ?? findReferenceUrls(request, 'image')[0];
+      const videoUrl = videoAsset?.url ?? findReferenceUrls(request, 'video')[0];
 
-      if (!imageAsset && !videoAsset) {
+      if (!imageUrl && !videoUrl) {
         throw new Error('Reference-to-video requests require an image or video reference.');
       }
 
-      if (imageAsset) {
-        input.image_url = imageAsset.url;
+      if (imageUrl) {
+        input.image_url = imageUrl;
       }
 
-      if (videoAsset) {
-        input.video_url = videoAsset.url;
+      if (videoUrl) {
+        input.video_url = videoUrl;
       }
 
       break;
     }
     case 'cinematic-image': {
-      const imageUrls = findAllAssets(assets, 'image').map((asset) => asset.url);
+      const imageUrls = Array.from(new Set([
+        ...findAllAssets(assets, 'image').map((asset) => asset.url),
+        ...findReferenceUrls(request, 'image'),
+      ]));
       if (imageUrls.length > 0) {
         input.image_urls = imageUrls;
       }
@@ -1489,6 +1536,49 @@ function assertAuthenticatedUser(userId: string): void {
   }
 }
 
+async function promoteKanvasResultToRegistry(
+  job: KanvasJobRecord,
+  result: KanvasNormalizedResult,
+  userId: string,
+  repository: KanvasJobRepository,
+): Promise<void> {
+  if (!repository.saveGeneratedAsset || !result.primaryUrl) {
+    return;
+  }
+
+  const request = job.config.request;
+  const generationRole = request.generationRole ?? 'primary';
+  const assetId = await repository.saveGeneratedAsset({
+    userId,
+    projectId: job.projectId,
+    jobId: job.id,
+    modelId: job.modelId,
+    mediaType: job.jobType,
+    url: result.primaryUrl,
+    thumbnailUrl: result.thumbnailUrl ?? result.previewUrl,
+    generationRole,
+  });
+
+  if (!assetId || !repository.linkBlueprintImage) {
+    return;
+  }
+
+  for (const blueprintId of request.referenceBlueprintIds ?? []) {
+    await repository.linkBlueprintImage({
+      blueprintId,
+      assetId,
+      imageUrl: result.primaryUrl,
+      generationRole,
+      generationMetadata: {
+        source: 'kanvas',
+        jobId: job.id,
+        modelId: job.modelId,
+        mediaType: job.jobType,
+      },
+    });
+  }
+}
+
 export async function submitKanvasJob(
   request: KanvasGenerationRequest,
   userId: string,
@@ -1590,6 +1680,7 @@ export async function submitKanvasJob(
       requestId: null,
       modelId: model.id,
     });
+    await promoteKanvasResultToRegistry(completed, result, userId, repository);
     return completed;
   }
 
@@ -1706,6 +1797,7 @@ export async function refreshKanvasJob(
       requestId: job.externalRequestId,
       modelId: job.modelId,
     });
+    await promoteKanvasResultToRegistry(updated, result, userId, repository);
     return updated;
   }
 

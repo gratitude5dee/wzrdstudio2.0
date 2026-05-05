@@ -1,4 +1,5 @@
 import type { CharacterBlueprint, CharacterKind, CharacterMention } from '@/types/character-creation';
+import { sortReferenceBlueprints, type ReferenceRankingOptions } from '@/lib/referenceRegistry';
 
 export type ReferenceBlueprintGroup = 'character' | 'object' | 'location';
 
@@ -22,25 +23,16 @@ export function getReferenceGroupLabel(group: ReferenceBlueprintGroup): string {
 
 export function sortBlueprintsForReference<T extends {
   kind: CharacterKind;
+  projectId?: string | null;
   isFavorite?: boolean;
   usageCount?: number;
   updatedAt?: string;
   name: string;
-}>(blueprints: T[]): T[] {
-  return [...blueprints].sort((left, right) => {
+}>(blueprints: T[], options: ReferenceRankingOptions = {}): T[] {
+  return sortReferenceBlueprints(blueprints, options).sort((left, right) => {
     const groupDelta = REFERENCE_GROUPS.indexOf(getReferenceGroup(left.kind)) - REFERENCE_GROUPS.indexOf(getReferenceGroup(right.kind));
     if (groupDelta !== 0) return groupDelta;
-
-    const pinnedDelta = Number(Boolean(right.isFavorite)) - Number(Boolean(left.isFavorite));
-    if (pinnedDelta !== 0) return pinnedDelta;
-
-    const usageDelta = (right.usageCount ?? 0) - (left.usageCount ?? 0);
-    if (usageDelta !== 0) return usageDelta;
-
-    const updatedDelta = (right.updatedAt ?? '').localeCompare(left.updatedAt ?? '');
-    if (updatedDelta !== 0) return updatedDelta;
-
-    return left.name.localeCompare(right.name);
+    return 0;
   });
 }
 

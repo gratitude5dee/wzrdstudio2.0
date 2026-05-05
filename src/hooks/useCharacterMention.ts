@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useCharacterCreationStore } from '@/lib/stores/character-creation-store';
 import { incrementBlueprintUsage, toggleBlueprintPinned } from '@/services/characterBlueprintService';
+import { resolveReferenceMentionsFromBlueprints, type ReferenceRankingOptions, type ReferenceResolverWarning, type RegistryReferenceAsset } from '@/lib/referenceRegistry';
 import type { CharacterMention, ResolvedCharacterRef } from '@/types/character-creation';
 
 // ---------------------------------------------------------------------------
@@ -34,7 +35,9 @@ interface UseCharacterMentionReturn {
     elementIds: string[];
     referenceAssetIds: string[];
     referenceImageUrls: string[];
+    referenceAssets: RegistryReferenceAsset[];
     usedCharacters: ResolvedCharacterRef[];
+    warnings: ReferenceResolverWarning[];
   };
   /** Close suggestions */
   closeSuggestions: () => void;
@@ -42,7 +45,7 @@ interface UseCharacterMentionReturn {
   toggleMentionPinned: (mention: CharacterMention) => Promise<void>;
 }
 
-export function useCharacterMention(): UseCharacterMentionReturn {
+export function useCharacterMention(options: ReferenceRankingOptions = {}): UseCharacterMentionReturn {
   const blueprints = useCharacterCreationStore((s) => s.blueprints);
   const getMentionList = useCharacterCreationStore((s) => s.getMentionList);
   const findBySlug = useCharacterCreationStore((s) => s.findBySlug);
@@ -51,9 +54,13 @@ export function useCharacterMention(): UseCharacterMentionReturn {
 
   const [activeQuery, setActiveQuery] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const mentionOptions = useMemo(
+    () => ({ projectId: options.projectId, includePinned: options.includePinned }),
+    [options.projectId, options.includePinned],
+  );
 
   // All available mentions
-  const allMentions = useMemo(() => getMentionList(), [getMentionList, blueprints]);
+  const allMentions = useMemo(() => getMentionList(mentionOptions), [getMentionList, blueprints, mentionOptions]);
 
   // Filtered by active query
   const suggestions = useMemo(() => {
@@ -99,61 +106,26 @@ export function useCharacterMention(): UseCharacterMentionReturn {
   const resolvePrompt = useCallback(
     (prompt: string) => {
       const mentionRegex = /@([\w-]+)/g;
+      const resolved = resolveReferenceMentionsFromBlueprints(prompt, blueprints, mentionOptions);
       const usedCharacters: ResolvedCharacterRef[] = [];
-      let expandedPrompt = prompt;
-      let elementPrompt = prompt;
-      const elementIds: string[] = [];
-      const referenceAssetIds: string[] = [];
-      const referenceImageUrls: string[] = [];
-      const elementIndexById = new Map<string, number>();
 
       const matches = Array.from(prompt.matchAll(mentionRegex));
       for (const match of matches) {
         const slug = match[1];
-        const bp = findBySlug(slug);
+        const bp = findBySlug(slug, mentionOptions);
         if (bp) {
           usedCharacters.push({
             slug: bp.slug,
             name: bp.name,
             imageUrl: bp.imageUrl,
             promptFragment: bp.promptFragment,
+            kind: bp.kind,
+            tags: bp.tags,
             referenceAssetIds: bp.referenceAssetIds,
             referenceImageUrls: bp.referenceImageUrls,
+            referenceAssets: bp.referenceAssets,
             gmiElementId: bp.gmiElementId,
           });
-
-          for (const assetId of bp.referenceAssetIds) {
-            if (!referenceAssetIds.includes(assetId)) {
-              referenceAssetIds.push(assetId);
-            }
-          }
-
-          for (const imageUrl of bp.referenceImageUrls) {
-            if (!referenceImageUrls.includes(imageUrl)) {
-              referenceImageUrls.push(imageUrl);
-            }
-          }
-
-          // Replace @slug with the prompt fragment
-          expandedPrompt = expandedPrompt.replace(
-            `@${slug}`,
-            `[${bp.name}: ${bp.promptFragment}]`,
-          );
-
-          if (bp.gmiElementId) {
-            let tokenIndex = elementIndexById.get(bp.gmiElementId);
-            if (!tokenIndex) {
-              elementIds.push(bp.gmiElementId);
-              tokenIndex = elementIds.length;
-              elementIndexById.set(bp.gmiElementId, tokenIndex);
-            }
-            elementPrompt = elementPrompt.replace(`@${slug}`, `<<<element_${tokenIndex}>>>`);
-          } else {
-            elementPrompt = elementPrompt.replace(
-              `@${slug}`,
-              `[${bp.name}: ${bp.promptFragment}]`,
-            );
-          }
 
           // Increment usage (fire-and-forget)
           incrementUsage(bp.id);
@@ -162,15 +134,17 @@ export function useCharacterMention(): UseCharacterMentionReturn {
       }
 
       return {
-        expandedPrompt,
-        elementPrompt,
-        elementIds,
-        referenceAssetIds,
-        referenceImageUrls,
+        expandedPrompt: resolved.expandedPrompt,
+        elementPrompt: resolved.elementPrompt,
+        elementIds: resolved.elementIds,
+        referenceAssetIds: resolved.referenceAssetIds,
+        referenceImageUrls: resolved.referenceImageUrls,
+        referenceAssets: resolved.referenceAssets,
         usedCharacters,
+        warnings: resolved.warnings,
       };
     },
-    [findBySlug, incrementUsage],
+    [blueprints, findBySlug, incrementUsage, mentionOptions],
   );
 
   const closeSuggestions = useCallback(() => {

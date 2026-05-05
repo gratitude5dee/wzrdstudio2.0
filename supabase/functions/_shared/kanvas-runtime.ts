@@ -84,17 +84,27 @@ function toNormalizedResult(value: unknown): KanvasNormalizedResult | null {
   return value as KanvasNormalizedResult;
 }
 
-function mapAssetRow(row: Record<string, unknown>): KanvasAssetRecord {
+function mapAssetRow(row: Record<string, unknown>, fallbackUserId: string): KanvasAssetRecord {
+  const metadata = asRecord(row.media_metadata ?? row.metadata);
+  const assetType = asString(row.asset_type) ?? asString(row.type) ?? asString(metadata.asset_type) ?? 'image';
+  const originalFileName =
+    asString(row.original_file_name) ??
+    asString(row.file_name) ??
+    asString(row.name) ??
+    asString(metadata.original_file_name) ??
+    'asset';
+  const url = asString(row.cdn_url) ?? asString(row.url) ?? asString(metadata.url) ?? '';
+
   return {
     id: String(row.id),
-    userId: String(row.user_id),
+    userId: asString(row.user_id) ?? asString(metadata.user_id) ?? fallbackUserId,
     projectId: asString(row.project_id),
-    assetType: String(row.asset_type) as KanvasAssetRecord['assetType'],
-    originalFileName: String(row.original_file_name),
-    url: String(row.cdn_url),
+    assetType: assetType as KanvasAssetRecord['assetType'],
+    originalFileName,
+    url,
     previewUrl: asString(row.preview_url),
     thumbnailUrl: asString(row.thumbnail_url),
-    metadata: asRecord(row.media_metadata),
+    metadata,
   };
 }
 
@@ -167,16 +177,46 @@ export function createKanvasRepository(supabase: SupabaseClient): KanvasJobRepos
     async getAssetById(assetId, userId) {
       const { data, error } = await supabase
         .from('project_assets')
-        .select('id, user_id, project_id, asset_type, original_file_name, cdn_url, preview_url, thumbnail_url, media_metadata')
+        .select('*')
         .eq('id', assetId)
-        .eq('user_id', userId)
         .single();
 
-      if (error || !data || !data.cdn_url) {
+      if (error || !data) {
         return null;
       }
 
-      return mapAssetRow(data as unknown as Record<string, unknown>);
+      const row = data as unknown as Record<string, unknown>;
+      const metadata = asRecord(row.media_metadata ?? row.metadata);
+      const rowUserId = asString(row.user_id) ?? asString(metadata.user_id);
+      const projectId = asString(row.project_id);
+      const url = asString(row.cdn_url) ?? asString(row.url) ?? asString(metadata.url);
+
+      if (!url) {
+        return null;
+      }
+
+      if (rowUserId && rowUserId !== userId) {
+        return null;
+      }
+
+      if (!rowUserId && projectId) {
+        const { data: project } = await supabase
+          .from('projects')
+          .select('id')
+          .eq('id', projectId)
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        if (!project) {
+          return null;
+        }
+      }
+
+      if (!rowUserId && !projectId) {
+        return null;
+      }
+
+      return mapAssetRow(row, userId);
     },
 
     async insertJob(job) {
@@ -221,6 +261,85 @@ export function createKanvasRepository(supabase: SupabaseClient): KanvasJobRepos
       }
 
       return mapJobRow(data as unknown as Record<string, unknown>);
+    },
+
+    async saveGeneratedAsset(input) {
+      const { data: existing } = await supabase
+        .from('project_assets')
+        .select('id')
+        .eq('url', input.url)
+        .maybeSingle();
+
+      if (existing?.id) {
+        return String(existing.id);
+      }
+
+      const now = new Date().toISOString();
+      const extension = input.mediaType === 'video' ? 'mp4' : 'png';
+      const { data, error } = await supabase
+        .from('project_assets')
+        .insert({
+          project_id: input.projectId,
+          name: `kanvas-${input.mediaType}-${input.jobId}.${extension}`,
+          url: input.url,
+          thumbnail_url: input.thumbnailUrl ?? input.url,
+          type: input.mediaType,
+          size: 0,
+          tags: ['generated', 'kanvas', input.generationRole ?? 'primary'],
+          metadata: {
+            user_id: input.userId,
+            source: 'kanvas',
+            job_id: input.jobId,
+            model_id: input.modelId,
+            generation_role: input.generationRole ?? 'primary',
+            url: input.url,
+          },
+          created_at: now,
+        } as never)
+        .select('id')
+        .single();
+
+      if (error || !data) {
+        console.warn('[kanvas] Failed to save generated asset:', error?.message);
+        return null;
+      }
+
+      return String(data.id);
+    },
+
+    async linkBlueprintImage(input) {
+      const { data: existing } = await supabase
+        .from('character_blueprint_images')
+        .select('id')
+        .eq('blueprint_id', input.blueprintId)
+        .eq('image_url', input.imageUrl)
+        .maybeSingle();
+
+      if (existing?.id) {
+        return;
+      }
+
+      const { count } = await supabase
+        .from('character_blueprint_images')
+        .select('id', { count: 'exact', head: true })
+        .eq('blueprint_id', input.blueprintId);
+
+      const { error } = await supabase
+        .from('character_blueprint_images')
+        .insert({
+          blueprint_id: input.blueprintId,
+          asset_id: input.assetId,
+          image_url: input.imageUrl,
+          label: `Kanvas ${input.generationRole}`,
+          generation_role: input.generationRole,
+          generation_metadata: input.generationMetadata,
+          is_primary: (count ?? 0) === 0,
+          sort_order: count ?? 0,
+        } as never);
+
+      if (error) {
+        console.warn('[kanvas] Failed to link blueprint image:', error.message);
+      }
     },
   };
 }

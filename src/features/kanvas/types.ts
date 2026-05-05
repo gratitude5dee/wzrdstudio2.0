@@ -1,4 +1,5 @@
 import type { ProjectAsset } from "@/types/assets";
+import type { RegistryReferenceAsset } from "@/lib/referenceRegistry";
 
 export type KanvasStudio = "image" | "video" | "edit" | "cinema" | "lipsync" | "worldview" | "character-creation";
 export type KanvasMode =
@@ -106,6 +107,9 @@ export interface KanvasGenerationBase {
   modelId: string;
   settings?: Record<string, unknown>;
   elementIds?: string[];
+  referenceAssets?: RegistryReferenceAsset[];
+  referenceBlueprintIds?: string[];
+  generationRole?: string;
 }
 
 export interface KanvasTextToImageRequest extends KanvasGenerationBase {
