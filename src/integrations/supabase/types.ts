@@ -2296,6 +2296,48 @@ export type Database = {
         }
         Relationships: []
       }
+      credit_holds: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          idempotency_key: string | null
+          metadata: Json | null
+          reference_id: string | null
+          reference_type: string | null
+          resource_type: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          idempotency_key?: string | null
+          metadata?: Json | null
+          reference_id?: string | null
+          reference_type?: string | null
+          resource_type: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          idempotency_key?: string | null
+          metadata?: Json | null
+          reference_id?: string | null
+          reference_type?: string | null
+          resource_type?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       credit_transactions: {
         Row: {
           amount: number
@@ -10067,7 +10109,26 @@ export type Database = {
       }
       cleanup_expired_idempotency: { Args: never; Returns: undefined }
       cleanup_mrkt_decision_logs: { Args: never; Returns: undefined }
+      credits_commit: {
+        Args: { actual_amount?: number; hold_id: string; metadata?: Json }
+        Returns: Json
+      }
       credits_get_balance: { Args: never; Returns: Json }
+      credits_release: {
+        Args: { hold_id: string; metadata?: Json; reason?: string }
+        Returns: Json
+      }
+      credits_reserve: {
+        Args: {
+          idempotency_key?: string
+          metadata?: Json
+          reference_id?: string
+          reference_type?: string
+          requested_amount: number
+          resource_type: string
+        }
+        Returns: Json
+      }
       deduct_credits: {
         Args: { p_amount: number; p_user_id: string }
         Returns: number
