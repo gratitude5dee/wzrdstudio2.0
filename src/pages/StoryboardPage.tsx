@@ -547,7 +547,8 @@ const StoryboardPage = () => {
             return invalid('Tell me the shot prompt text to update.');
           }
 
-          const { error } = await supabase.from('shots').update(compactUpdates).eq('id', shot.id);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { error } = await supabase.from('shots').update(compactUpdates as any).eq('id', shot.id);
           if (error) throw error;
           return completed(`Shot ${shot.shot_number} updated.`, { shotId: shot.id, updates: compactUpdates });
         },
