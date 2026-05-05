@@ -84,6 +84,7 @@ function getFunctionCallsFromResponseDone(event: RealtimeEvent): RealtimeFunctio
 
 export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptions) {
   const transportRef = useRef<WebRTCTransport | null>(null);
+  const connectingRef = useRef<Promise<WebRTCTransport | undefined> | null>(null);
   const [status, setStatus] = useState<VoiceSessionStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const processedToolCallsRef = useRef<Set<string>>(new Set());
@@ -269,7 +270,14 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
   }, []);
 
   const pushToTalkStart = useCallback(async () => {
-    const transport = transportRef.current ?? (await connect());
+    let transport = transportRef.current;
+    if (!transport) {
+      const promise = connect();
+      connectingRef.current = promise;
+      transport = (await promise) ?? null;
+      connectingRef.current = null;
+    }
+    if (!transport) return;
     // Only cancel if the assistant is actively responding
     if (responseActiveRef.current) {
       transport.interrupt();
@@ -281,7 +289,12 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
     setStatus('listening');
   }, [connect]);
 
-  const pushToTalkStop = useCallback(() => {
+  const pushToTalkStop = useCallback(async () => {
+    // Wait for in-flight connection if pushToTalkStart triggered one
+    if (connectingRef.current) {
+      await connectingRef.current;
+      connectingRef.current = null;
+    }
     const transport = transportRef.current;
     if (!transport || transport.status !== 'connected') {
       console.warn('[Voice] pushToTalkStop skipped — transport not connected');

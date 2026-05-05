@@ -1191,7 +1191,7 @@ export default function KanvasPage() {
         referenceAssetIds: resolved.referenceAssetIds,
         referenceImageUrls: resolved.referenceImageUrls,
         referenceAssets: resolved.referenceAssets,
-        referenceBlueprintIds: resolved.references.map((reference) => reference.blueprintId),
+        referenceBlueprintIds: resolved.usedCharacters.map((c) => c.slug),
         warnings: resolved.warnings,
       };
     }
@@ -1202,7 +1202,7 @@ export default function KanvasPage() {
       referenceAssetIds: resolved.referenceAssetIds,
       referenceImageUrls: resolved.referenceImageUrls,
       referenceAssets: resolved.referenceAssets,
-      referenceBlueprintIds: resolved.references.map((reference) => reference.blueprintId),
+      referenceBlueprintIds: resolved.usedCharacters.map((c) => c.slug),
       warnings: resolved.warnings,
     };
   }
