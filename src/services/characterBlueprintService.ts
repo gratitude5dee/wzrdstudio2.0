@@ -344,7 +344,7 @@ export async function createBlueprint(input: {
 
   const { data, error } = await supabase
     .from('character_blueprints')
-    .insert([{
+    .insert({
       user_id: user.id,
       project_id: input.projectId ?? null,
       name: input.name,
@@ -359,7 +359,7 @@ export async function createBlueprint(input: {
       location_metadata: toJson(input.locationMetadata),
       image_url: input.imageUrl ?? primaryReference?.imageUrl ?? null,
       thumbnail_url: input.thumbnailUrl ?? primaryReference?.imageUrl ?? null,
-    } as CharacterBlueprintInsert & Record<string, unknown>])
+    } as unknown as CharacterBlueprintInsert)
     .select('*')
     .single();
 
