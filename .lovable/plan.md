@@ -1,42 +1,28 @@
 
-# Proactive Voice Agent Flow
+# Fix Voice Agent Concept Flow
 
 ## Problem
-The voice agent waits passively for explicit commands instead of driving the flow. On the concept page, it should take any rough idea, craft a logline, fill it in, and ask to advance — all within seconds.
+
+Two issues prevent the voice agent from filling the concept field and advancing:
+
+1. **Stale closure**: `project_setup_next` reads `projectData.concept` from a React closure. When the model calls `set_project_setup_fields` then `project_setup_next` in the same turn, React hasn't re-rendered yet, so `projectData.concept` is still empty. The handler returns "Please give me at least a short logline" even though the concept was just set.
+
+2. **Parallel tool dispatch**: In `useWzrdRealtimeSession.ts`, when `response.done` fires with multiple tool calls, they run via `Promise.all` (parallel). This means `project_setup_next` doesn't wait for `set_project_setup_fields` to complete.
 
 ## Changes
 
-### 1. Rewrite voice instructions in `src/voice/agent.ts`
+### 1. Add a mutable ref for projectData in ProjectSetupVoiceBridge
 
-Replace the `# Conversation Flow` and `# Examples` sections with proactive, page-specific instructions:
+Keep a `useRef` that always mirrors the latest `projectData`. Voice action handlers read from this ref instead of the closure value, ensuring they always see the most recent state even before React re-renders.
 
-**Add new section: `# Pacing — Move Fast`**
-- Act immediately when the user provides enough info — fill fields, then ask one short confirmation to advance.
-- Never wait for explicit "fill the field" commands. If you have data, fill it.
-- Treat "yes", "sure", "go ahead", "next" as immediate confirmation to advance.
-- Goal: each page should take seconds, not minutes.
+**File**: `src/components/project-setup/ProjectSetupVoiceBridge.tsx`
+- Add `const projectDataRef = useRef(projectData)` and sync it with `useEffect`
+- In `set_project_setup_fields` handler, after calling `updateProjectData(fields)`, also update `projectDataRef.current` with the merged fields so subsequent tool calls in the same tick see them
+- In `project_setup_next` handler, read `projectDataRef.current.concept` instead of `projectData.concept`
 
-**Add `# Page-Specific Flow — Be Proactive`** with subsections:
+### 2. Serialize tool calls in the same response turn
 
-- **Concept Page**: When the user describes ANY idea, immediately craft a polished logline, call `set_project_setup_fields` with `{ concept, title }`, read it back, and ask "Want me to move to storyline?" If confirmed, call `project_setup_next`. Target: under 30 seconds.
+**File**: `src/voice/realtime/useWzrdRealtimeSession.ts`
+- In the `response.done` handler, change `Promise.all(toolCalls.map(executeToolCall))` to a sequential loop: `for (const call of toolCalls) { await executeToolCall(call); }`. This ensures `set_project_setup_fields` completes and updates the ref before `project_setup_next` runs.
 
-- **Storyline Page**: After generation completes, summarize key beats in 1-2 sentences and ask to advance to Settings & Cast.
-
-- **Settings & Cast Page**: Announce characters briefly, ask if user wants edits or to move on. On "next", advance immediately.
-
-- **Breakdown Page**: Summarize scene count, ask "Ready to storyboard?" On confirmation, call `breakdown_start_storyboard`.
-
-- **Timeline Page**: Ask if user wants to generate all images or review individual shots. Act on response immediately.
-
-**Update examples** to show the proactive pattern:
-- User: "a story about a lonely robot chef" -> Agent immediately crafts logline, fills concept+title, reads it back, asks to advance.
-- User: "yes" -> `project_setup_next` called instantly.
-
-**Add explicit English language instruction**: "ALWAYS speak in English."
-
-### 2. No backend or action handler changes needed
-
-The GPT-4o Realtime model itself generates the logline from the user's raw idea — it's a text transformation the model does natively. The existing `set_project_setup_fields` action already accepts `concept` and `title` fields. The existing `project_setup_next` action already handles page advancement. No new edge functions or action registrations are required.
-
-## Outcome
-The voice agent becomes a fast, proactive operator that drives users through each page in seconds rather than waiting for explicit step-by-step commands. The concept page flow becomes: user speaks idea -> agent fills logline -> user confirms -> agent advances to storyline.
+### 3. No backend or schema changes required
