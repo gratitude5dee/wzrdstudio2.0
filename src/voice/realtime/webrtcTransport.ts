@@ -55,6 +55,8 @@ export class WebRTCTransport {
   private wildcardListeners = new Set<RealtimeEventHandler>();
   private _status: 'disconnected' | 'connecting' | 'connected' = 'disconnected';
   private sessionConfig: RealtimeSessionConfig | null = null;
+  private _dcOpenResolve: (() => void) | null = null;
+  private _dcOpenPromise: Promise<void> | null = null;
 
   get status() {
     return this._status;
