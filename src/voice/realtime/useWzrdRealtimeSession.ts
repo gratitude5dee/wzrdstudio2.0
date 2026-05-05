@@ -178,7 +178,13 @@ export function useWzrdRealtimeSession({ registry }: UseWzrdRealtimeSessionOptio
       transport.on('response.done', (event) => {
         const toolCalls = getFunctionCallsFromResponseDone(event);
         if (toolCalls.length > 0) {
-          void Promise.all(toolCalls.map(executeToolCall));
+          // Sequential execution so earlier tool calls (e.g. set fields)
+          // complete before later ones (e.g. advance page) read state.
+          void (async () => {
+            for (const call of toolCalls) {
+              await executeToolCall(call);
+            }
+          })();
           return;
         }
         setStatus('connected');
