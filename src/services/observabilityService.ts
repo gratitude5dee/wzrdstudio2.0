@@ -20,6 +20,34 @@ export type NarrativeAtomRow = Tables['narrative_atoms']['Row'];
 export type StoryEventRow = Tables['story_events']['Row'];
 export type GenerationJobRow = Tables['generation_jobs']['Row'];
 export type AuraJudgeMode = 'quality' | 'safety' | 'aesthetic' | 'full';
+export type AuraJudgeTargetType = 'project' | 'storyline' | 'scene' | 'shot' | 'character';
+
+export interface AuraDraftImprovement {
+  type:
+    | 'rewrite_prompt_for_specificity'
+    | 'inject_prior_scene_refs'
+    | 'increase_identity_conditioning'
+    | 'rewrite_camera_instructions'
+    | 'swap_style_reference_board'
+    | 'manual_review_required';
+  title: string;
+  rationale: string;
+  draftPrompt?: string;
+  target?: string;
+}
+
+export interface AuraJudgeInput {
+  mediaUrl: string;
+  mediaType: 'image' | 'video';
+  mode: AuraJudgeMode;
+  criteria?: string;
+  projectId?: string;
+  targetType?: AuraJudgeTargetType;
+  targetId?: string;
+  promptText?: string;
+  referenceUrls?: string[];
+  persist?: boolean;
+}
 
 export interface AuraJudgeResult {
   scores: {
@@ -28,9 +56,23 @@ export interface AuraJudgeResult {
     aesthetic?: number;
     safety?: number;
   };
+  promptAdherence?: number;
+  characterConsistency?: number;
+  spatialConsistency?: number;
+  temporalConsistency?: number;
+  continuity?: number;
   feedback: string;
   tags: string[];
   suggestions: string[];
+  draftImprovements?: AuraDraftImprovement[];
+  evidence?: Record<string, unknown>;
+  modelUsed?: string;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  };
+  runId?: string;
 }
 
 export interface ObservabilityOverview {
@@ -371,18 +413,19 @@ export const observabilityService = {
     return event;
   },
 
-  async evaluateMediaWithAuraJudge(input: {
-    mediaUrl: string;
-    mediaType: 'image' | 'video';
-    mode: AuraJudgeMode;
-    criteria?: string;
-  }): Promise<AuraJudgeResult> {
+  async evaluateMediaWithAuraJudge(input: AuraJudgeInput): Promise<AuraJudgeResult> {
     const { data, error } = await supabase.functions.invoke('aura-vlm-judge', {
       body: {
         mediaUrl: input.mediaUrl,
         mediaType: input.mediaType,
         mode: input.mode,
         criteria: input.criteria?.trim() || undefined,
+        projectId: input.projectId,
+        targetType: input.targetType,
+        targetId: input.targetId,
+        promptText: input.promptText?.trim() || undefined,
+        referenceUrls: input.referenceUrls?.filter((url) => url.trim().length > 0),
+        persist: input.persist,
       },
     });
 

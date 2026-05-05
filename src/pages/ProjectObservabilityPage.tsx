@@ -8,11 +8,10 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
+import { AuraJudgePanel } from '@/components/observability/AuraJudgePanel';
 import { appRoutes } from '@/lib/routes';
 import {
   observabilityService,
-  type AuraJudgeMode,
-  type AuraJudgeResult,
   type ProjectObservabilityData,
 } from '@/services/observabilityService';
 import { toast } from 'sonner';
@@ -184,12 +183,6 @@ const ProjectObservabilityPage = () => {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [tags, setTags] = useState<Record<string, string>>({});
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [judgeMediaUrl, setJudgeMediaUrl] = useState('');
-  const [judgeMediaType, setJudgeMediaType] = useState<'image' | 'video'>('image');
-  const [judgeMode, setJudgeMode] = useState<AuraJudgeMode>('full');
-  const [judgeCriteria, setJudgeCriteria] = useState('');
-  const [judgeResult, setJudgeResult] = useState<AuraJudgeResult | null>(null);
-  const [judgeLoading, setJudgeLoading] = useState(false);
 
   const load = useCallback(async () => {
     if (!projectId) { navigate(appRoutes.home); return; }
@@ -258,30 +251,6 @@ const ProjectObservabilityPage = () => {
     },
     [load, notes, projectId, tags]
   );
-
-  const runAuraJudge = useCallback(async () => {
-    if (!judgeMediaUrl.trim()) {
-      toast.error('Enter an image or video URL first.');
-      return;
-    }
-
-    setJudgeLoading(true);
-    try {
-      const result = await observabilityService.evaluateMediaWithAuraJudge({
-        mediaUrl: judgeMediaUrl.trim(),
-        mediaType: judgeMediaType,
-        mode: judgeMode,
-        criteria: judgeCriteria,
-      });
-      setJudgeResult(result);
-      toast.success('Aura judge evaluation complete.');
-    } catch (error) {
-      console.error('Aura judge failed', error);
-      toast.error(error instanceof Error ? error.message : 'Aura judge failed');
-    } finally {
-      setJudgeLoading(false);
-    }
-  }, [judgeCriteria, judgeMediaType, judgeMediaUrl, judgeMode]);
 
   if (!projectId) return null;
 
@@ -539,124 +508,10 @@ const ProjectObservabilityPage = () => {
 
             {/* ── Aura Judge ───────────────────────────── */}
             <TabsContent value="judge" className="space-y-6">
-              <Card className="border-white/[0.06] bg-white/[0.02]">
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center gap-2 text-sm font-medium text-white">
-                    <Sparkles className="h-4 w-4 text-primary" /> Aura VLM judge
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid gap-4 md:grid-cols-[1.4fr_0.6fr_0.6fr]">
-                    <Input
-                      value={judgeMediaUrl}
-                      onChange={(event) => setJudgeMediaUrl(event.target.value)}
-                      placeholder="https://example.com/media.png"
-                      className="border-white/[0.06] bg-black/20 text-sm placeholder:text-white/20 focus:border-primary/30"
-                    />
-                    <select
-                      value={judgeMediaType}
-                      onChange={(event) => setJudgeMediaType(event.target.value as 'image' | 'video')}
-                      className="rounded-md border border-white/[0.06] bg-black/20 px-3 py-2 text-sm text-white focus:border-primary/30 focus:outline-none"
-                    >
-                      <option value="image">Image</option>
-                      <option value="video">Video</option>
-                    </select>
-                    <select
-                      value={judgeMode}
-                      onChange={(event) => setJudgeMode(event.target.value as AuraJudgeMode)}
-                      className="rounded-md border border-white/[0.06] bg-black/20 px-3 py-2 text-sm text-white focus:border-primary/30 focus:outline-none"
-                    >
-                      <option value="quality">Quality</option>
-                      <option value="safety">Safety</option>
-                      <option value="aesthetic">Aesthetic</option>
-                      <option value="full">Full</option>
-                    </select>
-                  </div>
-
-                  <Textarea
-                    value={judgeCriteria}
-                    onChange={(event) => setJudgeCriteria(event.target.value)}
-                    placeholder="Optional evaluation criteria or project-specific notes"
-                    className="min-h-24 border-white/[0.06] bg-black/20 text-sm placeholder:text-white/20 focus:border-primary/30"
-                  />
-
-                  <div className="flex justify-end">
-                    <Button
-                      onClick={() => void runAuraJudge()}
-                      disabled={judgeLoading}
-                      className="bg-primary text-black hover:bg-primary/90"
-                    >
-                      {judgeLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                      Evaluate
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {!judgeResult ? (
-                <EmptyState
-                  icon={Shield}
-                  title="No manual evaluation yet"
-                  description="Run the Aura judge against an image or video URL to inspect live scores and feedback."
-                />
-              ) : (
-                <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-                  <Card className="border-white/[0.06] bg-white/[0.02]">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-sm font-medium text-white">Scores</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <ScoreBar label="Overall" value={judgeResult.scores.overall} maxValue={100} />
-                      {judgeResult.scores.technical !== undefined && (
-                        <ScoreBar label="Technical" value={judgeResult.scores.technical} maxValue={100} />
-                      )}
-                      {judgeResult.scores.aesthetic !== undefined && (
-                        <ScoreBar label="Aesthetic" value={judgeResult.scores.aesthetic} maxValue={100} />
-                      )}
-                      {judgeResult.scores.safety !== undefined && (
-                        <ScoreBar label="Safety" value={judgeResult.scores.safety} maxValue={100} />
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  <Card className="border-white/[0.06] bg-white/[0.02]">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-sm font-medium text-white">Feedback</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <p className="text-sm leading-relaxed text-white/75">{judgeResult.feedback}</p>
-                      <div className="space-y-2">
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Tags</p>
-                        <div className="flex flex-wrap gap-2">
-                          {judgeResult.tags.length > 0 ? (
-                            judgeResult.tags.map((tag) => (
-                              <span key={tag} className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-[10px] font-semibold text-primary">
-                                {tag}
-                              </span>
-                            ))
-                          ) : (
-                            <span className="text-xs text-white/25">No tags returned</span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Suggestions</p>
-                        {judgeResult.suggestions.length > 0 ? (
-                          <ul className="space-y-2 text-sm text-white/65">
-                            {judgeResult.suggestions.map((suggestion) => (
-                              <li key={suggestion} className="rounded-lg bg-black/20 px-3 py-2">
-                                {suggestion}
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <p className="text-xs text-white/25">No suggestions returned</p>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
+              <AuraJudgePanel
+                projectId={projectId}
+                onEvaluate={observabilityService.evaluateMediaWithAuraJudge}
+              />
             </TabsContent>
 
             {/* ── Review ────────────────────────────────── */}
