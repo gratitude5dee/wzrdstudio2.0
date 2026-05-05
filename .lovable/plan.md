@@ -1,28 +1,37 @@
 
-# Fix Voice Agent Concept Flow
+# Fix Voice Agent Concept Field Not Being Filled
 
 ## Problem
 
-Two issues prevent the voice agent from filling the concept field and advancing:
+When the voice agent calls `set_project_setup_fields` with `{ concept: "..." }` followed by `project_setup_next`, the concept text never appears in the textarea and navigation fails. Two bugs cause this:
 
-1. **Stale closure**: `project_setup_next` reads `projectData.concept` from a React closure. When the model calls `set_project_setup_fields` then `project_setup_next` in the same turn, React hasn't re-rendered yet, so `projectData.concept` is still empty. The handler returns "Please give me at least a short logline" even though the concept was just set.
+### Bug 1: Duplicate event handlers cause concurrent execution
 
-2. **Parallel tool dispatch**: In `useWzrdRealtimeSession.ts`, when `response.done` fires with multiple tool calls, they run via `Promise.all` (parallel). This means `project_setup_next` doesn't wait for `set_project_setup_fields` to complete.
+Both `response.function_call_arguments.done` (line 194) and `response.done` (line 178) handle tool calls. For a multi-tool response (set fields + advance):
+
+1. `response.function_call_arguments.done` fires for call #1 (set fields) -- starts executing
+2. `response.function_call_arguments.done` fires for call #2 (next) -- starts executing **concurrently**, before call #1 finishes
+3. `response.done` fires -- both calls are already deduped, the sequential loop does nothing
+
+The sequential fix from the previous change only applies to `response.done`, but calls are already consumed by the per-call handler.
+
+### Bug 2: Multiple `response.create` for multi-tool responses
+
+Each `executeToolCall` sends `response.create` after submitting its output. For multi-tool responses, this triggers the model to respond after the first tool output, before the second is submitted -- causing the "Cancellation failed: no active response found" errors visible in console logs.
 
 ## Changes
 
-### 1. Add a mutable ref for projectData in ProjectSetupVoiceBridge
+### File: `src/voice/realtime/useWzrdRealtimeSession.ts`
 
-Keep a `useRef` that always mirrors the latest `projectData`. Voice action handlers read from this ref instead of the closure value, ensuring they always see the most recent state even before React re-renders.
+1. **Remove the `response.function_call_arguments.done` handler** (lines 193-200). Let `response.done` be the sole entry point for tool execution, which already runs calls sequentially.
 
-**File**: `src/components/project-setup/ProjectSetupVoiceBridge.tsx`
-- Add `const projectDataRef = useRef(projectData)` and sync it with `useEffect`
-- In `set_project_setup_fields` handler, after calling `updateProjectData(fields)`, also update `projectDataRef.current` with the merged fields so subsequent tool calls in the same tick see them
-- In `project_setup_next` handler, read `projectDataRef.current.concept` instead of `projectData.concept`
+2. **Batch tool outputs in `response.done`**: Instead of calling `executeToolCall` (which sends `response.create` per call), inline the execution loop to:
+   - Execute each tool call sequentially
+   - Send each `conversation.item.create` (function_call_output) immediately after execution
+   - Send **one** `response.create` at the end, after all outputs are submitted
 
-### 2. Serialize tool calls in the same response turn
+3. **Keep `executeToolCall` for single-call fallback**: If a single tool call somehow arrives outside `response.done`, the dedup guard still protects against double execution.
 
-**File**: `src/voice/realtime/useWzrdRealtimeSession.ts`
-- In the `response.done` handler, change `Promise.all(toolCalls.map(executeToolCall))` to a sequential loop: `for (const call of toolCalls) { await executeToolCall(call); }`. This ensures `set_project_setup_fields` completes and updates the ref before `project_setup_next` runs.
+### No other files need changes
 
-### 3. No backend or schema changes required
+The `ProjectSetupVoiceBridge.tsx` ref-based fix from the previous change is correct and will work once tool calls execute sequentially.
