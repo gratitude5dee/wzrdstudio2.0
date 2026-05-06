@@ -431,6 +431,13 @@ const SettingsBillingPage = () => {
           )}
         </section>
 
+        {/* ---- Stripe Setup (admin) ---- */}
+        <StripeSetupSection
+          plans={visiblePlans}
+          packs={visiblePacks}
+          onComplete={() => fetchCatalog()}
+        />
+
         {/* ---- Docs footer ---- */}
         <Card className="border-zinc-800/60 bg-zinc-950/40 p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
