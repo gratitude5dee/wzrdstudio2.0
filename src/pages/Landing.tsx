@@ -1,56 +1,79 @@
-import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import HeroSection from '@/components/landing/HeroSection';
-import FeatureGrid from '@/components/landing/FeatureGrid';
+import { LazySection } from '@/components/landing/LazySection';
 
 const CinematicIntro = lazy(() => import('@/components/landing/CinematicIntro'));
+
+// Below-fold sections — eagerly imported but rendered via LazySection
+import FeatureGrid from '@/components/landing/FeatureGrid';
 import { UseCasesSection } from '@/components/landing/UseCasesSection';
 import { TestimonialsSection } from '@/components/landing/TestimonialsSection';
-
 import FAQAccordion from '@/components/landing/FAQAccordion';
 import { PricingSectionRedesigned } from '@/components/landing/PricingSectionRedesigned';
 import CinematicHeroAnimatix from '@/components/landing/CinematicHeroAnimatix';
 import ScriptToScreenInput from '@/components/landing/ScriptToScreenInput';
-
 import ModelEcosystemGrid from '@/components/landing/ModelEcosystemGrid';
 import GovernanceSection from '@/components/landing/GovernanceSection';
 import UseCasesShowcase from '@/components/landing/UseCasesShowcase';
 import MassiveFooter from '@/components/landing/MassiveFooter';
-
-
 import { ThreeStepSection } from '@/components/landing/ThreeStepSection';
-
 import { IPhoneMockup } from '@/components/landing/IPhoneMockup';
-import { useAuth } from '@/providers/AuthProvider';
-import wzrdLogo from '@/assets/wzrd-logo.png';
 
 const Landing = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [introComplete, setIntroComplete] = useState(() => {
     return sessionStorage.getItem('mog-intro-seen') === 'true';
   });
+  const [introReady, setIntroReady] = useState(false);
 
   const handleIntroComplete = useCallback(() => {
     sessionStorage.setItem('mog-intro-seen', 'true');
     setIntroComplete(true);
   }, []);
 
+  // Force dark mode on landing
   useEffect(() => {
     const root = window.document.documentElement;
     root.classList.remove('light', 'system');
     root.classList.add('dark');
   }, []);
 
+  // Gate CinematicIntro behind idle + reduced-motion check
+  useEffect(() => {
+    if (introComplete) return;
+    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (prefersReduced) {
+      setIntroComplete(true);
+      return;
+    }
+    if ('requestIdleCallback' in window) {
+      const id = requestIdleCallback(() => setIntroReady(true), { timeout: 2000 });
+      return () => cancelIdleCallback(id);
+    } else {
+      const t = setTimeout(() => setIntroReady(true), 100);
+      return () => clearTimeout(t);
+    }
+  }, [introComplete]);
+
+  // RAF-throttled passive scroll listener
+  const rafRef = useRef(0);
   useEffect(() => {
     const handleScroll = () => {
-      setIsScrolled(window.scrollY > 50);
+      if (rafRef.current) return;
+      rafRef.current = requestAnimationFrame(() => {
+        setIsScrolled(window.scrollY > 50);
+        rafRef.current = 0;
+      });
     };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
   }, []);
 
   const faqItems = [
@@ -90,7 +113,7 @@ const Landing = () => {
   return (
     <div className="min-h-screen w-full relative bg-black">
       <AnimatePresence>
-        {!introComplete && (
+        {!introComplete && introReady && (
           <Suspense fallback={<div className="fixed inset-0 z-[99999] bg-black" />}>
             <CinematicIntro onComplete={handleIntroComplete} />
           </Suspense>
@@ -104,7 +127,7 @@ const Landing = () => {
       >
         <div className="flex items-center justify-between w-full gap-4">
           <Link to="/" onClick={(e) => { if (window.location.pathname === '/') { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }); } }} className="flex items-center justify-center gap-2 flex-shrink-0 z-50 cursor-pointer">
-            <img src={wzrdLogo} alt="WZRD" className="h-12 sm:h-15 w-auto" />
+            <span className="text-2xl font-bold text-white tracking-tight">WZRD</span>
           </Link>
 
           <nav className="hidden lg:flex flex-1 flex-row items-center justify-center gap-1 text-sm font-medium text-white/50">
@@ -117,17 +140,8 @@ const Landing = () => {
 
           <div className="flex items-center gap-3 flex-shrink-0">
             <Link to="/demo" className="rounded-lg font-medium relative cursor-pointer hover:-translate-y-0.5 transition duration-200 inline-block text-center bg-gradient-to-b from-[#FF6B4A] to-[#e55a3a] text-white shadow-[0_0_20px_rgba(255,107,74,0.2)] hover:shadow-[0_0_30px_rgba(255,107,74,0.4)] px-4 py-1.5 text-xs sm:text-sm whitespace-nowrap">Demo</Link>
-            {user ? (
-              <>
-                <Link to="/home" className="font-medium transition-colors hover:text-white text-white/50 text-xs sm:text-sm cursor-pointer whitespace-nowrap">Dashboard</Link>
-                <button onClick={handleLogout} className="rounded-lg font-bold relative cursor-pointer hover:-translate-y-0.5 transition duration-200 inline-block text-center bg-gradient-to-b from-[#FF6B4A] to-[#e55a3a] text-white shadow-[0_0_20px_rgba(255,107,74,0.2)] hover:shadow-[0_0_30px_rgba(255,107,74,0.4)] px-4 py-1.5 text-xs sm:text-sm whitespace-nowrap">Log Out</button>
-              </>
-            ) : (
-              <>
-                <Link to="/login" className="font-medium transition-colors hover:text-white text-white/50 text-xs sm:text-sm cursor-pointer whitespace-nowrap">Log In</Link>
-                <Link to="/login?mode=signup" className="rounded-lg font-bold relative cursor-pointer hover:-translate-y-0.5 transition duration-200 inline-block text-center bg-gradient-to-b from-[#FF6B4A] to-[#e55a3a] text-white shadow-[0_0_20px_rgba(255,107,74,0.2)] hover:shadow-[0_0_30px_rgba(255,107,74,0.4)] px-4 py-1.5 text-xs sm:text-sm whitespace-nowrap">Sign Up</Link>
-              </>
-            )}
+            <Link to="/login" className="font-medium transition-colors hover:text-white text-white/50 text-xs sm:text-sm cursor-pointer whitespace-nowrap">Log In</Link>
+            <Link to="/login?mode=signup" className="rounded-lg font-bold relative cursor-pointer hover:-translate-y-0.5 transition duration-200 inline-block text-center bg-gradient-to-b from-[#FF6B4A] to-[#e55a3a] text-white shadow-[0_0_20px_rgba(255,107,74,0.2)] hover:shadow-[0_0_30px_rgba(255,107,74,0.4)] px-4 py-1.5 text-xs sm:text-sm whitespace-nowrap">Sign Up</Link>
           </div>
         </div>
       </header>
@@ -135,7 +149,7 @@ const Landing = () => {
       {/* Mobile Header */}
       <header className="sticky top-4 z-[9999] mx-4 flex w-auto flex-row items-center justify-between rounded-full bg-black/70 backdrop-blur-xl border border-white/[0.08] shadow-2xl shadow-black/50 md:hidden px-4 py-3">
         <Link to="/" onClick={(e) => { if (window.location.pathname === '/') { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }); } }} className="flex items-center justify-center gap-2 cursor-pointer">
-          <img src={wzrdLogo} alt="WZRD" className="h-7 w-auto" />
+          <span className="text-lg font-bold text-white tracking-tight">WZRD</span>
         </Link>
         <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="flex items-center justify-center w-10 h-10 rounded-full bg-white/5 border border-white/[0.08] transition-colors hover:bg-white/10" aria-label="Toggle menu">
           <div className="flex flex-col items-center justify-center w-5 h-5 space-y-1">
@@ -157,17 +171,8 @@ const Landing = () => {
               <button onClick={() => handleMobileNavClick('testimonials')} className="text-left px-4 py-3 text-lg font-medium text-white/50 hover:text-white transition-colors rounded-xl hover:bg-white/5">Testimonials</button>
               <div className="border-t border-white/[0.06] pt-4 mt-4 flex flex-col space-y-3">
                 <Link to="/demo" className="px-4 py-3 text-lg font-bold text-center bg-gradient-to-b from-[#FF6B4A] to-[#e55a3a] text-white rounded-xl shadow-lg">Demo</Link>
-                {user ? (
-                  <>
-                    <Link to="/home" className="px-4 py-3 text-lg font-medium text-white/50 hover:text-white transition-colors rounded-xl hover:bg-white/5 cursor-pointer">Dashboard</Link>
-                    <button onClick={handleLogout} className="px-4 py-3 text-lg font-bold text-center bg-gradient-to-b from-[#FF6B4A] to-[#e55a3a] text-white rounded-xl shadow-lg">Log Out</button>
-                  </>
-                ) : (
-                  <>
-                    <Link to="/login" className="px-4 py-3 text-lg font-medium text-white/50 hover:text-white transition-colors rounded-xl hover:bg-white/5 cursor-pointer">Log In</Link>
-                    <Link to="/login?mode=signup" className="px-4 py-3 text-lg font-bold text-center bg-gradient-to-b from-[#FF6B4A] to-[#e55a3a] text-white rounded-xl shadow-lg">Sign Up</Link>
-                  </>
-                )}
+                <Link to="/login" className="px-4 py-3 text-lg font-medium text-white/50 hover:text-white transition-colors rounded-xl hover:bg-white/5 cursor-pointer">Log In</Link>
+                <Link to="/login?mode=signup" className="px-4 py-3 text-lg font-bold text-center bg-gradient-to-b from-[#FF6B4A] to-[#e55a3a] text-white rounded-xl shadow-lg">Sign Up</Link>
               </div>
             </nav>
           </div>
@@ -178,23 +183,29 @@ const Landing = () => {
       <div className="relative overflow-hidden">
         <div className="relative z-10">
           <HeroSection />
-
           <div className="mx-auto max-w-6xl px-4">
             <div className="h-px bg-gradient-to-r from-transparent via-orange-500/20 to-transparent" />
           </div>
-
-          
         </div>
       </div>
 
       {/* ===== PLATFORM CAPABILITIES SECTIONS ===== */}
       <div className="relative bg-black">
-        <CinematicHeroAnimatix />
-        <ScriptToScreenInput />
-        
-        <ModelEcosystemGrid />
-        <GovernanceSection />
-        <UseCasesShowcase />
+        <LazySection minHeight="400px">
+          <CinematicHeroAnimatix />
+        </LazySection>
+        <LazySection minHeight="300px">
+          <ScriptToScreenInput />
+        </LazySection>
+        <LazySection minHeight="400px">
+          <ModelEcosystemGrid />
+        </LazySection>
+        <LazySection minHeight="300px">
+          <GovernanceSection />
+        </LazySection>
+        <LazySection minHeight="400px">
+          <UseCasesShowcase />
+        </LazySection>
       </div>
 
       {/* ===== REST OF PAGE ===== */}
@@ -209,52 +220,55 @@ const Landing = () => {
         <div className="absolute top-40 left-1/2 -translate-x-1/2 w-[500px] h-[500px] rounded-full pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(139,92,246,0.15) 0%, rgba(139,92,246,0.05) 40%, transparent 70%)', filter: 'blur(60px)' }} />
 
         <div className="relative z-10">
+          <div className="mx-auto max-w-6xl px-4"><div className="h-px bg-gradient-to-r from-transparent via-purple-500/20 to-transparent" /></div>
+          <div className="mx-auto max-w-6xl px-4"><div className="h-px bg-gradient-to-r from-transparent via-purple-500/20 to-transparent" /></div>
+
+          <LazySection minHeight="400px">
+            <div id="features"><FeatureGrid /></div>
+          </LazySection>
 
           <div className="mx-auto max-w-6xl px-4"><div className="h-px bg-gradient-to-r from-transparent via-purple-500/20 to-transparent" /></div>
 
+          <LazySection minHeight="300px">
+            <ThreeStepSection />
+          </LazySection>
 
           <div className="mx-auto max-w-6xl px-4"><div className="h-px bg-gradient-to-r from-transparent via-purple-500/20 to-transparent" /></div>
 
-          {/* Features */}
-          <div id="features"><FeatureGrid /></div>
+          <LazySection minHeight="300px">
+            <UseCasesSection />
+          </LazySection>
 
           <div className="mx-auto max-w-6xl px-4"><div className="h-px bg-gradient-to-r from-transparent via-purple-500/20 to-transparent" /></div>
 
-          {/* Three Step */}
-          <ThreeStepSection />
+          <LazySection minHeight="400px">
+            <IPhoneMockup />
+          </LazySection>
 
           <div className="mx-auto max-w-6xl px-4"><div className="h-px bg-gradient-to-r from-transparent via-purple-500/20 to-transparent" /></div>
 
-          {/* Case Studies */}
-          <UseCasesSection />
+          <LazySection minHeight="300px">
+            <div id="testimonials"><TestimonialsSection /></div>
+          </LazySection>
 
           <div className="mx-auto max-w-6xl px-4"><div className="h-px bg-gradient-to-r from-transparent via-purple-500/20 to-transparent" /></div>
 
-          {/* iPhone Mockup */}
-          <IPhoneMockup />
+          <LazySection minHeight="400px">
+            <div id="pricing"><PricingSectionRedesigned /></div>
+          </LazySection>
+
+          <div className="mx-auto max-w-6xl px-4"><div className="h-px bg-gradient-to-r from-transparent via-purple-500/20 to-transparent" /></div>
+          <div className="mx-auto max-w-6xl px-4"><div className="h-px bg-gradient-to-r from-transparent via-purple-500/20 to-transparent" /></div>
+
+          <LazySection minHeight="200px">
+            <div id="faq"><FAQAccordion items={faqItems} /></div>
+          </LazySection>
 
           <div className="mx-auto max-w-6xl px-4"><div className="h-px bg-gradient-to-r from-transparent via-purple-500/20 to-transparent" /></div>
 
-          {/* Testimonials */}
-          <div id="testimonials"><TestimonialsSection /></div>
-
-          <div className="mx-auto max-w-6xl px-4"><div className="h-px bg-gradient-to-r from-transparent via-purple-500/20 to-transparent" /></div>
-
-          {/* Pricing */}
-          <div id="pricing"><PricingSectionRedesigned /></div>
-
-          <div className="mx-auto max-w-6xl px-4"><div className="h-px bg-gradient-to-r from-transparent via-purple-500/20 to-transparent" /></div>
-
-
-          <div className="mx-auto max-w-6xl px-4"><div className="h-px bg-gradient-to-r from-transparent via-purple-500/20 to-transparent" /></div>
-
-          {/* FAQ */}
-          <div id="faq"><FAQAccordion items={faqItems} /></div>
-
-          <div className="mx-auto max-w-6xl px-4"><div className="h-px bg-gradient-to-r from-transparent via-purple-500/20 to-transparent" /></div>
-
-          {/* Footer */}
-          <MassiveFooter />
+          <LazySection minHeight="300px">
+            <MassiveFooter />
+          </LazySection>
         </div>
       </div>
     </div>
