@@ -21,6 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { useBilling, type BillingCreditPack, type BillingPlan } from '@/hooks/useBilling';
 import { useCredits } from '@/hooks/useCredits';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 import { appRoutes } from '@/lib/routes';
 
 /* ------------------------------------------------------------------ */
