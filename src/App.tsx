@@ -8,7 +8,7 @@ import { appRoutes } from '@/lib/routes';
 const Landing = lazy(() => import('./pages/Landing'));
 const LoginRoute = lazy(() => import('./app/LoginRoute'));
 const AuthenticatedRoutes = lazy(() => import('./app/AuthenticatedRoutes'));
-const NotFound = lazy(() => import('./pages/NotFound'));
+
 
 const queryClient = new QueryClient();
 
