@@ -3,7 +3,8 @@ import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Play, ArrowDown, Film, Music, Type, Sparkles, Layers, SkipBack, SkipForward, Volume2, Search, Plus, Send } from 'lucide-react';
 import ScrollingPartners from '@/components/landing/ScrollingPartners';
-import wzrdIntroGif from '@/assets/wzrd-intro.gif';
+import { SmartVideo } from '@/components/media/SmartVideo';
+import { heroVideo } from '@/lib/brandMedia';
 import { musicStyleRange } from '@/lib/musicPolishAssets';
 
 interface HeroSectionProps {
@@ -151,12 +152,10 @@ export function HeroSection({
                   {/* Preview Window */}
                   <div className="flex-1 p-3">
                     <div className="bg-black rounded-lg h-full flex items-center justify-center border border-white/[0.05] relative overflow-hidden min-h-[160px]">
-                      <img
-                        src={wzrdIntroGif}
-                        alt="WZRD.studio animated product preview"
+                      <SmartVideo
+                        poster={heroVideo.poster}
+                        sources={[...heroVideo.sources]}
                         className="absolute inset-0 w-full h-full object-cover"
-                        loading="eager"
-                        decoding="async"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-black/5" />
                     </div>
