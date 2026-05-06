@@ -442,6 +442,7 @@ export const ipVaultService = {
       tx_hash: result.txHash ?? null,
       story_explorer_url: result.storyExplorerUrl ?? null,
       license_terms_ids: result.licenseTermsIds ?? current?.license_terms_ids ?? [],
+      royalty_vault_address: result.royaltyVaultAddress ?? null,
       proof_packet: {
         ...(current?.proof_packet ?? {}),
         story: {
