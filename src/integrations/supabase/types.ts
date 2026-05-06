@@ -741,6 +741,206 @@ export type Database = {
           },
         ]
       }
+      billing_checkout_sessions: {
+        Row: {
+          amount_cents: number
+          checkout_mode: string
+          created_at: string
+          credits: number
+          id: string
+          metadata: Json | null
+          pack_code: string | null
+          plan_code: string | null
+          status: string
+          stripe_customer_id: string | null
+          stripe_payment_intent_id: string | null
+          stripe_session_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount_cents?: number
+          checkout_mode: string
+          created_at?: string
+          credits?: number
+          id?: string
+          metadata?: Json | null
+          pack_code?: string | null
+          plan_code?: string | null
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_payment_intent_id?: string | null
+          stripe_session_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount_cents?: number
+          checkout_mode?: string
+          created_at?: string
+          credits?: number
+          id?: string
+          metadata?: Json | null
+          pack_code?: string | null
+          plan_code?: string | null
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_payment_intent_id?: string | null
+          stripe_session_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      billing_credit_packs: {
+        Row: {
+          created_at: string
+          credits: number
+          display_name: string
+          id: string
+          is_active: boolean
+          metadata: Json | null
+          pack_code: string
+          price_cents: number
+          sort_order: number
+          stripe_price_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          credits: number
+          display_name: string
+          id?: string
+          is_active?: boolean
+          metadata?: Json | null
+          pack_code: string
+          price_cents: number
+          sort_order?: number
+          stripe_price_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          credits?: number
+          display_name?: string
+          id?: string
+          is_active?: boolean
+          metadata?: Json | null
+          pack_code?: string
+          price_cents?: number
+          sort_order?: number
+          stripe_price_id?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      billing_plans: {
+        Row: {
+          created_at: string
+          description: string | null
+          display_name: string
+          id: string
+          is_active: boolean
+          metadata: Json | null
+          monthly_price_cents: number
+          monthly_quota: number
+          plan_code: string
+          rollover_cap: number
+          sort_order: number
+          stripe_price_monthly_id: string | null
+          stripe_price_yearly_id: string | null
+          updated_at: string
+          yearly_price_cents: number | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          display_name: string
+          id?: string
+          is_active?: boolean
+          metadata?: Json | null
+          monthly_price_cents?: number
+          monthly_quota?: number
+          plan_code: string
+          rollover_cap?: number
+          sort_order?: number
+          stripe_price_monthly_id?: string | null
+          stripe_price_yearly_id?: string | null
+          updated_at?: string
+          yearly_price_cents?: number | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          display_name?: string
+          id?: string
+          is_active?: boolean
+          metadata?: Json | null
+          monthly_price_cents?: number
+          monthly_quota?: number
+          plan_code?: string
+          rollover_cap?: number
+          sort_order?: number
+          stripe_price_monthly_id?: string | null
+          stripe_price_yearly_id?: string | null
+          updated_at?: string
+          yearly_price_cents?: number | null
+        }
+        Relationships: []
+      }
+      billing_subscriptions: {
+        Row: {
+          cancel_at_period_end: boolean
+          created_at: string
+          current_period_end: string | null
+          current_period_start: string | null
+          id: string
+          metadata: Json | null
+          plan_code: string
+          status: string
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cancel_at_period_end?: boolean
+          created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          id?: string
+          metadata?: Json | null
+          plan_code: string
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cancel_at_period_end?: boolean
+          created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          id?: string
+          metadata?: Json | null
+          plan_code?: string
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_subscriptions_plan_code_fkey"
+            columns: ["plan_code"]
+            isOneToOne: false
+            referencedRelation: "billing_plans"
+            referencedColumns: ["plan_code"]
+          },
+        ]
+      }
       board_collaborators: {
         Row: {
           board_id: string

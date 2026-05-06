@@ -78,7 +78,7 @@ function parseCatalogResponse(data: unknown): BillingCatalogResponse | null {
 export function useBilling() {
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
-  const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
+  const [checkoutLoadingId, setCheckoutLoadingId] = useState<string | null>(null);
   const [isPortalLoading, setIsPortalLoading] = useState(false);
   const [catalog, setCatalog] = useState<BillingCatalogResponse | null>(null);
 
@@ -118,7 +118,8 @@ export function useBilling() {
         return { success: false, message: 'Please log in to continue.' };
       }
 
-      setIsCheckoutLoading(true);
+      const loadingId = payload.pack_code || payload.plan_code || 'checkout';
+      setCheckoutLoadingId(loadingId);
       try {
         const { data, error } = await supabase.functions.invoke('billing-checkout', {
           body: payload,
@@ -147,7 +148,7 @@ export function useBilling() {
         console.error('Checkout start failed', error);
         return { success: false, message };
       } finally {
-        setIsCheckoutLoading(false);
+        setCheckoutLoadingId(null);
       }
     },
     [user]
@@ -194,7 +195,8 @@ export function useBilling() {
 
   return {
     isLoading,
-    isCheckoutLoading,
+    isCheckoutLoading: checkoutLoadingId !== null,
+    checkoutLoadingId,
     isPortalLoading,
     billingMode: catalog?.billing_mode || 'test_only',
     checkoutAvailable: catalog?.checkout_available !== false,
@@ -208,4 +210,3 @@ export function useBilling() {
     openPortal,
   };
 }
-
