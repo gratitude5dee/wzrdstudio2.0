@@ -130,6 +130,83 @@ function PackCard({
 }
 
 /* ------------------------------------------------------------------ */
+/*  Stripe Setup Section (admin — auto-hides when configured)         */
+/* ------------------------------------------------------------------ */
+
+function StripeSetupSection({
+  plans,
+  packs,
+  onComplete,
+}: {
+  plans: BillingPlan[];
+  packs: BillingCreditPack[];
+  onComplete: () => void;
+}) {
+  const [isRunning, setIsRunning] = useState(false);
+
+  const needsSetup = useMemo(() => {
+    const unconfiguredPlans = plans.filter(
+      (p) => (p.plan_code === 'pro' || p.plan_code === 'business') && !hasStripePrice(p),
+    );
+    const unconfiguredPacks = packs.filter((p) => !hasPackStripePrice(p));
+    return unconfiguredPlans.length > 0 || unconfiguredPacks.length > 0;
+  }, [plans, packs]);
+
+  const handleSetup = useCallback(async () => {
+    setIsRunning(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('billing-setup');
+      if (error) {
+        toast.error(`Setup failed: ${error.message}`);
+        return;
+      }
+      const results = data?.results || {};
+      const created = Object.values(results).filter((r: any) => r.status === 'created').length;
+      const skipped = Object.values(results).filter((r: any) => r.status === 'already_configured').length;
+      const errors = Object.values(results).filter((r: any) => r.status === 'error').length;
+
+      if (errors > 0) {
+        toast.warning(`Setup completed with ${errors} error(s). Check edge function logs.`);
+      } else {
+        toast.success(`Stripe configured! ${created} created, ${skipped} already set.`);
+      }
+      onComplete();
+    } catch (err) {
+      toast.error('Failed to invoke billing-setup function.');
+    } finally {
+      setIsRunning(false);
+    }
+  }, [onComplete]);
+
+  if (!needsSetup) return null;
+
+  return (
+    <Card className="mb-6 border-amber-500/30 bg-amber-950/10 p-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <Settings className="h-4 w-4 text-amber-400" />
+            <h4 className="text-sm font-semibold text-amber-200">Stripe Setup Required</h4>
+          </div>
+          <p className="text-xs text-zinc-400">
+            Some plans or credit packs don't have Stripe Price IDs. Click to auto-create Products &amp; Prices in Stripe and link them.
+          </p>
+        </div>
+        <Button
+          onClick={handleSetup}
+          disabled={isRunning}
+          className="bg-amber-500 text-zinc-950 hover:bg-amber-400 shrink-0"
+          size="sm"
+        >
+          {isRunning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Settings className="mr-2 h-4 w-4" />}
+          {isRunning ? 'Configuring…' : 'Configure Stripe'}
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Main Page                                                         */
 /* ------------------------------------------------------------------ */
 
