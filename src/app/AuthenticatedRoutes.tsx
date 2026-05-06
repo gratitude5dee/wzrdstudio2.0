@@ -57,6 +57,7 @@ const KanvasRemix = lazyWithRetry(() => import('@/pages/KanvasRemix'));
 const KanvasRemixJobs = lazyWithRetry(() => import('@/pages/KanvasRemixJobs'));
 const AssetsPage = lazyWithRetry(() => import('@/pages/AssetsPage'));
 const IPVault = lazyWithRetry(() => import('@/pages/IPVault'));
+const NotFound = lazyWithRetry(() => import('@/pages/NotFound'));
 
 const CursorWrapper = () => {
   const { isLoading } = useCursorLoading();
