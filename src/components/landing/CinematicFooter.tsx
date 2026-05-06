@@ -4,9 +4,7 @@ const CinematicFooter = () => {
   return (
     <footer className="flex flex-col sm:flex-row justify-between items-center px-8 py-10 border-t border-white/5 mt-20 text-[10px] tracking-[0.2em] text-white/50 uppercase">
       <div className="flex items-center gap-3 mb-4 sm:mb-0">
-        <div className="w-6 h-6 bg-white rounded-sm flex items-center justify-center text-black font-black text-[10px]">
-          W
-        </div>
+        <img src="/lovable-uploads/wzrdtechlogo.png" alt="WZRD Studio" className="h-6 object-contain" />
         <span>&copy; {new Date().getFullYear()} WZRD.Studio</span>
       </div>
       <nav className="flex items-center gap-8">
