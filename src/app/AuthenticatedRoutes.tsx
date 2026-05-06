@@ -262,6 +262,7 @@ const AuthenticatedRoutes = () => {
                       </ProtectedRoute>
                     }
                   />
+                  <Route path="*" element={<NotFound />} />
                 </Routes>
               </Suspense>
             </CursorLoadingProvider>
