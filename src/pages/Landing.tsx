@@ -127,7 +127,7 @@ const Landing = () => {
       >
         <div className="flex items-center justify-between w-full gap-4">
           <Link to="/" onClick={(e) => { if (window.location.pathname === '/') { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }); } }} className="flex items-center justify-center gap-2 flex-shrink-0 z-50 cursor-pointer">
-            <span className="text-2xl font-bold text-white tracking-tight">WZRD</span>
+            <img src="/lovable-uploads/wzrdtechlogo.png" alt="WZRD Studio" className="h-8 object-contain" />
           </Link>
 
           <nav className="hidden lg:flex flex-1 flex-row items-center justify-center gap-1 text-sm font-medium text-white/50">
@@ -149,7 +149,7 @@ const Landing = () => {
       {/* Mobile Header */}
       <header className="sticky top-4 z-[9999] mx-4 flex w-auto flex-row items-center justify-between rounded-full bg-black/70 backdrop-blur-xl border border-white/[0.08] shadow-2xl shadow-black/50 md:hidden px-4 py-3">
         <Link to="/" onClick={(e) => { if (window.location.pathname === '/') { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }); } }} className="flex items-center justify-center gap-2 cursor-pointer">
-          <span className="text-lg font-bold text-white tracking-tight">WZRD</span>
+          <img src="/lovable-uploads/wzrdtechlogo.png" alt="WZRD Studio" className="h-6 object-contain" />
         </Link>
         <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="flex items-center justify-center w-10 h-10 rounded-full bg-white/5 border border-white/[0.08] transition-colors hover:bg-white/10" aria-label="Toggle menu">
           <div className="flex flex-col items-center justify-center w-5 h-5 space-y-1">

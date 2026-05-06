@@ -1,28 +1,18 @@
-## Add Sidebar Navigation and Header to IP Vault
+## Replace text "WZRD" with logo image in landing nav and footers
 
-### What changes
+Three files need updates to swap the plain-text logo for the actual WZRD logo image (`/lovable-uploads/wzrdtechlogo.png`):
 
-**1. Wrap IP Vault page with the same sidebar layout as `/home`**
+### 1. Landing page nav (`src/pages/Landing.tsx`)
 
-Update `IPVaultPage.tsx` to include:
-- The `Sidebar` component from `src/components/home/Sidebar.tsx` (desktop, hidden on mobile)
-- The `MobileSidebarDrawer` component (mobile)
-- The `MobileHeader` component (mobile)
-- `activeView` state set to `'ip-vault'` so the IP Vault nav item is highlighted
+- **Desktop header** (line 130): Replace `<span className="text-2xl font-bold text-white tracking-tight">WZRD</span>` with an `<img>` tag using the logo, height ~32px.
+- **Mobile header** (line 152): Same replacement, height ~24px.
 
-The main content area will use the same `motion.div` wrapper with `marginLeft` animation that `/home` uses, driven by `useSidebar().isCollapsed`.
+### 2. MassiveFooter (`src/components/landing/MassiveFooter.tsx`)
 
-**2. Add back-chevron + WZRD logo header bar**
+- Lines 14-17: Replace the "W" square div + "WZRD.tech" text span with the logo `<img>` at ~28px height, keeping the existing layout.
 
-Above the existing IP Vault header, add a desktop header bar matching the Home page pattern:
-- Left side: A `ChevronLeft` button that navigates back to `/home`, followed by the WZRD logo image and the ALPHA badge
-- When the sidebar is collapsed, show a `ChevronRight` button to re-expand it (same as Home)
-- Right side: ThemeToggle
+### 3. CinematicFooter (`src/components/landing/CinematicFooter.tsx`)
 
-**3. Files modified**
+- Lines 7-9: Replace the "W" square div with the logo `<img>` at ~24px height, keeping the copyright text.
 
-| File | Change |
-|------|--------|
-| `src/components/ip-vault/IPVaultPage.tsx` | Import Sidebar, MobileSidebarDrawer, MobileHeader, useSidebar, wzrdLogo. Wrap content in sidebar layout. Add header bar with back chevron + logo. |
-
-No new files needed. No database changes.
+No new files, no database changes. Only visual updates to use the existing logo asset consistently.

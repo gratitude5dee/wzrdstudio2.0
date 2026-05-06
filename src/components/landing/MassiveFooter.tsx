@@ -11,10 +11,7 @@ const MassiveFooter = () => {
           {/* Left: Logo + social */}
           <div className="flex flex-col gap-6">
             <div className="flex items-center gap-3">
-              <div className="w-7 h-7 bg-white rounded-sm flex items-center justify-center text-black font-black text-[11px]">
-                W
-              </div>
-              <span className="text-white font-medium text-sm tracking-wide">WZRD.tech</span>
+              <img src="/lovable-uploads/wzrdtechlogo.png" alt="WZRD Studio" className="h-7 object-contain" />
             </div>
             <div className="flex items-center gap-4">
               <a href="https://linkedin.com" target="_blank" rel="noopener noreferrer" className="text-zinc-500 hover:text-white transition-colors">
