@@ -107,7 +107,7 @@ describe('SettingsBillingPage', () => {
 
   it('Credit pack CTA calls pack checkout with pack_code', async () => {
     await renderBilling();
-    const btns = screen.getAllByLabelText(/Buy 2,000 credits/i);
+    const btns = screen.getAllByLabelText(/Buy 2,000 credits/i) ?? screen.getAllByLabelText(/Buy 2000 credits/i);
     fireEvent.click(btns[0]);
     await waitFor(() => {
       expect(mockStartCheckout).toHaveBeenCalledWith({
