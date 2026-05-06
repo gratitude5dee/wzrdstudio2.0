@@ -3,7 +3,8 @@ import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Play, ArrowDown, Film, Music, Type, Sparkles, Layers, SkipBack, SkipForward, Volume2, Search, Plus, Send } from 'lucide-react';
 import ScrollingPartners from '@/components/landing/ScrollingPartners';
-import wzrdIntroGif from '@/assets/wzrd-intro.gif';
+import { SmartVideo } from '@/components/media/SmartVideo';
+import { heroVideo } from '@/lib/brandMedia';
 import { musicStyleRange } from '@/lib/musicPolishAssets';
 
 interface HeroSectionProps {
