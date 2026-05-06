@@ -1,74 +1,131 @@
 
-# WZRD Studio Landing + Studio Performance Plan
+# Billing Page Redesign + Stripe Checkout Integration
 
-## 1. Route Shell Split
+## Overview
+Redesign `/settings/billing` into a premium SaaS billing console with working Stripe Checkout links for Pro, Business, and credit packs. All checkout flows already exist in the backend — this is primarily a frontend redesign + seed data + tests.
 
-**Current**: `App.tsx` wraps every route (including `/`) in `AuthProvider`, `ThirdwebProvider`, `VoiceAgentProvider`, `SidebarProvider`, `CursorLoadingProvider`, `InsufficientCreditsDialog`, and a 2-second `LoadingScreen`.
+## 1. Per-Item Checkout Loading in useBilling
 
-**Change**: Restructure into three route shells:
+**File: `src/hooks/useBilling.ts`**
 
-- **Public shell** (`/`, `*`): Only `QueryClientProvider`, `ThemeProvider`, `BrowserRouter`, `TooltipProvider`, `Suspense`. No auth, no wallet, no voice, no sidebar, no cursor, no credit dialogs.
-- **Login shell** (`/login`): Adds `AuthProvider` only.
-- **Authenticated shell** (all other routes): Adds `AuthProvider`, `ThirdwebProvider`, `VoiceAgentProvider`, `SidebarProvider`, `CursorLoadingProvider`, `InsufficientCreditsDialog`, `CursorWrapper`.
+Replace the single `isCheckoutLoading` boolean with a `checkoutLoadingId` string that tracks which specific item (plan code or pack code) is currently checking out. This prevents all buttons from showing loading state simultaneously.
 
-Files:
-- `src/App.tsx` -- slim router with lazy `LoginRoute` and `AuthenticatedRoutes`
-- `src/app/LoginRoute.tsx` -- new, wraps Login in AuthProvider
-- `src/app/AuthenticatedRoutes.tsx` -- new, all protected routes with full provider stack
+- Add `checkoutLoadingId: string | null` state
+- Export both `isCheckoutLoading` (derived: `checkoutLoadingId !== null`) for backward compat and `checkoutLoadingId` for per-item UI
+- In `startCheckout`, set `checkoutLoadingId` to the pack_code or plan_code before the request, clear on complete
 
-Remove the 2-second `LoadingScreen` timer entirely. Protected routes use existing `PerfShell` skeleton during auth resolution.
+## 2. Billing Page Redesign
 
-The `lovable-tagger` Vite plugin and its `componentTagger()` call remain untouched -- they are dev-only and unrelated.
+**File: `src/pages/SettingsBillingPage.tsx`** — full rewrite
 
-## 2. Landing Page Optimization
+### Checkout query param handling
+- On mount, check `?checkout=success` → show success toast + call `fetchCatalog()` to refresh
+- On mount, check `?checkout=cancel` → show info toast ("Checkout cancelled")
+- Clear query params after handling
 
-- **`src/pages/Landing.tsx`**: Remove `useAuth()` import and `wzrdLogo` raw PNG import. Wrap below-fold sections (`FeatureGrid`, `UseCasesSection`, `TestimonialsSection`, `FAQAccordion`, `PricingSectionRedesigned`, `ModelEcosystemGrid`, `GovernanceSection`, `UseCasesShowcase`, `MassiveFooter`, `ThreeStepSection`, `IPhoneMockup`) in a `LazySection` intersection-observer gate so they only render when near the viewport.
-- **`src/components/landing/LazySection.tsx`**: New shared component using `IntersectionObserver` with `rootMargin: '200px'` to defer rendering.
-- Gate `CinematicIntro` behind `requestIdleCallback` + `prefers-reduced-motion` check so it does not block first paint.
-- Convert scroll handler to passive listener with `requestAnimationFrame` throttle.
+### Top summary area
+Two cards in a grid:
+- **Current Plan card**: plan name, billing mode badge, renewal date, "Manage Subscription" button
+- **Credits card**: available credits with progress bar, monthly quota, "Top Up" button
 
-## 3. Media Pipeline + Optimized Derivatives
+### Plan comparison section (id="plans" for anchor)
+Grid of 4 cards: Free, Pro, Business, Enterprise
 
-- **`scripts/generate-optimized-media.mjs`**: New build-prep script using `sharp` (devDependency) to generate AVIF/WebP/JPEG derivatives from source PNGs, and `ffmpeg` (already in PATH) to convert `wzrd-intro.gif` to MP4/WebM loops + WebP posters. Outputs to `public/generated-media/`.
-- **`src/lib/optimizedMedia.ts`**: Type definitions for the optimized media contract (`id`, `kind`, `alt`, `width`, `height`, `placeholder`, `sources`, `srcSet`, `sizes`, `poster`, `previewLoop`).
-- **`src/lib/generated/optimizedMusicPolishManifest.ts`**: Generated manifest mapping each music-polish asset to its optimized derivatives with dimensions, placeholders, and role metadata.
-- **`src/lib/brandMedia.ts`**: Exports hero video poster/loop and logo derivative entries.
-- **`src/lib/musicPolishAssets.ts`**: Refactor from 26 raw PNG imports to exporting optimized metadata from the manifest. No raw imports remain.
-- **`src/components/media/ResponsiveImage.tsx`**: New `<picture>` component with AVIF/WebP/JPEG sources and blur placeholder.
-- **`src/components/media/SmartVideo.tsx`**: New `<video>` component with MP4/WebM sources and poster, autoplay/muted/loop for hero use.
-- **`src/components/landing/HeroSection.tsx`**: Replace raw `wzrd-intro.gif` import with `SmartVideo` using generated poster + loop.
-- Add `sharp` as a devDependency. Add `"media:optimize"` script to `package.json`.
+- **Pro** ($49/mo): 2,000 monthly credits, 2,000 rollover cap, feature bullets (priority generation, advanced models, project sharing)
+- **Business** ($149/mo): 10,000 monthly credits, 10,000 rollover cap, feature bullets (everything in Pro + team seats, priority support, custom workflows) — visually marked as "Best Value" with an accent border/badge
+- **Free**: current welcome grant description, disabled "Current Plan" button if active
+- **Enterprise**: "Contact Sales" CTA
 
-## 4. index.html Cleanup
+Each card:
+- Shows disabled state with tooltip when `!checkoutAvailable` or when the plan's `stripe_price_monthly_id` is missing (from catalog data)
+- Shows "Current Plan" label + disabled button for active plan
+- Loading spinner only on the specific card being checked out (using `checkoutLoadingId`)
+- Calls `startCheckout({ checkout_mode: 'subscription', plan_code, interval: 'month' })`
 
-- Remove the GPT Engineer `<script src="https://cdn.gpteng.co/gptengineer.js">` tag.
-- Remove `preconnect`/`dns-prefetch` hints for `api.supabase.co`, `fal.media`, `v3.fal.media`, `api.gmicloud.ai` (not needed on public landing; authenticated code can add them dynamically or they connect on first use).
-- Keep font preconnects (fonts.googleapis.com, fonts.gstatic.com).
+### Credit packs section
+Replace the modal list with a clean 3-card grid layout directly on the page (below plans). Use the 3 preferred packs from catalog or fallback:
+- **pack_500**: 500 credits / $50 — show as starter
+- **pack_2000**: 2,000 credits / $180 — show as "Best Value" with accent
+- **pack_5000**: 5,000 credits / $400 — show as "Max Pack"
 
-## 5. Package Manager Canonicalization
+Each card shows:
+- Credit count, price, effective per-credit cost (e.g., "$0.10/credit → $0.08/credit")
+- Buy button with per-item loading state
+- Disabled state when checkout unavailable or stripe_price_id missing
 
-- Remove `package-lock.json`.
-- `bun.lock` remains as the canonical lock file.
+### Top-up modal
+Keep the dialog for the `?topup=1` / `billing:open-topup` event triggers, but render the same 3 pack cards inside it instead of the long scrollable list.
 
-## 6. Vite Chunk Config
+### Billing docs link
+Move to a secondary footer section — subtle card with "Open Docs" link.
 
-- Remove the `manualChunks` function from `vite.config.ts` that created named chunks (`editor-editframe`, `visual-3d`, `kanvas-worldview`, `kanvas-character`, `kanvas-edit`). These caused feature chunks to appear as entry dependencies. Lazy route boundaries handle code-splitting naturally.
+### Visual treatment
+- Keep the existing dark gradient background
+- Use orange accent for "Best Value" highlights
+- Zinc-800 borders, zinc-950 card backgrounds
+- Proper spacing, consistent heading hierarchy
 
-## 7. Static Guardrails (Tests)
+## 3. Stripe Price ID Seed Migration
 
-- **`src/lib/__tests__/performance-guardrails.test.ts`**: New Vitest test verifying:
-  - `App.tsx` does not import `AuthProvider`, `ThirdwebProvider`, `VoiceAgentProvider` at module scope
-  - No UI file imports raw music-polish PNGs, raw intro GIF, or raw logo PNG
-- **`src/lib/__tests__/optimized-media.test.ts`**: New Vitest test verifying manifest entries have required fields (dimensions, placeholders, sources).
+**File: `supabase/migrations/[timestamp]_stripe_price_id_placeholders.sql`**
 
-## Implementation Order
+SQL that updates existing `billing_plans` and `billing_credit_packs` rows with placeholder Stripe Price IDs plus clear comments:
 
-1. Route shell split (App.tsx + 2 new files)
-2. Landing page optimization (Landing.tsx + LazySection component)
-3. Media pipeline + derivatives (script, types, manifest, components)
-4. Hero/landing media swap (HeroSection, musicPolishAssets)
-5. index.html cleanup
-6. Remove package-lock.json, remove manualChunks
-7. Add guardrail tests
+```sql
+-- Replace these placeholder Price IDs with real ones from your Stripe Dashboard.
+-- Stripe > Products > select product > copy Price ID (starts with price_)
 
-Estimated: ~15 files modified/created, ~1 file deleted (package-lock.json).
+UPDATE billing_plans SET stripe_price_monthly_id = 'price_REPLACE_WITH_PRO_MONTHLY'
+WHERE plan_code = 'pro' AND (stripe_price_monthly_id IS NULL OR stripe_price_monthly_id = '');
+
+UPDATE billing_plans SET stripe_price_monthly_id = 'price_REPLACE_WITH_BUSINESS_MONTHLY'
+WHERE plan_code = 'business' AND (stripe_price_monthly_id IS NULL OR stripe_price_monthly_id = '');
+
+-- Credit packs
+UPDATE billing_credit_packs SET stripe_price_id = 'price_REPLACE_WITH_PACK_500'
+WHERE pack_code = 'pack_500' AND (stripe_price_id IS NULL OR stripe_price_id = '');
+
+UPDATE billing_credit_packs SET stripe_price_id = 'price_REPLACE_WITH_PACK_2000'
+WHERE pack_code = 'pack_2000' AND (stripe_price_id IS NULL OR stripe_price_id = '');
+
+UPDATE billing_credit_packs SET stripe_price_id = 'price_REPLACE_WITH_PACK_5000'
+WHERE pack_code = 'pack_5000' AND (stripe_price_id IS NULL OR stripe_price_id = '');
+```
+
+Also ensure the 3 preferred packs exist in `billing_credit_packs` if missing:
+
+```sql
+INSERT INTO billing_credit_packs (pack_code, display_name, credits, price_cents, is_active, stripe_price_id)
+VALUES
+  ('pack_500',  '500 Credits',   500,   5000, true, 'price_REPLACE_WITH_PACK_500'),
+  ('pack_2000', '2,000 Credits', 2000, 18000, true, 'price_REPLACE_WITH_PACK_2000'),
+  ('pack_5000', '5,000 Credits', 5000, 40000, true, 'price_REPLACE_WITH_PACK_5000')
+ON CONFLICT (pack_code) DO UPDATE SET
+  stripe_price_id = CASE
+    WHEN billing_credit_packs.stripe_price_id IS NULL OR billing_credit_packs.stripe_price_id = ''
+    THEN EXCLUDED.stripe_price_id
+    ELSE billing_credit_packs.stripe_price_id
+  END;
+```
+
+## 4. Tests
+
+**File: `src/pages/__tests__/SettingsBillingPage.test.tsx`**
+
+Mock `useBilling` and `useCredits` hooks. Test:
+
+1. Pro CTA calls `startCheckout` with `{ checkout_mode: 'subscription', plan_code: 'pro', interval: 'month' }`
+2. Business CTA calls `startCheckout` with `{ checkout_mode: 'subscription', plan_code: 'business', interval: 'month' }`
+3. Credit pack CTA calls `startCheckout` with `{ checkout_mode: 'pack', pack_code: 'pack_2000' }`
+4. When `checkoutAvailable` is false, all checkout buttons are disabled
+5. `?checkout=success` query param triggers success toast
+6. `?checkout=cancel` query param triggers info toast
+7. Current plan button is disabled and labeled "Current Plan"
+
+## Files Changed
+- `src/hooks/useBilling.ts` — add `checkoutLoadingId` per-item state
+- `src/pages/SettingsBillingPage.tsx` — full redesign
+- `supabase/migrations/[timestamp]_stripe_price_id_placeholders.sql` — seed Stripe Price IDs
+- `src/pages/__tests__/SettingsBillingPage.test.tsx` — new test file
+
+No edge function changes needed — the existing `billing-checkout` already handles everything correctly. No Stripe secrets in frontend code.
