@@ -114,6 +114,9 @@ function normalizeVaultRow(row: any): IPVaultItem {
     commercial_rev_share: asNumberOrNull(row.commercial_rev_share),
     minting_fee_wip: asNumberOrNull(row.minting_fee_wip),
     proof_packet: asRecord(row.proof_packet),
+    royalty_vault_address: row.royalty_vault_address ?? null,
+    last_claim_tx_hash: row.last_claim_tx_hash ?? null,
+    last_claimed_at: row.last_claimed_at ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };

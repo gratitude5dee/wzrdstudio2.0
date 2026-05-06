@@ -53,6 +53,9 @@ export interface IPVaultItem {
   commercial_rev_share: number | null;
   minting_fee_wip: number | null;
   proof_packet: Record<string, unknown>;
+  royalty_vault_address: string | null;
+  last_claim_tx_hash: string | null;
+  last_claimed_at: string | null;
   created_at: string;
   updated_at: string;
 }
