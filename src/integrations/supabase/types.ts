@@ -3908,6 +3908,8 @@ export type Database = {
           ip_id: string | null
           ip_metadata_hash: string | null
           ip_metadata_uri: string | null
+          last_claim_tx_hash: string | null
+          last_claimed_at: string | null
           license_profile: string
           license_terms_ids: string[]
           media_hash: string | null
@@ -3924,6 +3926,7 @@ export type Database = {
           registration_status: string
           relationship_type: string
           royalty_policy: string | null
+          royalty_vault_address: string | null
           source_id: string
           source_type: string
           story_explorer_url: string | null
@@ -3944,6 +3947,8 @@ export type Database = {
           ip_id?: string | null
           ip_metadata_hash?: string | null
           ip_metadata_uri?: string | null
+          last_claim_tx_hash?: string | null
+          last_claimed_at?: string | null
           license_profile?: string
           license_terms_ids?: string[]
           media_hash?: string | null
@@ -3960,6 +3965,7 @@ export type Database = {
           registration_status?: string
           relationship_type?: string
           royalty_policy?: string | null
+          royalty_vault_address?: string | null
           source_id: string
           source_type: string
           story_explorer_url?: string | null
@@ -3980,6 +3986,8 @@ export type Database = {
           ip_id?: string | null
           ip_metadata_hash?: string | null
           ip_metadata_uri?: string | null
+          last_claim_tx_hash?: string | null
+          last_claimed_at?: string | null
           license_profile?: string
           license_terms_ids?: string[]
           media_hash?: string | null
@@ -3996,6 +4004,7 @@ export type Database = {
           registration_status?: string
           relationship_type?: string
           royalty_policy?: string | null
+          royalty_vault_address?: string | null
           source_id?: string
           source_type?: string
           story_explorer_url?: string | null
