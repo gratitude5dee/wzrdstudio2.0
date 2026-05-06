@@ -40,20 +40,7 @@ export default defineConfig(({ mode }) => ({
   },
   build: mode === 'editframe'
     ? undefined
-    : {
-      rollupOptions: {
-        output: {
-          manualChunks(id) {
-            if (id.includes('@editframe/')) return 'editor-editframe';
-            if (id.includes('@react-three/') || id.includes('/three/')) return 'visual-3d';
-            if (id.includes('/src/components/worldview/')) return 'kanvas-worldview';
-            if (id.includes('/src/components/character-creation/')) return 'kanvas-character';
-            if (id.includes('/src/components/kanvas/EditStudioSection') || id.includes('/src/components/kanvas/EditCanvas')) return 'kanvas-edit';
-            return undefined;
-          },
-        },
-      },
-    },
+    : undefined,
   test: {
     globals: true,
     environment: "jsdom",
