@@ -135,9 +135,8 @@ describe('IPVaultPage', () => {
       makeItem({ registration_status: 'metadata_ready', ip_metadata_uri: 'ipfs://test' }),
     ]);
     render(<IPVaultPage />);
-    await screen.findByText('Nova Pilot');
+    await screen.findAllByText('Nova Pilot');
     fireEvent.click(screen.getByTestId('inspector-tab-registration'));
-    // Step 2 should be checked
     expect(screen.getByText('2. Metadata pinned to IPFS')).toBeInTheDocument();
   });
 
@@ -151,8 +150,7 @@ describe('IPVaultPage', () => {
       }),
     ]);
     render(<IPVaultPage />);
-    await screen.findByText('Nova Pilot');
-    // Overview tab is default
+    await screen.findAllByText('Nova Pilot');
     expect(screen.getByText('View on StoryScan')).toBeInTheDocument();
     expect(screen.getByText('IP metadata (IPFS)')).toBeInTheDocument();
   });
@@ -160,18 +158,15 @@ describe('IPVaultPage', () => {
   it('switches tabs in the inspector', async () => {
     vi.mocked(ipVaultService.list).mockResolvedValue([makeItem()]);
     render(<IPVaultPage />);
-    await screen.findByText('Nova Pilot');
+    await screen.findAllByText('Nova Pilot');
 
-    // Switch to licensing tab
     fireEvent.click(screen.getByTestId('inspector-tab-licensing'));
     expect(screen.getByText('License profile')).toBeInTheDocument();
     expect(screen.getByTestId('license-card-none')).toBeInTheDocument();
 
-    // Switch to derivatives tab
     fireEvent.click(screen.getByTestId('inspector-tab-derivatives'));
     expect(screen.getByText('Relationship type')).toBeInTheDocument();
 
-    // Switch to proof tab
     fireEvent.click(screen.getByTestId('inspector-tab-proof'));
     expect(screen.getByText('Source provenance')).toBeInTheDocument();
   });
@@ -182,7 +177,7 @@ describe('IPVaultPage', () => {
     vi.mocked(ipVaultService.list).mockResolvedValue([item]);
     vi.mocked(ipVaultService.updateRights).mockResolvedValue(updated);
     render(<IPVaultPage />);
-    await screen.findByText('Nova Pilot');
+    await screen.findAllByText('Nova Pilot');
 
     fireEvent.click(screen.getByTestId('inspector-tab-licensing'));
     fireEvent.click(screen.getByTestId('license-card-commercial_remix'));
@@ -192,7 +187,7 @@ describe('IPVaultPage', () => {
   it('shows royalty tab disabled message for unregistered items', async () => {
     vi.mocked(ipVaultService.list).mockResolvedValue([makeItem()]);
     render(<IPVaultPage />);
-    await screen.findByText('Nova Pilot');
+    await screen.findAllByText('Nova Pilot');
     fireEvent.click(screen.getByTestId('inspector-tab-royalties'));
     expect(screen.getByText(/Register this IP on Story/)).toBeInTheDocument();
   });
@@ -203,7 +198,7 @@ describe('IPVaultPage', () => {
     vi.mocked(ipVaultService.list).mockResolvedValue([item]);
     vi.mocked(ipVaultService.updateRights).mockResolvedValue(updated);
     render(<IPVaultPage />);
-    await screen.findByText('Nova Pilot');
+    await screen.findAllByText('Nova Pilot');
     fireEvent.click(screen.getByTestId('inspector-tab-derivatives'));
     expect(screen.getByText(/Derivative registration requires a registered parent IP/)).toBeInTheDocument();
   });
