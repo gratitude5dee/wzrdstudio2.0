@@ -1,18 +1,31 @@
-## Replace text "WZRD" with logo image in landing nav and footers
+## What's wrong
 
-Three files need updates to swap the plain-text logo for the actual WZRD logo image (`/lovable-uploads/wzrdtechlogo.png`):
+The `character_blueprints` table is missing several columns that the code references via `select('*')`, causing the PostgREST schema cache error. The `character_blueprint_images` table is also missing columns.
 
-### 1. Landing page nav (`src/pages/Landing.tsx`)
+## Database migration
 
-- **Desktop header** (line 130): Replace `<span className="text-2xl font-bold text-white tracking-tight">WZRD</span>` with an `<img>` tag using the logo, height ~32px.
-- **Mobile header** (line 152): Same replacement, height ~24px.
+Add missing columns to both tables:
 
-### 2. MassiveFooter (`src/components/landing/MassiveFooter.tsx`)
+**`character_blueprints`** — add:
+- `location_metadata` (JSONB, nullable)
+- `tags` (JSONB, nullable)
+- `gmi_element_id` (TEXT, nullable)
+- `gmi_element_request_id` (TEXT, nullable)
+- `gmi_element_status` (TEXT, nullable)
+- `gmi_element_error` (TEXT, nullable)
+- `gmi_element_updated_at` (TIMESTAMPTZ, nullable)
 
-- Lines 14-17: Replace the "W" square div + "WZRD.tech" text span with the logo `<img>` at ~28px height, keeping the existing layout.
+**`character_blueprint_images`** — add:
+- `asset_id` (TEXT, nullable)
+- `generation_role` (TEXT, nullable)
+- `generation_metadata` (JSONB, nullable)
 
-### 3. CinematicFooter (`src/components/landing/CinematicFooter.tsx`)
+After migration, run `NOTIFY pgrst, 'reload schema';` to refresh the PostgREST cache.
 
-- Lines 7-9: Replace the "W" square div with the logo `<img>` at ~24px height, keeping the copyright text.
+## Add OVERSHOOT_API_KEY secret
 
-No new files, no database changes. Only visual updates to use the existing logo asset consistently.
+Add the `OVERSHOOT_API_KEY` to Supabase Edge Function secrets so the `aura-vlm-judge` and `overshoot-stream` functions work.
+
+## No code changes needed
+
+The application code already handles these columns correctly — it just needs the database schema to match.

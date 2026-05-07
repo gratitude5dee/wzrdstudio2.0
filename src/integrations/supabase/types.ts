@@ -1464,9 +1464,12 @@ export type Database = {
       }
       character_blueprint_images: {
         Row: {
+          asset_id: string | null
           blueprint_id: string
           created_at: string
+          generation_metadata: Json | null
           generation_params: Json | null
+          generation_role: string | null
           id: string
           image_url: string
           is_primary: boolean | null
@@ -1475,9 +1478,12 @@ export type Database = {
           variant: string | null
         }
         Insert: {
+          asset_id?: string | null
           blueprint_id: string
           created_at?: string
+          generation_metadata?: Json | null
           generation_params?: Json | null
+          generation_role?: string | null
           id?: string
           image_url: string
           is_primary?: boolean | null
@@ -1486,9 +1492,12 @@ export type Database = {
           variant?: string | null
         }
         Update: {
+          asset_id?: string | null
           blueprint_id?: string
           created_at?: string
+          generation_metadata?: Json | null
           generation_params?: Json | null
+          generation_role?: string | null
           id?: string
           image_url?: string
           is_primary?: boolean | null
@@ -1512,10 +1521,16 @@ export type Database = {
           created_at: string
           description: string | null
           face_details: Json | null
+          gmi_element_error: string | null
+          gmi_element_id: string | null
+          gmi_element_request_id: string | null
+          gmi_element_status: string | null
+          gmi_element_updated_at: string | null
           id: string
           image_url: string | null
           is_favorite: boolean | null
           kind: string | null
+          location_metadata: Json | null
           metadata: Json | null
           name: string
           project_id: string | null
@@ -1524,6 +1539,7 @@ export type Database = {
           status: string
           style: string | null
           style_details: Json | null
+          tags: Json | null
           thumbnail_url: string | null
           traits: Json | null
           updated_at: string
@@ -1536,10 +1552,16 @@ export type Database = {
           created_at?: string
           description?: string | null
           face_details?: Json | null
+          gmi_element_error?: string | null
+          gmi_element_id?: string | null
+          gmi_element_request_id?: string | null
+          gmi_element_status?: string | null
+          gmi_element_updated_at?: string | null
           id?: string
           image_url?: string | null
           is_favorite?: boolean | null
           kind?: string | null
+          location_metadata?: Json | null
           metadata?: Json | null
           name: string
           project_id?: string | null
@@ -1548,6 +1570,7 @@ export type Database = {
           status?: string
           style?: string | null
           style_details?: Json | null
+          tags?: Json | null
           thumbnail_url?: string | null
           traits?: Json | null
           updated_at?: string
@@ -1560,10 +1583,16 @@ export type Database = {
           created_at?: string
           description?: string | null
           face_details?: Json | null
+          gmi_element_error?: string | null
+          gmi_element_id?: string | null
+          gmi_element_request_id?: string | null
+          gmi_element_status?: string | null
+          gmi_element_updated_at?: string | null
           id?: string
           image_url?: string | null
           is_favorite?: boolean | null
           kind?: string | null
+          location_metadata?: Json | null
           metadata?: Json | null
           name?: string
           project_id?: string | null
@@ -1572,6 +1601,7 @@ export type Database = {
           status?: string
           style?: string | null
           style_details?: Json | null
+          tags?: Json | null
           thumbnail_url?: string | null
           traits?: Json | null
           updated_at?: string
