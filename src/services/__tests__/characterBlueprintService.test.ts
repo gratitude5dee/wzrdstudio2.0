@@ -34,6 +34,8 @@ const baseBlueprintRow: BlueprintRow = {
   usage_count: 3,
   user_id: 'user-1',
   visual_prompt: null,
+  location_metadata: null,
+  tags: null,
 };
 
 describe('characterBlueprintService row mappers', () => {

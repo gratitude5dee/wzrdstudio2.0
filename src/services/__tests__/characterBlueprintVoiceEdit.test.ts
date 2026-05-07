@@ -47,6 +47,8 @@ const updatedBlueprintRow: BlueprintRow = {
   usage_count: 0,
   user_id: 'user-1',
   visual_prompt: null,
+  location_metadata: null,
+  tags: null,
 };
 
 function mockUpdateChain(row: BlueprintRow) {
@@ -91,6 +93,8 @@ describe('editBlueprintImage', () => {
       label: 'Voice edit: wear a flannel',
       sort_order: 0,
       variant: 'voice-edit',
+      generation_role: null,
+      generation_metadata: null,
     });
 
     vi.mocked(supabase.from)
