@@ -57,6 +57,7 @@ function getGmiApiKey(): string {
   if (!key) {
     throw new Error('GMI_CLOUD_API_KEY environment variable is not set');
   }
+  console.log(`[GMI] Using API key: ${key.slice(0, 6)}...${key.slice(-4)} (${key.length} chars)`);
   return key;
 }
 
