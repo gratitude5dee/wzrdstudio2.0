@@ -380,8 +380,9 @@ export async function executeGmiChatCompletion(
         const error = JSON.parse(responseText);
         errorMessage = error.message || error.error || `GMI LLM request failed (${response.status})`;
       } catch {
-        errorMessage = `GMI LLM request failed (${response.status}): ${responseText}`;
+        errorMessage = `GMI LLM request failed (${response.status}): ${responseText.slice(0, 300)}`;
       }
+      console.error(`[GMI] LLM HTTP ${response.status} for model ${model}: ${errorMessage}`);
       throw new Error(errorMessage);
     }
 
