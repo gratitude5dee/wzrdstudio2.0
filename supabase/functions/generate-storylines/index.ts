@@ -37,7 +37,68 @@ function isGmiModel(modelId: string): boolean {
 }
 
 /**
+ * Call Groq as a fallback when GMI auth fails.
+ */
+async function callGroqFallback(
+  systemPrompt: string,
+  userPrompt: string,
+  options: { temperature?: number; maxTokens?: number; jsonMode?: boolean } = {}
+): Promise<{ ok: boolean; parsed?: any; text?: string; error?: string }> {
+  const groqKey = Deno.env.get('GROQ_API_KEY');
+  if (!groqKey) {
+    return { ok: false, error: 'GROQ_API_KEY not set — cannot fallback' };
+  }
+  console.log('[GMI→Groq] Falling back to Groq llama-3.3-70b-versatile');
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${groqKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      max_tokens: options.maxTokens ?? 2000,
+      temperature: options.temperature ?? 0.7,
+    }),
+  });
+  const responseText = await response.text();
+  if (!response.ok) {
+    return { ok: false, error: `Groq fallback failed (${response.status}): ${responseText.slice(0, 200)}` };
+  }
+  const result = JSON.parse(responseText);
+  const content = result.choices?.[0]?.message?.content || '';
+  return parseCallResult(content, options.jsonMode);
+}
+
+function parseCallResult(
+  content: string,
+  jsonMode?: boolean
+): { ok: boolean; parsed?: any; text?: string; error?: string } {
+  if (jsonMode) {
+    try {
+      const parsed = JSON.parse(content);
+      return { ok: true, parsed, text: content };
+    } catch {
+      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (jsonMatch) {
+        try {
+          const parsed = JSON.parse(jsonMatch[1].trim());
+          return { ok: true, parsed, text: content };
+        } catch { /* fall through */ }
+      }
+      return { ok: false, error: 'Failed to parse JSON from response', text: content };
+    }
+  }
+  return { ok: true, text: content };
+}
+
+/**
  * Call GMI Cloud chat completions for storyline generation.
+ * Falls back to Groq if GMI returns an authentication error.
  * Returns parsed JSON content or raw text.
  */
 async function callGmiForStoryline(
@@ -61,29 +122,16 @@ async function callGmiForStoryline(
   });
 
   if (!result.success || !result.data) {
+    const isAuthError = /authenticat|unauthorized|403|401/i.test(result.error || '');
+    if (isAuthError) {
+      console.warn(`[GMI] Auth failed, trying Groq fallback: ${result.error}`);
+      return callGroqFallback(systemPrompt, userPrompt, options);
+    }
     return { ok: false, error: result.error || 'GMI call failed' };
   }
 
   const content = result.data.choices?.[0]?.message?.content || '';
-
-  if (options.jsonMode) {
-    try {
-      const parsed = JSON.parse(content);
-      return { ok: true, parsed, text: content };
-    } catch {
-      // Try to extract JSON from markdown code blocks
-      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (jsonMatch) {
-        try {
-          const parsed = JSON.parse(jsonMatch[1].trim());
-          return { ok: true, parsed, text: content };
-        } catch { /* fall through */ }
-      }
-      return { ok: false, error: 'Failed to parse JSON from GMI response', text: content };
-    }
-  }
-
-  return { ok: true, text: content };
+  return parseCallResult(content, options.jsonMode);
 }
 
 const DEPRECATED_GROQ_MODELS = new Set(['llama-3.3-70b-versatile', 'llama-3.1-8b-instant']);

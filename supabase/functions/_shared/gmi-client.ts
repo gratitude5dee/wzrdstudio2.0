@@ -57,6 +57,7 @@ function getGmiApiKey(): string {
   if (!key) {
     throw new Error('GMI_CLOUD_API_KEY environment variable is not set');
   }
+  console.log(`[GMI] Using API key: ${key.slice(0, 6)}...${key.slice(-4)} (${key.length} chars)`);
   return key;
 }
 
@@ -379,8 +380,9 @@ export async function executeGmiChatCompletion(
         const error = JSON.parse(responseText);
         errorMessage = error.message || error.error || `GMI LLM request failed (${response.status})`;
       } catch {
-        errorMessage = `GMI LLM request failed (${response.status}): ${responseText}`;
+        errorMessage = `GMI LLM request failed (${response.status}): ${responseText.slice(0, 300)}`;
       }
+      console.error(`[GMI] LLM HTTP ${response.status} for model ${model}: ${errorMessage}`);
       throw new Error(errorMessage);
     }
 
