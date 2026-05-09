@@ -27,6 +27,8 @@ serve(async (req) => {
   try {
     console.log("Generating concept examples with GMI Cloud (Gemini 3.1 Flash-Lite)");
 
+    let content: string | undefined;
+
     const result = await executeGmiChatCompletion(
       'google/gemini-3.1-flash-lite-preview',
       [
@@ -36,14 +38,45 @@ serve(async (req) => {
       { temperature: 0.9, max_tokens: 500 }
     );
 
+    const isAuthError = (msg?: string) =>
+      !!msg && /authenticat|unauthorized|forbidden|401|403/i.test(msg);
+
     if (!result.success || !result.data) {
       console.error("GMI Cloud error:", result.error);
-      throw new Error(result.error || "GMI Cloud request failed");
+      if (isAuthError(result.error)) {
+        // @ts-ignore Deno
+        const groqKey = Deno.env.get('GROQ_API_KEY');
+        if (!groqKey) throw new Error(result.error || "GMI auth failed and no Groq fallback configured");
+        console.log("[Fallback] Calling Groq llama-3.3-70b-versatile");
+        const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${groqKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'llama-3.3-70b-versatile',
+            messages: [
+              { role: 'system', content: SYSTEM_PROMPT },
+              { role: 'user', content: USER_PROMPT },
+            ],
+            temperature: 0.9,
+            max_tokens: 500,
+            response_format: { type: 'json_object' },
+          }),
+        });
+        if (!groqRes.ok) {
+          const txt = await groqRes.text();
+          throw new Error(`Groq fallback failed: ${groqRes.status} ${txt.slice(0, 200)}`);
+        }
+        const groqJson = await groqRes.json();
+        content = groqJson.choices?.[0]?.message?.content;
+      } else {
+        throw new Error(result.error || "GMI Cloud request failed");
+      }
+    } else {
+      content = result.data.choices?.[0]?.message?.content;
     }
 
-    const content = result.data.choices?.[0]?.message?.content;
     if (!content) {
-      throw new Error("No content in GMI Cloud response");
+      throw new Error("No content in AI response");
     }
 
     // Parse the JSON from the response
