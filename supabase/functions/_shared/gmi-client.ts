@@ -544,12 +544,12 @@ export async function pollGmiQueueStatus(requestId: string): Promise<GmiResponse
   try {
     const apiKey = getGmiApiKey();
 
-    const response = await fetch(`${GMI_QUEUE_BASE}/requests/${requestId}`, {
+    const response = await fetchWithTimeout(`${GMI_QUEUE_BASE}/requests/${requestId}`, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${apiKey}`,
       },
-    });
+    }, 30_000);
 
     const responseText = await response.text();
 
