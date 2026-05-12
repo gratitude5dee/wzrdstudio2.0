@@ -65,10 +65,11 @@ const GMI_QUEUE_BASE = 'https://console.gmicloud.ai/api/v1/ie/requestqueue/apike
 const GMI_LLM_BASE = 'https://api.gmi-serving.com/v1';
 
 // ── Sync image models (OpenAI-compatible /images endpoint) ──────────────────
-const GMI_SYNC_IMAGE_MODELS = new Set([
-  'gpt-image-2',
-  'gpt-image-2-edit',
-]);
+// NOTE: gpt-image-2 / gpt-image-2-edit on GMI use the queue endpoint
+// (console.gmicloud.ai/.../requestqueue), NOT the OpenAI-compatible
+// /v1/images/generations endpoint. Keep this set empty unless GMI
+// explicitly documents a sync image model.
+const GMI_SYNC_IMAGE_MODELS = new Set<string>([]);
 
 export function isGmiSyncImageModel(model: string): boolean {
   return GMI_SYNC_IMAGE_MODELS.has(model.replace(/^gmi\//, ''));
