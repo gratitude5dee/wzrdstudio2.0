@@ -99,8 +99,8 @@ export const useProjectSettingsStore = create<ProjectSettingsState>()(
                 id: settingsData.id,
                 projectId: settingsData.project_id,
                 baseTextModel: settingsData.base_text_model || 'gmi/gemini-3.1-flash-lite',
-                baseImageModel: settingsData.base_image_model || 'gmi/seedream-5.0',
-                baseVideoModel: settingsData.base_video_model || 'gmi/kling-v3-omni',
+                baseImageModel: settingsData.base_image_model || 'gmi/gpt-image-2',
+                baseVideoModel: settingsData.base_video_model || 'gmi/seedance-2.0-i2v',
                 storylineTextModel: settingsData.storyline_text_model || 'gmi/gemini-3.1-flash-lite',
                 storylineTextSettings:
                   settingsData.storyline_text_settings &&
@@ -127,8 +127,8 @@ export const useProjectSettingsStore = create<ProjectSettingsState>()(
               .insert({
                 project_id: projectId,
                 base_text_model: 'gmi/gemini-3.1-flash-lite',
-                base_image_model: 'gmi/seedream-5.0',
-                base_video_model: 'gmi/kling-v3-omni',
+                base_image_model: 'gmi/gpt-image-2',
+                base_video_model: 'gmi/seedance-2.0-i2v',
                 storyline_text_model: 'gmi/gemini-3.1-flash-lite',
                 storyline_text_settings: {},
                 evaluation_mode: 'shadow',

@@ -211,7 +211,7 @@ const TabNavigation = () => {
                         "focus:border-[rgba(249,115,22,0.4)] focus:outline-none focus:ring-1 focus:ring-[rgba(249,115,22,0.2)]",
                         "transition-all duration-200"
                       )}
-                      value={projectData.baseImageModel || 'gmi/seedream-5.0-lite'}
+                      value={projectData.baseImageModel || 'gmi/gpt-image-2'}
                       onChange={(e) => updateProjectData({ baseImageModel: e.target.value })}
                     >
                       {imageGenerationModels.map((model) => (
@@ -234,7 +234,7 @@ const TabNavigation = () => {
                         "focus:border-[rgba(249,115,22,0.4)] focus:outline-none focus:ring-1 focus:ring-[rgba(249,115,22,0.2)]",
                         "transition-all duration-200"
                       )}
-                      value={projectData.baseVideoModel || 'gmi/ltx-fast-i2v'}
+                      value={projectData.baseVideoModel || 'gmi/seedance-2.0-i2v'}
                       onChange={(e) => updateProjectData({ baseVideoModel: e.target.value })}
                     >
                       {videoGenerationModels.map((model) => (
