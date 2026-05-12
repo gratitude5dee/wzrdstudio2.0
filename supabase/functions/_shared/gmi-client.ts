@@ -64,6 +64,94 @@ function getGmiApiKey(): string {
 const GMI_QUEUE_BASE = 'https://console.gmicloud.ai/api/v1/ie/requestqueue/apikey';
 const GMI_LLM_BASE = 'https://api.gmi-serving.com/v1';
 
+// ── Sync image models (OpenAI-compatible /images endpoint) ──────────────────
+const GMI_SYNC_IMAGE_MODELS = new Set([
+  'gpt-image-2',
+  'gpt-image-2-edit',
+]);
+
+export function isGmiSyncImageModel(model: string): boolean {
+  return GMI_SYNC_IMAGE_MODELS.has(model.replace(/^gmi\//, ''));
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export interface GmiSyncImageResult {
+  success: boolean;
+  imageUrl?: string;
+  imageBase64?: string;
+  error?: string;
+}
+
+export async function executeGmiSyncImage(
+  model: string,
+  payload: Record<string, any>,
+): Promise<GmiSyncImageResult> {
+  try {
+    const apiKey = getGmiApiKey();
+    const apiModel = model.replace(/^gmi\//, '');
+    const isEdit = apiModel === 'gpt-image-2-edit';
+    const endpoint = `${GMI_LLM_BASE}/images/${isEdit ? 'edits' : 'generations'}`;
+
+    const body: Record<string, unknown> = {
+      model: apiModel,
+      prompt: payload.prompt ?? '',
+      size: payload.size ?? '1024x1024',
+      n: typeof payload.n === 'number' ? payload.n : 1,
+    };
+    if (payload.quality) body.quality = payload.quality;
+    if (!isEdit && payload.output_format) body.output_format = payload.output_format;
+    if (isEdit && payload.image) body.image = payload.image;
+    if (isEdit && payload.mask) body.mask = payload.mask;
+
+    console.log(`[GMI] Sync image request model=${apiModel} endpoint=${endpoint}`);
+
+    const response = await fetchWithTimeout(endpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    }, 120_000);
+
+    const responseText = await response.text();
+    if (!response.ok) {
+      return {
+        success: false,
+        error: `GMI sync image failed (${response.status}): ${responseText.slice(0, 400)}`,
+      };
+    }
+
+    const result = JSON.parse(responseText);
+    const items = Array.isArray(result?.data) ? result.data : Array.isArray(result) ? result : [result];
+    const first = items[0] ?? {};
+    const imageUrl = typeof first.url === 'string' ? first.url : undefined;
+    const imageBase64 = typeof first.b64_json === 'string' ? first.b64_json : undefined;
+
+    if (!imageUrl && !imageBase64) {
+      return { success: false, error: 'GMI sync image returned no url or b64_json' };
+    }
+
+    console.log(`[GMI] Sync image OK model=${apiModel} (${imageUrl ? 'url' : 'b64'})`);
+    return { success: true, imageUrl, imageBase64 };
+  } catch (error) {
+    const message = error instanceof Error
+      ? (error.name === 'AbortError' ? 'GMI sync image timed out' : error.message)
+      : 'Unknown GMI sync image error';
+    console.error('[GMI] Sync image error:', message);
+    return { success: false, error: message };
+  }
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -284,12 +372,12 @@ export function buildLtxRetryPayloads(
 
 async function fetchGmiQueueModelDetails(apiKey: string, model: string): Promise<unknown | undefined> {
   try {
-    const response = await fetch(`${GMI_QUEUE_BASE}/models/${encodeURIComponent(model)}`, {
+    const response = await fetchWithTimeout(`${GMI_QUEUE_BASE}/models/${encodeURIComponent(model)}`, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${apiKey}`,
       },
-    });
+    }, 30_000);
 
     const responseText = await response.text();
     if (!response.ok) {
@@ -309,14 +397,14 @@ async function submitGmiQueueRequest(
   model: string,
   payload: Record<string, unknown>,
 ): Promise<{ success: true; data: any; requestId?: string; statusUrl?: string } | { success: false; error: string }> {
-  const response = await fetch(`${GMI_QUEUE_BASE}/requests`, {
+  const response = await fetchWithTimeout(`${GMI_QUEUE_BASE}/requests`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ model, payload }),
-  });
+  }, 60_000);
 
   const responseText = await response.text();
 
@@ -456,12 +544,12 @@ export async function pollGmiQueueStatus(requestId: string): Promise<GmiResponse
   try {
     const apiKey = getGmiApiKey();
 
-    const response = await fetch(`${GMI_QUEUE_BASE}/requests/${requestId}`, {
+    const response = await fetchWithTimeout(`${GMI_QUEUE_BASE}/requests/${requestId}`, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${apiKey}`,
       },
-    });
+    }, 30_000);
 
     const responseText = await response.text();
 

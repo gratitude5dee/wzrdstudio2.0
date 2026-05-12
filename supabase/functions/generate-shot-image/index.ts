@@ -4,7 +4,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fal } from "https://esm.sh/@fal-ai/client@1.2.3";
 import { mergeFalModelInputs, resolveFalModelOrFallback } from "../_shared/falai-client.ts";
-import { executeGmiQueueModel, pollGmiQueueStatus } from "../_shared/gmi-client.ts";
+import { executeGmiQueueModel, executeGmiSyncImage, isGmiSyncImageModel, pollGmiQueueStatus } from "../_shared/gmi-client.ts";
 import { getCatalogModelById } from "../_shared/ai-model-catalog.ts";
 import {
   createAssetLineage,
@@ -240,6 +240,91 @@ serve(async (req) => {
         '4:3': '2048x1536', '3:4': '1536x2048',
       };
       const gmiSize = sizeMap[aspectRatio] || '2048x2048';
+
+      // ── GMI sync image path (gpt-image-2 / gpt-image-2-edit) ──────────────
+      if (isGmiSyncImageModel(gmiApiModelId)) {
+        const syncSizeMap: Record<string, string> = {
+          '16:9': '1536x1024', '9:16': '1024x1536', '1:1': '1024x1024',
+          '4:3': '1536x1024', '3:4': '1024x1536',
+        };
+        const syncSize = syncSizeMap[aspectRatio] || '1024x1024';
+
+        const syncResult = await executeGmiSyncImage(gmiApiModelId, {
+          prompt: shot.visual_prompt,
+          size: syncSize,
+          quality: 'medium',
+          output_format: 'png',
+          n: 1,
+        });
+
+        if (!syncResult.success) {
+          throw new Error(syncResult.error || 'GMI sync image failed');
+        }
+
+        await supabase.from("shots").update({ image_progress: 80 }).eq("id", shotId);
+
+        let imageBuffer: Uint8Array;
+        if (syncResult.imageBase64) {
+          const binary = atob(syncResult.imageBase64);
+          imageBuffer = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) imageBuffer[i] = binary.charCodeAt(i);
+        } else {
+          const r = await fetch(syncResult.imageUrl!);
+          if (!r.ok) throw new Error(`Failed to download GMI sync image: ${r.status}`);
+          imageBuffer = new Uint8Array(await r.arrayBuffer());
+        }
+
+        const fileName = `shot-${shotId}-${Date.now()}.png`;
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('workflow-media')
+          .upload(fileName, imageBuffer, { contentType: 'image/png', upsert: false });
+        if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
+        const { data: { publicUrl } } = supabase.storage.from('workflow-media').getPublicUrl(fileName);
+
+        const promptVersionId = await createPromptVersion(supabase, {
+          projectId: shot.project_id, stage: 'shot_image', authorType: 'system',
+          text: shot.visual_prompt, sourceEntityType: 'shot', sourceEntityId: shotId,
+          metadata: { model_id: gmiApiModelId, storage_path: uploadData?.path ?? fileName, public_url: publicUrl },
+        });
+
+        const imageAssetId = await createProjectAsset(supabase, {
+          projectId: shot.project_id, userId: user.id, name: fileName, type: 'image',
+          url: publicUrl, size: imageBuffer.byteLength, storageBucket: 'workflow-media',
+          storagePath: uploadData?.path ?? fileName,
+          metadata: { shot_id: shotId, model_id: gmiApiModelId },
+        });
+
+        await supabase.from("shots").update({
+          image_url: publicUrl, image_asset_id: imageAssetId, image_status: "completed", image_progress: 100,
+        }).eq("id", shotId);
+
+        await createAssetLineage(supabase, {
+          projectId: shot.project_id, promptVersionId, generationJobId: imageGenerationJobId,
+          outputAssetId: imageAssetId, shotId, sceneId: shot.scene_id ?? null,
+          relationType: 'output', metadata: { kind: 'shot_image', model_id: gmiApiModelId },
+        });
+
+        await commitCredits({
+          supabase, holdId: creditReservation.holdId, skipped: creditReservation.skipped,
+          amount: gmiCreditCost,
+          metadata: { endpoint: 'generate-shot-image', shot_id: shotId, image_url: publicUrl, provider: 'gmi-cloud' },
+        });
+        await updateGenerationJob(supabase, imageGenerationJobId, {
+          status: 'completed', progress: 100, result_url: publicUrl,
+          result_payload: { shot_id: shotId, asset_id: imageAssetId },
+          completed_at: new Date().toISOString(),
+        });
+        await enqueueStoryboardEvaluation(supabase, {
+          userId: user.id, projectId: shot.project_id,
+          targetType: 'shot', targetId: shotId, sourceGenerationJobId: imageGenerationJobId,
+        });
+
+        console.log(`[generate-shot-image][Shot ${shotId}] GMI sync image generation completed (${gmiApiModelId})`);
+        return new Response(
+          JSON.stringify({ success: true, image_url: publicUrl, status: "completed" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
 
       const gmiPayload = {
         prompt: shot.visual_prompt,
@@ -743,6 +828,31 @@ serve(async (req) => {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
     const errorStack = error instanceof Error ? error.stack : undefined;
     console.error(`[generate-shot-image][Shot ${shotId || 'UNKNOWN'}] Unexpected error: ${errorMsg}`, errorStack);
+
+    // Recovery: flip stuck shot to failed so the UI doesn't spin forever
+    if (shotId) {
+      await supabase
+        .from("shots")
+        .update({ image_status: "failed", image_progress: 0, failure_reason: errorMsg })
+        .eq("id", shotId);
+    }
+    if (creditReservation) {
+      await releaseCredits({
+        supabase,
+        holdId: creditReservation.holdId,
+        skipped: creditReservation.skipped,
+        reason: 'unexpected_error',
+        metadata: { endpoint: 'generate-shot-image', shot_id: shotId, error: errorMsg },
+      }).catch(() => {});
+    }
+    if (imageGenerationJobId) {
+      await updateGenerationJob(supabase, imageGenerationJobId, {
+        status: 'failed',
+        error_message: errorMsg,
+        completed_at: new Date().toISOString(),
+      }).catch(() => {});
+    }
+
     return new Response(
       JSON.stringify({ success: false, error: 'An unexpected error occurred. Please try again.' }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
