@@ -64,6 +64,8 @@ export interface ProcessAssetsResult {
   provider: 'fal_remote' | 'editframe_remote';
   fallbackUsed: boolean;
   providerPayload: Record<string, unknown>;
+  posterFrameUrl?: string | null;
+  mediaInfo?: FfmpegMediaInfo | null;
 }
 
 export class ExportProcessingError extends Error {
@@ -93,6 +95,7 @@ class FalRenderError extends Error {
 const FAL_QUEUE_URL = 'https://queue.fal.run';
 const MERGE_MODEL = 'fal-ai/ffmpeg-api/merge-videos';
 const COMPOSE_MODEL = 'fal-ai/ffmpeg-api/compose';
+const MERGE_AUDIO_VIDEO_MODEL = 'fal-ai/ffmpeg-api/merge-audio-video';
 const EDITFRAME_RENDERER = 'editframe/render-api';
 const MAX_POLL = 180;
 const POLL_MS = 3000;
