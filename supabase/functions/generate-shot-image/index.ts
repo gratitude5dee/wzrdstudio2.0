@@ -269,16 +269,16 @@ serve(async (req) => {
             usedModelId = modelId;
             break;
           }
-          // If submission failed but not "does not exist", throw to outer catch
-          if (submitResult.error && !submitResult.error.includes('does not exist')) {
+          // Provider-side routing failures should try the next known-good GMI model.
+          if (submitResult.error && !isRetryableGmiModelFailure(submitResult.error)) {
             throw new Error(submitResult.error);
           }
-          console.warn(`[generate-shot-image][Shot ${shotId}] GMI model ${modelId} does not exist, trying next...`);
+          console.warn(`[generate-shot-image][Shot ${shotId}] GMI model ${modelId} unavailable (${submitResult.error}), trying next...`);
           submitResult = null;
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          if (msg.includes('does not exist')) {
-            console.warn(`[generate-shot-image][Shot ${shotId}] GMI model ${modelId} does not exist, trying next...`);
+          if (isRetryableGmiModelFailure(msg)) {
+            console.warn(`[generate-shot-image][Shot ${shotId}] GMI model ${modelId} unavailable (${msg}), trying next...`);
             submitResult = null;
             continue;
           }
