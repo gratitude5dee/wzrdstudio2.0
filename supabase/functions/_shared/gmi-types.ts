@@ -373,18 +373,42 @@ function translateVeo31Payload(payload: GmiQueuePayload): GmiQueuePayload {
   });
 }
 
-const VALID_GPT_IMAGE_SIZES = new Set([
-  '1024x1024', '1024x1536', '1536x1024',
-  '1920x1080', '1080x1920',
-  '2048x1536', '1536x2048',
-  '2560x1440', '1440x2560',
-  '3840x2160', '2160x3840',
-]);
+// GPT Image 2 size constraints (per OpenAI docs):
+//  - both edges multiples of 16
+//  - max edge <= 3840
+//  - long:short ratio <= 3:1
+//  - 655,360 <= total pixels <= 8,294,400
+const GPT_IMAGE_FALLBACK_SIZE = '2048x1152';
+
+function snapToMultipleOf16(n: number): number {
+  return Math.max(16, Math.round(n / 16) * 16);
+}
+
+function isValidGptImageSize(w: number, h: number): boolean {
+  if (!Number.isFinite(w) || !Number.isFinite(h)) return false;
+  if (w % 16 !== 0 || h % 16 !== 0) return false;
+  if (w > 3840 || h > 3840) return false;
+  const long = Math.max(w, h);
+  const short = Math.min(w, h);
+  if (short <= 0 || long / short > 3) return false;
+  const total = w * h;
+  if (total < 655_360 || total > 8_294_400) return false;
+  return true;
+}
 
 function normalizeGptImageSize(value: unknown): string {
   const v = asString(value);
-  if (v && VALID_GPT_IMAGE_SIZES.has(v)) return v;
-  return '1920x1080';
+  if (!v) return GPT_IMAGE_FALLBACK_SIZE;
+  const m = v.match(/^(\d+)\s*x\s*(\d+)$/i);
+  if (!m) return GPT_IMAGE_FALLBACK_SIZE;
+  let w = Number(m[1]);
+  let h = Number(m[2]);
+  if (isValidGptImageSize(w, h)) return `${w}x${h}`;
+  // Try snapping to nearest multiples of 16, preserving ratio cap.
+  const sw = Math.min(snapToMultipleOf16(w), 3840);
+  const sh = Math.min(snapToMultipleOf16(h), 3840);
+  if (isValidGptImageSize(sw, sh)) return `${sw}x${sh}`;
+  return GPT_IMAGE_FALLBACK_SIZE;
 }
 
 function normalizeGptImageQuality(value: unknown): 'low' | 'medium' | 'high' | 'auto' {

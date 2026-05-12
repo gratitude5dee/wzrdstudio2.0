@@ -1,33 +1,43 @@
-Root cause found: the deployed function is still reading `endpoint_id = gpt-image-2` from the live `ai_model_catalog` table, so it submits the undocumented model ID to GMI. The logs confirm `model: gpt-image-2` and the DB query confirms the live row has not been updated to `gpt-image-2-generate`. The function also waits/polls for the whole image generation inside one Edge Function invocation, which is causing aborts/timeouts.
+## Diagnosis
 
-Plan:
+The current failure is not a generic Edge Function issue. The logs show the exact provider rejection:
 
-1. Update the live model catalog
-   - Add a database migration that updates `public.ai_model_catalog` for `gmi/gpt-image-2`:
-     - `endpoint_id` → `gpt-image-2-generate`
-     - defaults/control sizes → documented sizes such as `1920x1080`
-     - raw API example → documented `gpt-image-2-generate` request
-   - Run `NOTIFY pgrst, 'reload schema';` after the migration.
+```text
+400: gpt-image-2: size dimensions must be multiples of 16 (got 1920x1080)
+```
 
-2. Fix edge-function fallback behavior
-   - In `generate-shot-image`, keep the alias protection so older settings resolving to `gpt-image-2` submit `gpt-image-2-generate`.
-   - Adjust the GMI fallback list so GPT Image 2 failures do not immediately fall into unrelated GMI models with incompatible payload assumptions.
-   - Ensure the request payload for GPT Image 2 only includes documented fields: `prompt`, `size`, `quality`, `output_format`, `n`.
+`1920` is valid, but `1080` is not divisible by 16. The `generate-shot-image` function maps a 16:9 project to `1920x1080`, then sends that to GMI as `gpt-image-2-generate`, so GMI rejects the request before generation starts.
 
-3. Stop returning 500 after a generation is successfully queued
-   - Refactor the GMI path so `generate-shot-image` submits the GMI queue request, updates the shot to `generating` with the provider `request_id`, and returns `success: true` immediately.
-   - This avoids the Supabase Edge Function long-running timeout/abort while the image model generates.
+## Fix plan
 
-4. Add a small poller endpoint for completion
-   - Add or reuse an Edge Function path to poll GMI request status by stored request id.
-   - On success, download/upload the image to `workflow-media`, create the existing project asset/lineage/job records, commit credits, update the shot to `completed`, and enqueue storyboard evaluation.
-   - On failure/timeout, release credits and mark the shot failed with the real provider error.
+1. **Correct GPT Image 2 size mapping**
+   - Update `supabase/functions/generate-shot-image/index.ts` so `getGptImageSizeForAspectRatio()` returns valid multiples-of-16 dimensions.
+   - Use reliable, documented sizes:
+     - `16:9` → `2048x1152`
+     - `9:16` → `1152x2048`
+     - `1:1` → `1024x1024`
+     - `4:3` → `1536x1152`
+     - `3:4` → `1152x1536`
+   - These preserve aspect ratios and satisfy GPT Image 2 constraints.
 
-5. Wire frontend retry/status handling minimally
-   - Keep the current realtime subscriptions as the source of UI updates.
-   - If needed, trigger the poller from the page while shots are in `generating`, so the UI completes without the original function staying open.
+2. **Harden shared GMI payload normalization**
+   - Update `supabase/functions/_shared/gmi-types.ts` so GPT Image 2 no longer treats invalid sizes like `1920x1080` as valid.
+   - Replace the static allow-list with a validator that checks:
+     - both dimensions are multiples of 16,
+     - max edge is within limit,
+     - total pixels are within GPT Image 2 limits,
+     - long:short ratio is not over `3:1`.
+   - This prevents future catalog/default/client values from reintroducing the same provider-side 400.
 
-6. Validate
-   - Deploy the touched Edge Function(s).
-   - Query the catalog row to confirm `endpoint_id = gpt-image-2-generate`.
-   - Check fresh Edge Function logs to confirm requests now submit `model=gpt-image-2-generate` and no longer abort while waiting for full generation.
+3. **Improve fallback behavior for provider validation errors**
+   - Add this specific `multiples of 16` provider error to the retryable/fallback classifier in `generate-shot-image`.
+   - That way, if a future GMI model rejects dimensions, the function can try the next configured image model instead of immediately returning 500.
+
+4. **Make the frontend error useful instead of opaque**
+   - Update the image-generation hook/page call site so when the Edge Function returns JSON with an error, the thrown error includes that message rather than only `Edge Function returned a non-2xx status code`.
+   - This keeps future provider errors visible in the UI/logs.
+
+5. **Validate**
+   - Run a targeted search to confirm no remaining GPT Image 2 path sends `1920x1080` / `1080x1920`.
+   - Deploy the updated Edge Function.
+   - Check recent Edge Function logs after deploy for the corrected request body containing `2048x1152` for `16:9` shots.
