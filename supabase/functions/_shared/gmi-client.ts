@@ -397,14 +397,14 @@ async function submitGmiQueueRequest(
   model: string,
   payload: Record<string, unknown>,
 ): Promise<{ success: true; data: any; requestId?: string; statusUrl?: string } | { success: false; error: string }> {
-  const response = await fetch(`${GMI_QUEUE_BASE}/requests`, {
+  const response = await fetchWithTimeout(`${GMI_QUEUE_BASE}/requests`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ model, payload }),
-  });
+  }, 60_000);
 
   const responseText = await response.text();
 
