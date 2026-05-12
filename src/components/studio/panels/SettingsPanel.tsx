@@ -301,7 +301,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ projectId, onClose
           label="Image Model"
           icon={ImageIcon}
           models={modelGroups.imageModels}
-          selectedId={settings?.baseImageModel || modelGroups.imageModels[0]?.id || ''}
+          selectedId={settings?.baseImageModel || 'gmi/seedream-5.0-lite'}
           onSelect={handleImageModelChange}
           iconColor="text-purple-400"
         />
@@ -310,7 +310,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ projectId, onClose
           label="Video Model"
           icon={Video}
           models={modelGroups.videoModels}
-          selectedId={settings?.baseVideoModel || modelGroups.videoModels[0]?.id || ''}
+          selectedId={settings?.baseVideoModel || 'gmi/ltx-fast-i2v'}
           onSelect={handleVideoModelChange}
           iconColor="text-amber-400"
         />
