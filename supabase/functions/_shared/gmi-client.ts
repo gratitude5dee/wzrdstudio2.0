@@ -372,12 +372,12 @@ export function buildLtxRetryPayloads(
 
 async function fetchGmiQueueModelDetails(apiKey: string, model: string): Promise<unknown | undefined> {
   try {
-    const response = await fetch(`${GMI_QUEUE_BASE}/models/${encodeURIComponent(model)}`, {
+    const response = await fetchWithTimeout(`${GMI_QUEUE_BASE}/models/${encodeURIComponent(model)}`, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${apiKey}`,
       },
-    });
+    }, 30_000);
 
     const responseText = await response.text();
     if (!response.ok) {
