@@ -522,6 +522,10 @@ export function translateGmiQueuePayload(
     case 'seedream-5.0-lite':
     case 'gmi/seedream-5-0-lite':
     case 'seedream-5-0-lite':
+    case 'gmi/seedream-4-0-250828':
+    case 'seedream-4-0-250828':
+    case 'gmi/seedream-3-0-t2i-250415':
+    case 'seedream-3-0-t2i-250415':
       return translateSeedreamPayload(payload);
     case 'gmi/kling-v3-omni':
     case 'kling-v3-omni':
