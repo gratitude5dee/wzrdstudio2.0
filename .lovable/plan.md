@@ -1,54 +1,27 @@
-# Fix: GMI Authentication Failed (Placeholder API Key)
+## 1. Make GMI models the preset defaults
 
-## Root Cause
+Keep the full fal + GMI lists in the dropdowns. Only change the *initial selection* so newly created projects (and projects that haven't picked a model yet) default to GMI Cloud.
 
-Edge function logs reveal:
-```
-[GMI] Using API key: PLACEH...ACED (32 chars)
-[GMI] LLM HTTP 401 for model google/gemini-3.1-flash-lite-preview: Authentication failed
-```
+**`src/components/project-setup/TabNavigation.tsx`** (lines 214, 237)
+- Image select fallback: `'gmi/seedream-5.0-lite'` (currently falls back to `imageGenerationModels[0]`, which is fal).
+- Video select fallback: `'gmi/ltx-fast-i2v'`.
 
-The `GMI_CLOUD_API_KEY` secret in Supabase is set to the literal placeholder string `PLACEHOLDER_REPLACE` (32 chars) — not a real key. Every GMI call therefore 401s, and `generate-concept-examples` returns 500 to the client (it has no fallback).
+**`src/components/project-setup/ProjectContext.tsx`**
+- Already defaults `base_image_model: 'gmi/seedream-5.0-lite'` and `base_video_model: 'gmi/ltx-fast-i2v'` on save (lines 135–136). No change needed.
 
-The Groq fallback we added previously only covers `generate-storylines`, so the rest of the GMI-dependent edge functions still hard-fail.
+**`src/components/studio/panels/SettingsPanel.tsx`** (lines 304, 313)
+- Replace `modelGroups.imageModels[0]?.id` fallback with `'gmi/seedream-5.0-lite'`.
+- Replace `modelGroups.videoModels[0]?.id` fallback with `'gmi/ltx-fast-i2v'`.
 
-## Plan
+**`src/lib/constants/credits.ts`** (`getShotImageCredits` / `getShotVideoCredits`)
+- Currently fall back to `IMAGE_MODELS[0]` / `VIDEO_MODELS[0]` (fal). Change fallbacks to look up `gmi/seedream-5.0-lite` / `gmi/ltx-fast-i2v` so credit estimates match the new preset.
 
-### Step 1 — Replace the placeholder GMI_CLOUD_API_KEY (required, user action)
+No catalog edits, no schema changes, no filtering — fal models stay selectable.
 
-1. Go to https://console.gmicloud.ai → API Keys → create or copy a valid key with access to the LLM endpoint (`api.gmi-serving.com/v1`).
-2. Update the Supabase secret `GMI_CLOUD_API_KEY` with that real value.
+## 2. Grant 1000 credits to zdhpeter@gmail.com
 
-I will trigger the secret update prompt for you once you confirm.
+**Blocker:** that user does not exist in `auth.users` yet (verified via query — zero matches for `zdhpeter` or `peter`). Once they sign up, I'll insert +1000 into `user_credits.total_credits` and log a `credit_transactions` row (`transaction_type='free'`, `amount=1000`).
 
-### Step 2 — Add Groq fallback to `generate-concept-examples`
-
-Mirror the pattern already used in `generate-storylines`:
-- Wrap the GMI call in a try/catch.
-- On auth-style errors (401/403/"authentication"/"unauthorized"), fall back to Groq `llama-3.3-70b-versatile` via OpenAI-compatible `chat/completions`.
-- Keep the same JSON-only system prompt so parsing is unchanged.
-
-This makes the concept-examples flow resilient even if the GMI key lapses again.
-
-### Step 3 — (Optional, recommended) Audit other GMI-only callers
-
-Quick grep for `executeGmiChatCompletion` to identify any other LLM edge functions that would 500 under the same condition (e.g. character generation, prompt rewriters). For each:
-- If user-blocking → add the same Groq fallback.
-- If background → leave as-is but ensure the error surfaces gracefully.
-
-I'll list the affected functions after the grep and confirm with you before adding fallbacks broadly.
-
-## Files to change
-
-- `supabase/functions/generate-concept-examples/index.ts` — add `callGroqFallback()` and try/catch wrapper.
-- (Optional, Step 3) other `*/index.ts` functions calling `executeGmiChatCompletion` for LLM tasks.
-
-## Verification
-
-1. After you update `GMI_CLOUD_API_KEY`, re-trigger "Generate concept examples" on `/project-setup` — should return 200 with concepts.
-2. Check edge logs: `[GMI] Using API key: <real-prefix>...` and no 401.
-3. To validate the fallback path, temporarily revoke the key (or trust the existing storyline fallback logs) — concept examples should still return 200 via Groq.
-
-## Note on Overshoot
-
-Overshoot is unrelated to this error — it's the observability layer. No action needed there for this fix.
+Options:
+- **(a)** They sign up first, then I run the grant.
+- **(b)** Provide a different email that already has an account.
