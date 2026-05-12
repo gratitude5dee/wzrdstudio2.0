@@ -1130,10 +1130,31 @@ export async function processAssetsRemote(
       90
     );
     const publicUrl = await uploadFinalVideo(supabaseAdmin, projectId, jobId, exportBucket, bytes, ownerId);
+
+    // Best-effort poster frame + media metadata (never block the cut on failure).
+    let posterFrameUrl: string | null = null;
+    let mediaInfo: FfmpegMediaInfo | null = null;
+    const [posterRes, metaRes] = await Promise.allSettled([
+      falExtractFrame({ video_url: publicUrl, position: 'middle', output_format: 'png' }, falKey),
+      falMetadata({ file_url: publicUrl }, falKey),
+    ]);
+    if (posterRes.status === 'fulfilled') {
+      posterFrameUrl = falExtractMediaUrl(posterRes.value.data, ['image_url', 'url', 'output_url']);
+    } else {
+      safeLog('warn', 'export.fal.extract_frame.failed', { error: posterRes.reason });
+    }
+    if (metaRes.status === 'fulfilled') {
+      mediaInfo = normalizeMediaInfo(metaRes.value.data);
+    } else {
+      safeLog('warn', 'export.fal.metadata.failed', { error: metaRes.reason });
+    }
+
     const completedPayload = {
       ...providerPayload,
       stage: 'completed',
       partialSuccess: shotFailures.length > 0,
+      posterFrameUrl,
+      mediaInfo,
     };
     await updateJobPayload(supabaseAdmin, jobId, completedPayload, 95);
 
@@ -1143,6 +1164,8 @@ export async function processAssetsRemote(
       provider: 'fal_remote',
       fallbackUsed: false,
       providerPayload: completedPayload,
+      posterFrameUrl,
+      mediaInfo,
     };
   } catch (falError) {
     const falMessage = errorMessage(falError, 'FAL render failed');
