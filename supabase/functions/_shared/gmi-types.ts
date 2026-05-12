@@ -538,11 +538,35 @@ export function translateGmiQueuePayload(
     case 'seedance-2-0-fast-260128':
       return translateSeedancePayload(payload);
     case 'gmi/wan2.7-i2v':
+    case 'gmi/wan-2.7-i2v':
     case 'wan2.7-i2v':
+    case 'gmi/happyhorse-1.0-i2v':
+    case 'happyhorse1.0-i2v':
       return translateWanI2vPayload(payload);
     case 'gmi/wan2.7-r2v':
+    case 'gmi/wan-2.7-r2v':
     case 'wan2.7-r2v':
       return translateWanR2vPayload(payload);
+    case 'gmi/veo-3.1-generate-001':
+    case 'gmi/veo-3-1-generate-001':
+    case 'gmi/veo-3-1-lite-generate-001':
+    case 'gmi/veo-3.1-lite-generate-001':
+    case 'veo-3.1-generate-001':
+    case 'veo-3.1-lite-generate-001':
+      return translateVeo31Payload(payload);
+    case 'gmi/gpt-image-2':
+    case 'gpt-image-2':
+    case 'gpt-image-2-generate':
+      return translateGptImage2GeneratePayload(payload);
+    case 'gmi/gpt-image-2-edit':
+    case 'gpt-image-2-edit':
+      return translateGptImage2EditPayload(payload);
+    case 'gmi/gemini-3-pro-image-preview':
+    case 'gemini-3-pro-image-preview':
+      return translateGemini3ProImagePayload(payload);
+    case 'gmi/luma-uni-1.1':
+    case 'luma-uni-1.1':
+      return translateLumaUni11Payload(payload);
     case 'gemini-3.1-flash-image-preview':
     case 'gmi/gemini-3.1-flash-image-preview':
       return translateGeminiFlashImagePayload(payload);
