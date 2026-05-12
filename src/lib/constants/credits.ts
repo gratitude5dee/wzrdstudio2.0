@@ -91,7 +91,7 @@ export function formatStorylineModelLabel(option: StorylineModelOption): string 
  */
 export function getShotImageCredits(modelId?: string): number {
   const model = modelId ? getModelById(modelId) : null;
-  return model?.credits ?? getModelById('gmi/seedream-5.0-lite')?.credits ?? IMAGE_MODELS[0].credits;
+  return model?.credits ?? getModelById('gmi/gpt-image-2')?.credits ?? IMAGE_MODELS[0].credits;
 }
 
 /**
@@ -100,7 +100,7 @@ export function getShotImageCredits(modelId?: string): number {
  */
 export function getShotVideoCredits(modelId?: string): number {
   const model = modelId ? getModelById(modelId) : null;
-  return model?.credits ?? getModelById('gmi/ltx-fast-i2v')?.credits ?? VIDEO_MODELS[0].credits;
+  return model?.credits ?? getModelById('gmi/seedance-2.0-i2v')?.credits ?? VIDEO_MODELS[0].credits;
 }
 
 /**

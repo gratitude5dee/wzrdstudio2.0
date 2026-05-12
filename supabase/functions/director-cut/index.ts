@@ -466,10 +466,13 @@ const runDirectorCutJob = async (
         asset_type: 'video',
         file_url: publicUrl,
         storage_bucket: EXPORT_BUCKET,
+        duration_ms: result.mediaInfo?.duration_ms ?? null,
         metadata: {
           export_job_id: jobId,
           source: 'director_cut',
           partial_success: shotFailures.length > 0,
+          thumbnail_url: result.posterFrameUrl ?? null,
+          media_info: result.mediaInfo ?? null,
         },
       });
 
