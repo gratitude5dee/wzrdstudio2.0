@@ -5,6 +5,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fal } from "https://esm.sh/@fal-ai/client@1.2.3";
 import { mergeFalModelInputs, resolveFalModelOrFallback } from "../_shared/falai-client.ts";
 import { executeGmiQueueModel, pollGmiQueueStatus } from "../_shared/gmi-client.ts";
+import { extractGmiMedia } from "../_shared/gmi-types.ts";
 import { getCatalogModelById } from "../_shared/ai-model-catalog.ts";
 import {
   createAssetLineage,
@@ -320,7 +321,7 @@ serve(async (req) => {
           if (status === 'processing') {
             await supabase.from("shots").update({ image_progress: 60 }).eq("id", shotId);
           } else if (status === 'success') {
-            imageUrl = pollResult.data?.outcome?.media_urls?.[0]?.url || null;
+            imageUrl = extractGmiMedia(pollResult.data, 'image').primaryUrl || null;
             break;
           } else if (status === 'failed' || status === 'cancelled') {
             throw new Error(`GMI image generation ${status}`);
