@@ -9,6 +9,16 @@ import {
   type EditframeCompositionAsset,
 } from './editframeComposition.ts';
 import { safeLog } from './safe-logger.ts';
+import {
+  extractFrame as falExtractFrame,
+  extractMediaUrl as falExtractMediaUrl,
+  loudnorm as falLoudnorm,
+  mergeAudioVideo as falMergeAudioVideo,
+  mergeAudios as falMergeAudios,
+  metadata as falMetadata,
+  normalizeMediaInfo,
+  type FfmpegMediaInfo,
+} from './fal-ffmpeg.ts';
 
 export interface ExportAsset {
   id: string;
