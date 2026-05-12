@@ -81,7 +81,23 @@ function getImageSizeFromAspectRatio(aspectRatio: string): string {
 }
 
 function isRetryableGmiModelFailure(message: string): boolean {
-  return /does not exist|not found|no matching target server|target server|model .*unavailable|404/i.test(message);
+  return /does not exist|not found|no matching target server|target server|model .*unavailable|temporary backend|temporarily unavailable|aborted|timed out|timeout|429|404|5\d{2}/i.test(message);
+}
+
+function getGptImageSizeForAspectRatio(aspectRatio: string): string {
+  switch (aspectRatio) {
+    case '16:9': return '1920x1080';
+    case '9:16': return '1080x1920';
+    case '1:1': return '1024x1024';
+    case '4:3': return '2048x1536';
+    case '3:4': return '1536x2048';
+    default: return '1920x1080';
+  }
+}
+
+function isGptImage2Model(modelId: string): boolean {
+  const m = modelId.replace(/^gmi\//, '');
+  return m === 'gpt-image-2' || m === 'gpt-image-2-generate';
 }
 
 serve(async (req) => {
@@ -205,12 +221,13 @@ serve(async (req) => {
 
     // ── GMI Cloud path ──────────────────────────────────────────────────────
     if (selectedCatalogModel?.provider === 'gmi-cloud') {
-      const gmiApiModelId = selectedCatalogModel.endpointId;
+      // Always use the documented GMI endpoint for GPT Image 2 ('gpt-image-2-generate'),
+      // even if older saved settings still use the 'gpt-image-2' alias.
+      const rawEndpointId = selectedCatalogModel.endpointId;
+      const gmiApiModelId = isGptImage2Model(rawEndpointId) ? 'gpt-image-2-generate' : rawEndpointId;
       console.log(`[generate-shot-image][Shot ${shotId}] Using GMI Cloud model: ${gmiApiModelId}`);
 
       // GMI fallback model IDs to try if the primary model is unavailable.
-      // Keep concrete endpoint IDs here; gpt-image-2 can be catalog-visible while
-      // temporarily unroutable for a given GMI API key/region.
       const GMI_FALLBACK_MODELS = [
         'gemini-3.1-flash-image-preview',
         'seedream-5-0-lite',
@@ -246,12 +263,13 @@ serve(async (req) => {
         skipBilling: shouldSkipCreditBilling(req.headers),
       });
 
+      const gptImageSize = getGptImageSizeForAspectRatio(aspectRatio);
       const gmiPayload = {
         prompt: shot.visual_prompt,
         image_size: '1K',
         aspect_ratio: aspectRatio,
         image_output_format: 'png',
-        size: imageSize,
+        size: gptImageSize,
         quality: 'medium',
         output_format: 'png',
         n: 1,
