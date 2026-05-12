@@ -84,14 +84,15 @@ function isRetryableGmiModelFailure(message: string): boolean {
   return /does not exist|not found|no matching target server|target server|model .*unavailable|temporary backend|temporarily unavailable|aborted|timed out|timeout|429|404|5\d{2}/i.test(message);
 }
 
+// GPT Image 2 requires both edges to be multiples of 16. 1920x1080 is invalid (1080 % 16 != 0).
 function getGptImageSizeForAspectRatio(aspectRatio: string): string {
   switch (aspectRatio) {
-    case '16:9': return '1920x1080';
-    case '9:16': return '1080x1920';
+    case '16:9': return '2048x1152';
+    case '9:16': return '1152x2048';
     case '1:1': return '1024x1024';
-    case '4:3': return '2048x1536';
-    case '3:4': return '1536x2048';
-    default: return '1920x1080';
+    case '4:3': return '1536x1152';
+    case '3:4': return '1152x1536';
+    default: return '2048x1152';
   }
 }
 
