@@ -336,6 +336,103 @@ function translateLtxAudioPayload(payload: GmiQueuePayload): GmiQueuePayload {
   });
 }
 
+function translateVeo31Payload(payload: GmiQueuePayload): GmiQueuePayload {
+  const VALID_VEO_DURATIONS = new Set([4, 6, 8]);
+  const VALID_VEO_RATIOS = new Set(['16:9', '9:16']);
+  const VALID_VEO_RESOLUTIONS = new Set(['720p', '1080p', '4k']);
+  const VALID_PERSON = new Set(['allow_all', 'allow_adult', 'disallow']);
+
+  const images = collectGenericImages(payload);
+  const firstImage = asString(payload.image) ?? images[0];
+  const lastFrame = asString(payload.lastFrame) ?? asString(payload.last_frame);
+  const referenceImages = asStringArray(payload.reference_image);
+
+  const rawDuration = asFiniteNumber(payload.durationSeconds ?? payload.duration_seconds ?? payload.duration);
+  const duration = rawDuration && VALID_VEO_DURATIONS.has(rawDuration) ? rawDuration : 8;
+  const rawRatio = asString(payload.aspectRatio) ?? asString(payload.aspect_ratio) ?? '16:9';
+  const aspectRatio = VALID_VEO_RATIOS.has(rawRatio) ? rawRatio : '16:9';
+  const rawResolution = asString(payload.resolution)?.toLowerCase() ?? '1080p';
+  const resolution = VALID_VEO_RESOLUTIONS.has(rawResolution) ? rawResolution : '1080p';
+  const rawPerson = asString(payload.personGeneration ?? payload.person_generation) ?? 'allow_all';
+  const personGeneration = VALID_PERSON.has(rawPerson) ? rawPerson : 'allow_all';
+
+  return stripUndefined({
+    prompt: asString(payload.prompt) ?? '',
+    image: firstImage,
+    lastFrame,
+    reference_image: referenceImages.length > 0 ? referenceImages.slice(0, 3) : undefined,
+    durationSeconds: duration,
+    aspectRatio,
+    generateAudio: asBoolean(payload.generateAudio ?? payload.generate_audio) ?? true,
+    negativePrompt: asString(payload.negativePrompt ?? payload.negative_prompt),
+    personGeneration,
+    seed: asFiniteNumber(payload.seed) !== undefined
+      ? clampInteger(payload.seed, 0, 4294967295, 0)
+      : undefined,
+    resolution,
+  });
+}
+
+function normalizeGptImageSize(value: unknown): '1024x1024' | '1024x1536' | '1536x1024' {
+  const v = asString(value);
+  if (v === '1024x1536' || v === '1536x1024') return v;
+  return '1024x1024';
+}
+
+function normalizeGptImageQuality(value: unknown): 'low' | 'medium' | 'high' | 'auto' {
+  const v = asString(value)?.toLowerCase();
+  if (v === 'low' || v === 'high' || v === 'auto') return v;
+  return 'medium';
+}
+
+function translateGptImage2GeneratePayload(payload: GmiQueuePayload): GmiQueuePayload {
+  return stripUndefined({
+    prompt: asString(payload.prompt) ?? '',
+    size: normalizeGptImageSize(payload.size),
+    quality: normalizeGptImageQuality(payload.quality),
+    output_format: asString(payload.output_format) ?? 'png',
+    n: clampInteger(payload.n, 1, 10, 1),
+  });
+}
+
+function translateGptImage2EditPayload(payload: GmiQueuePayload): GmiQueuePayload {
+  const images = collectGenericImages(payload);
+  return stripUndefined({
+    prompt: asString(payload.prompt) ?? '',
+    image: asString(payload.image) ?? images[0],
+    mask: asString(payload.mask),
+    size: normalizeGptImageSize(payload.size),
+    quality: normalizeGptImageQuality(payload.quality),
+    n: clampInteger(payload.n, 1, 10, 1),
+  });
+}
+
+function translateGemini3ProImagePayload(payload: GmiQueuePayload): GmiQueuePayload {
+  const VALID_SIZES = new Set(['1K', '2K', '4K']);
+  const VALID_RATIOS = new Set(['1:1', '4:5', '5:4', '3:4', '4:3', '9:16', '16:9', '21:9']);
+  const images = collectGenericImages(payload);
+  const rawSize = asString(payload.image_size) ?? '1K';
+  const rawRatio = asString(payload.aspect_ratio) ?? asString(payload.aspectRatio) ?? '1:1';
+
+  return stripUndefined({
+    prompt: asString(payload.prompt) ?? '',
+    image: images.length > 0 ? images.slice(0, 14) : undefined,
+    image_size: VALID_SIZES.has(rawSize) ? rawSize : '1K',
+    aspect_ratio: VALID_RATIOS.has(rawRatio) ? rawRatio : '1:1',
+    image_output_format: asString(payload.image_output_format) ?? 'png',
+    contents: payload.contents,
+  });
+}
+
+function translateLumaUni11Payload(payload: GmiQueuePayload): GmiQueuePayload {
+  const images = collectGenericImages(payload);
+  return stripUndefined({
+    prompt: asString(payload.prompt) ?? '',
+    aspect_ratio: asString(payload.aspect_ratio) ?? asString(payload.aspectRatio) ?? '1:1',
+    image: asString(payload.image) ?? images[0],
+  });
+}
+
 function firstDefined<T>(...values: Array<T | undefined>): T | undefined {
   for (const value of values) {
     if (value !== undefined) return value;
