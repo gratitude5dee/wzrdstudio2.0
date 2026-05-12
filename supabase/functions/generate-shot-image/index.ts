@@ -4,7 +4,8 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fal } from "https://esm.sh/@fal-ai/client@1.2.3";
 import { mergeFalModelInputs, resolveFalModelOrFallback } from "../_shared/falai-client.ts";
-import { executeGmiQueueModel, executeGmiSyncImage, isGmiSyncImageModel, pollGmiQueueStatus } from "../_shared/gmi-client.ts";
+import { executeGmiQueueModel, pollGmiQueueStatus } from "../_shared/gmi-client.ts";
+import { extractGmiMedia } from "../_shared/gmi-types.ts";
 import { getCatalogModelById } from "../_shared/ai-model-catalog.ts";
 import {
   createAssetLineage,
@@ -77,6 +78,10 @@ function getImageSizeFromAspectRatio(aspectRatio: string): string {
     default:
       return "1536x1024"; // Default landscape 16:9
   }
+}
+
+function isRetryableGmiModelFailure(message: string): boolean {
+  return /does not exist|not found|no matching target server|target server|model .*unavailable|404/i.test(message);
 }
 
 serve(async (req) => {
@@ -203,8 +208,15 @@ serve(async (req) => {
       const gmiApiModelId = selectedCatalogModel.endpointId;
       console.log(`[generate-shot-image][Shot ${shotId}] Using GMI Cloud model: ${gmiApiModelId}`);
 
-      // GMI fallback model IDs to try if the primary model is unavailable
-      const GMI_FALLBACK_MODELS = ['gemini-3.1-flash-image-preview', 'seedream-4-0-250828', 'seedream-3-0'];
+      // GMI fallback model IDs to try if the primary model is unavailable.
+      // Keep concrete endpoint IDs here; gpt-image-2 can be catalog-visible while
+      // temporarily unroutable for a given GMI API key/region.
+      const GMI_FALLBACK_MODELS = [
+        'gemini-3.1-flash-image-preview',
+        'seedream-5-0-lite',
+        'seedream-4-0-250828',
+        'seedream-3-0-t2i-250415',
+      ];
 
       imageGenerationJobId = await createGenerationJob(supabase, {
         userId: user.id,
@@ -234,103 +246,15 @@ serve(async (req) => {
         skipBilling: shouldSkipCreditBilling(req.headers),
       });
 
-      // Convert aspect ratio to WxH for Seedream
-      const sizeMap: Record<string, string> = {
-        '16:9': '2560x1440', '9:16': '1440x2560', '1:1': '2048x2048',
-        '4:3': '2048x1536', '3:4': '1536x2048',
-      };
-      const gmiSize = sizeMap[aspectRatio] || '2048x2048';
-
-      // ── GMI sync image path (gpt-image-2 / gpt-image-2-edit) ──────────────
-      if (isGmiSyncImageModel(gmiApiModelId)) {
-        const syncSizeMap: Record<string, string> = {
-          '16:9': '1536x1024', '9:16': '1024x1536', '1:1': '1024x1024',
-          '4:3': '1536x1024', '3:4': '1024x1536',
-        };
-        const syncSize = syncSizeMap[aspectRatio] || '1024x1024';
-
-        const syncResult = await executeGmiSyncImage(gmiApiModelId, {
-          prompt: shot.visual_prompt,
-          size: syncSize,
-          quality: 'medium',
-          output_format: 'png',
-          n: 1,
-        });
-
-        if (!syncResult.success) {
-          throw new Error(syncResult.error || 'GMI sync image failed');
-        }
-
-        await supabase.from("shots").update({ image_progress: 80 }).eq("id", shotId);
-
-        let imageBuffer: Uint8Array;
-        if (syncResult.imageBase64) {
-          const binary = atob(syncResult.imageBase64);
-          imageBuffer = new Uint8Array(binary.length);
-          for (let i = 0; i < binary.length; i++) imageBuffer[i] = binary.charCodeAt(i);
-        } else {
-          const r = await fetch(syncResult.imageUrl!);
-          if (!r.ok) throw new Error(`Failed to download GMI sync image: ${r.status}`);
-          imageBuffer = new Uint8Array(await r.arrayBuffer());
-        }
-
-        const fileName = `shot-${shotId}-${Date.now()}.png`;
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('workflow-media')
-          .upload(fileName, imageBuffer, { contentType: 'image/png', upsert: false });
-        if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
-        const { data: { publicUrl } } = supabase.storage.from('workflow-media').getPublicUrl(fileName);
-
-        const promptVersionId = await createPromptVersion(supabase, {
-          projectId: shot.project_id, stage: 'shot_image', authorType: 'system',
-          text: shot.visual_prompt, sourceEntityType: 'shot', sourceEntityId: shotId,
-          metadata: { model_id: gmiApiModelId, storage_path: uploadData?.path ?? fileName, public_url: publicUrl },
-        });
-
-        const imageAssetId = await createProjectAsset(supabase, {
-          projectId: shot.project_id, userId: user.id, name: fileName, type: 'image',
-          url: publicUrl, size: imageBuffer.byteLength, storageBucket: 'workflow-media',
-          storagePath: uploadData?.path ?? fileName,
-          metadata: { shot_id: shotId, model_id: gmiApiModelId },
-        });
-
-        await supabase.from("shots").update({
-          image_url: publicUrl, image_asset_id: imageAssetId, image_status: "completed", image_progress: 100,
-        }).eq("id", shotId);
-
-        await createAssetLineage(supabase, {
-          projectId: shot.project_id, promptVersionId, generationJobId: imageGenerationJobId,
-          outputAssetId: imageAssetId, shotId, sceneId: shot.scene_id ?? null,
-          relationType: 'output', metadata: { kind: 'shot_image', model_id: gmiApiModelId },
-        });
-
-        await commitCredits({
-          supabase, holdId: creditReservation.holdId, skipped: creditReservation.skipped,
-          amount: gmiCreditCost,
-          metadata: { endpoint: 'generate-shot-image', shot_id: shotId, image_url: publicUrl, provider: 'gmi-cloud' },
-        });
-        await updateGenerationJob(supabase, imageGenerationJobId, {
-          status: 'completed', progress: 100, result_url: publicUrl,
-          result_payload: { shot_id: shotId, asset_id: imageAssetId },
-          completed_at: new Date().toISOString(),
-        });
-        await enqueueStoryboardEvaluation(supabase, {
-          userId: user.id, projectId: shot.project_id,
-          targetType: 'shot', targetId: shotId, sourceGenerationJobId: imageGenerationJobId,
-        });
-
-        console.log(`[generate-shot-image][Shot ${shotId}] GMI sync image generation completed (${gmiApiModelId})`);
-        return new Response(
-          JSON.stringify({ success: true, image_url: publicUrl, status: "completed" }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
       const gmiPayload = {
         prompt: shot.visual_prompt,
         image_size: '1K',
         aspect_ratio: aspectRatio,
         image_output_format: 'png',
+        size: imageSize,
+        quality: 'medium',
+        output_format: 'png',
+        n: 1,
       };
 
       // Try primary model, then fallbacks
@@ -346,16 +270,16 @@ serve(async (req) => {
             usedModelId = modelId;
             break;
           }
-          // If submission failed but not "does not exist", throw to outer catch
-          if (submitResult.error && !submitResult.error.includes('does not exist')) {
+          // Provider-side routing failures should try the next known-good GMI model.
+          if (submitResult.error && !isRetryableGmiModelFailure(submitResult.error)) {
             throw new Error(submitResult.error);
           }
-          console.warn(`[generate-shot-image][Shot ${shotId}] GMI model ${modelId} does not exist, trying next...`);
+          console.warn(`[generate-shot-image][Shot ${shotId}] GMI model ${modelId} unavailable (${submitResult.error}), trying next...`);
           submitResult = null;
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          if (msg.includes('does not exist')) {
-            console.warn(`[generate-shot-image][Shot ${shotId}] GMI model ${modelId} does not exist, trying next...`);
+          if (isRetryableGmiModelFailure(msg)) {
+            console.warn(`[generate-shot-image][Shot ${shotId}] GMI model ${modelId} unavailable (${msg}), trying next...`);
             submitResult = null;
             continue;
           }
@@ -397,7 +321,7 @@ serve(async (req) => {
           if (status === 'processing') {
             await supabase.from("shots").update({ image_progress: 60 }).eq("id", shotId);
           } else if (status === 'success') {
-            imageUrl = pollResult.data?.outcome?.media_urls?.[0]?.url || null;
+            imageUrl = extractGmiMedia(pollResult.data, 'image').primaryUrl || null;
             break;
           } else if (status === 'failed' || status === 'cancelled') {
             throw new Error(`GMI image generation ${status}`);
