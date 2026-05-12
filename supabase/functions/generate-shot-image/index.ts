@@ -828,6 +828,31 @@ serve(async (req) => {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
     const errorStack = error instanceof Error ? error.stack : undefined;
     console.error(`[generate-shot-image][Shot ${shotId || 'UNKNOWN'}] Unexpected error: ${errorMsg}`, errorStack);
+
+    // Recovery: flip stuck shot to failed so the UI doesn't spin forever
+    if (shotId) {
+      await supabase
+        .from("shots")
+        .update({ image_status: "failed", image_progress: 0, failure_reason: errorMsg })
+        .eq("id", shotId);
+    }
+    if (creditReservation) {
+      await releaseCredits({
+        supabase,
+        holdId: creditReservation.holdId,
+        skipped: creditReservation.skipped,
+        reason: 'unexpected_error',
+        metadata: { endpoint: 'generate-shot-image', shot_id: shotId, error: errorMsg },
+      }).catch(() => {});
+    }
+    if (imageGenerationJobId) {
+      await updateGenerationJob(supabase, imageGenerationJobId, {
+        status: 'failed',
+        error_message: errorMsg,
+        completed_at: new Date().toISOString(),
+      }).catch(() => {});
+    }
+
     return new Response(
       JSON.stringify({ success: false, error: 'An unexpected error occurred. Please try again.' }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
