@@ -1,75 +1,66 @@
-## Goal
+# Fix: Image generation stuck on "Generating image..."
 
-Two changes:
+## Root cause
 
-1. Make **GMI GPT Image 2** and **GMI Seedance 2.0 I2V** the actual pre-selected defaults everywhere (settings panel, project setup, store, credit fallbacks).
-2. Round out the Director's Cut stitching pipeline to use the full **fal-ai/ffmpeg-api** suite (merge-videos, compose, merge-audio-video, merge-audios, loudnorm, extract-frame, metadata, waveform) instead of only `merge-videos` + `compose`.
+The new default image model `gmi/gpt-image-2` is being submitted to the GMI **queue** endpoint (`console.gmicloud.ai/.../requestqueue/apikey/requests`). That endpoint never responds for `gpt-image-2`, so:
 
----
+- The fetch hangs until the edge function hits its 2-minute wall (confirmed in `generate-shot-image` logs: `Submitting queue request` → 2 min of silence → `shutdown`).
+- The shot row stays at `image_status='generating'` forever, so the UI shows the spinner indefinitely (Shot 1 in the screenshot).
 
-## Part 1 — Default model presets
+`gpt-image-2` (and `gpt-image-2-edit`) on GMI Cloud is an **OpenAI-compatible synchronous image API** at `https://api.gmi-serving.com/v1/images/generations`, not a queue model.
 
-Currently five places still hard-code old fallbacks (`gmi/seedream-5.0(-lite)`, `gmi/kling-v3-omni`, `gmi/ltx-fast-i2v`). Replace each with the new defaults:
+## Changes
 
-| File | Lines | Change |
-|---|---|---|
-| `src/components/project-setup/ProjectContext.tsx` | 84–85, 135–136, 373–374 | `baseImageModel` → `'gmi/gpt-image-2'`, `baseVideoModel` → `'gmi/seedance-2.0-i2v'` (initial state, create payload, hydrate fallback) |
-| `src/store/projectSettingsStore.ts` | 102–103, 130–131 | Same two replacements (load + create defaults) |
-| `src/components/studio/panels/SettingsPanel.tsx` | 304, 313 | `selectedId` fallback → new defaults |
-| `src/components/project-setup/TabNavigation.tsx` | 214, 237 | `value` fallback → new defaults |
-| `src/lib/constants/credits.ts` | 94, 103 | `getModelById` fallback ids → new defaults |
+### 1. Route `gpt-image-2` / `gpt-image-2-edit` to the sync image endpoint
+`supabase/functions/_shared/gmi-client.ts`
 
-No DB migration needed — `base_image_model` / `base_video_model` columns are nullable; existing projects keep their saved values. New projects get the new defaults.
+- Add `executeGmiImageGeneration(model, payload)` that POSTs to `${GMI_LLM_BASE}/images/generations` with `{ model, prompt, size, quality, n, response_format: 'b64_json' }` (or `url` if returned).
+- Add `executeGmiImageEdit(model, payload)` that POSTs to `${GMI_LLM_BASE}/images/edits` (multipart) with `image`, `mask`, `prompt`, `size`, `n`.
+- Both return `{ success, data: { url?: string, b64_json?: string } }` shaped like the queue extractors expect, so callers can reuse `extractGmiMedia`-style logic with a tiny shim returning `{ primaryUrl }`.
 
----
+### 2. Dispatcher: pick sync vs queue based on model
+`supabase/functions/_shared/gmi-client.ts` + every caller of `executeGmiQueueModel` (`generate-shot-image`, `generate-shot-video`, `kanvas-generate`, etc.)
 
-## Part 2 — Director's Cut: full fal ffmpeg suite
+- Add `isSyncImageGmiModel(model)` returning true for `gpt-image-2`, `gpt-image-2-edit`, `gmi/gpt-image-2`, `gmi/gpt-image-2-edit`.
+- New unified `executeGmiModel(model, payload, payloadKeys)` that routes:
+  - sync image models → `executeGmiImageGeneration` / `executeGmiImageEdit`
+  - everything else → existing `executeGmiQueueModel` + poll loop
+- Returns a normalized `{ success, primaryUrl, requestId? }` so `generate-shot-image`'s download/upload step is unchanged.
 
-Current state (`supabase/functions/_shared/export-helpers.ts`):
-- Picks `direct_video` for single video, `merge-videos` for all-video sequences, `compose` for mixed/audio cases.
-- Submits via raw `queue.fal.run` POST + manual polling.
+### 3. Hard timeout on every GMI fetch
+`supabase/functions/_shared/gmi-client.ts`
 
-Add a shared helper module `supabase/functions/_shared/fal-ffmpeg.ts` that wraps all 8 endpoints with one consistent submit+poll signature, then plug it into the Director's Cut renderer:
+- Add `fetchWithTimeout(url, init, ms)` using `AbortController`.
+- Apply 60s timeout to `submitGmiQueueRequest`, `pollGmiQueueStatus`, `fetchGmiQueueModelDetails`, and the new sync image calls. Treat aborts as a normal failure so the caller fails the shot fast instead of hanging until the function dies.
 
-```
-supabase/functions/_shared/fal-ffmpeg.ts
-  - mergeVideos({ video_urls, output_format? })
-  - compose({ width, height, fps, duration_seconds, tracks, output_format? })
-  - mergeAudioVideo({ video_url, audio_url, keep_video_audio?, output_format? })
-  - mergeAudios({ audio_urls, output_format? })
-  - loudnorm({ audio_url, target_i?, target_tp?, target_lra?, output_format? })
-  - extractFrame({ video_url, position?|timestamp_seconds?, output_format? })
-  - metadata({ file_url })
-  - waveform({ audio_url, sample_rate?, channels?, points? })
-```
+### 4. Recovery for already-stuck shots
+`supabase/functions/generate-shot-image/index.ts`
 
-All wrappers reuse the existing `falQueueSubmit` + `falPollUntilDone` + `extractVideoUrl` helpers (move them into `fal-ffmpeg.ts` and re-export from `export-helpers.ts` to avoid duplication).
+- Wrap the main work in `try/catch/finally`. On any thrown error (including timeout/abort), update the shot row with `image_status='failed'`, `failure_reason=<message>`, `image_progress=0` so the UI can recover instead of spinning forever.
+- One-time SQL migration to reset existing stuck rows:
+  ```sql
+  update public.shots
+     set image_status='failed', failure_reason='timeout (recovered)', image_progress=0
+   where image_status='generating'
+     and updated_at < now() - interval '5 minutes';
+  ```
 
-Pipeline upgrades inside `processAssetsRemote` / `renderWithFal`:
+### 5. Pre-selected default models (the user's main ask)
+Confirm and harden the new defaults across all surfaces so freshly created projects + the dropdowns in the screenshot land on the right models:
 
-1. **Audio normalization pre-pass** — if any voiceover/music track is present, run each audio URL through `loudnorm` (target_i = -16 LUFS, target_tp = -1.5, target_lra = 11) before composing, and substitute the normalized URL into the compose tracks. Skip on failure (best-effort).
-2. **Multi-audio mix** — if multiple `voiceover`/`music` audio tracks need to play simultaneously, pre-mix them with `mergeAudios` so `compose` only has to handle one audio stream.
-3. **Renderer selection** stays the same (direct → merge-videos → compose), but now compose receives normalized audio. When the only output needed is "video + single audio" (no overlays), prefer the lighter `mergeAudioVideo` over `compose`.
-4. **Thumbnail capture** — after the final video is rendered, call `extractFrame` (`position: "middle"`, `output_format: "png"`) and store the URL on `final_project_assets.metadata.thumbnail_url` so Director's Cut history can show a poster frame.
-5. **Metadata stamping** — call `metadata` on the final video and store `{ duration_ms, width, height, fps, codec }` into `final_project_assets.metadata.media_info` for downstream UI (eliminates guesswork from `DEFAULT_VIDEO_DURATION_MS`).
-6. **Waveform** — optional, gated behind `settings.includeWaveform === true`; not wired to UI in this pass but exposed via the helper for future use.
-
-Diagnostics (`renderDiagnostics`) gain three new fields: `loudnormApplied`, `audioPreMixed`, `posterFrameUrl`. Surfaced through the existing `provider_payload` so `useDirectorCut` debug summary can show them with no schema change.
-
-No new env vars (uses existing `FAL_KEY`). No DB migration (all new info lives inside existing JSONB `metadata` columns).
-
----
-
-## Technical notes
-
-- Single point of change for the renderer keeps the Editframe fallback path untouched.
-- `loudnorm` step is wrapped in `Promise.allSettled` so a single audio failure doesn't block the cut.
-- Polling timeout (`MAX_POLL = 180`, `POLL_MS = 3s` → ~9 min) reused as-is; metadata/extract-frame typically return in <10s so no tuning needed.
-- Tests: extend `src/hooks/__tests__/useDirectorCut.test.tsx` only if the debug summary shape changes consumer code; the hook itself stays API-compatible.
-
----
+- `src/components/project-setup/ProjectContext.tsx` → `baseImageModel: 'gmi/gpt-image-2'`, `baseVideoModel: 'gmi/seedance-2.0-i2v'` (already done last turn — verify all 3 fallback sites).
+- `src/store/projectSettingsStore.ts` → same two defaults (verify).
+- `src/components/studio/panels/SettingsPanel.tsx` and `src/components/project-setup/TabNavigation.tsx` → ensure the `Select`'s controlled value uses the new default ids when the project hasn't picked one yet, so the dropdowns visibly show the new defaults pre-selected (not blank).
+- Add a one-time DB migration that updates existing projects whose `image_model`/`video_model` are still the old fallbacks (`gmi/seedream-5.0`, `gmi/seedream-5.0-lite`, `gmi/kling-v3-omni`, `gmi/ltx-fast-i2v`) to the new defaults — otherwise existing projects (like the one in the screenshot) keep using the old IDs even after we change the constants.
 
 ## Out of scope
 
-- No UI for waveform display, poster frame override, or loudnorm target controls (helpers are ready when you want them).
-- No changes to GMI image/video generation pipelines — only the post-production stitching layer.
+- Director's Cut / FFmpeg pipeline (already shipped last turn — leave alone).
+- Adding new models to the catalog.
+
+## Validation
+
+1. Open the project in the screenshot, click `Generate Image` on Shot 1 — image returns within ~15s instead of hanging.
+2. Edge function logs show `[GMI] Image generation OK` instead of silence + shutdown.
+3. Force a failure (revoke key) → shot flips to `failed` with a visible reason in the UI within 60s.
+4. New project → image dropdown shows `GPT Image 2`, video dropdown shows `Seedance 2.0 I2V` pre-selected.
