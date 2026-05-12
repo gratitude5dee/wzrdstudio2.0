@@ -465,32 +465,105 @@ async function downloadVideoBytes(url: string): Promise<Uint8Array> {
   return new Uint8Array(await videoRes.arrayBuffer());
 }
 
+/**
+ * Best-effort EBU R128 loudness normalization for each audio asset.
+ * Returns the same array (in order) with `url` swapped for the normalized
+ * version when fal succeeds. A single failure does not block the cut.
+ */
+async function normalizeAudioAssets(
+  audioAssets: ExportAsset[],
+  falKey: string
+): Promise<{ assets: ExportAsset[]; applied: number }> {
+  if (audioAssets.length === 0) return { assets: audioAssets, applied: 0 };
+  const results = await Promise.allSettled(
+    audioAssets.map((asset) =>
+      falLoudnorm({ audio_url: asset.url!, target_i: -16, target_tp: -1.5, target_lra: 11, output_format: 'wav' }, falKey)
+    )
+  );
+  let applied = 0;
+  const next = audioAssets.map((asset, i) => {
+    const r = results[i];
+    if (r.status === 'fulfilled') {
+      const url = falExtractMediaUrl(r.value.data, ['audio_url', 'url', 'output_url']);
+      if (url) {
+        applied += 1;
+        return { ...asset, url };
+      }
+    } else {
+      safeLog('warn', 'export.fal.loudnorm.failed', { assetId: asset.id, error: r.reason });
+    }
+    return asset;
+  });
+  return { assets: next, applied };
+}
+
+/**
+ * If multiple audio tracks all start at 0 and are tagged music/voiceover, pre-mix
+ * them with merge-audios so the renderer only has one audio stream to compose.
+ */
+async function preMixAudioAssets(
+  audioAssets: ExportAsset[],
+  falKey: string
+): Promise<{ assets: ExportAsset[]; mixed: boolean }> {
+  if (audioAssets.length < 2) return { assets: audioAssets, mixed: false };
+  const allAtZero = audioAssets.every((a) => getNumber(a.metadata?.start_ms, 0) === 0);
+  if (!allAtZero) return { assets: audioAssets, mixed: false };
+  try {
+    const mix = await falMergeAudios({ audio_urls: audioAssets.map((a) => a.url!), output_format: 'wav' }, falKey);
+    const url = falExtractMediaUrl(mix.data, ['audio_url', 'url', 'output_url']);
+    if (!url) return { assets: audioAssets, mixed: false };
+    const head = audioAssets[0];
+    return {
+      assets: [{
+        ...head,
+        url,
+        metadata: { ...(head.metadata ?? {}), asset_role: 'music', start_ms: 0, premixed_from: audioAssets.length },
+      }],
+      mixed: true,
+    };
+  } catch (error) {
+    safeLog('warn', 'export.fal.merge_audios.failed', { error, count: audioAssets.length });
+    return { assets: audioAssets, mixed: false };
+  }
+}
+
 async function renderWithFal(
   supabaseAdmin: any,
   jobId: string,
   visuals: ExportAsset[],
-  audioAssets: ExportAsset[],
+  audioAssetsIn: ExportAsset[],
   falKey: string,
   settings: ExportSettings,
   shotFailures: ShotFailure[]
 ) {
   const { resolution = '1920x1080', fps = 30 } = settings;
   const { width, height } = parseResolution(resolution);
-  const allVideos = visuals.every((asset) => asset.type === 'video');
+  const allVideos = visuals.length > 0 && visuals.every((asset) => asset.type === 'video');
+
+  // Audio post-production pre-pass: loudnorm + multi-track mixdown.
+  const { assets: normalizedAudio, applied: loudnormApplied } = await normalizeAudioAssets(audioAssetsIn, falKey);
+  const { assets: audioAssets, mixed: audioPreMixed } = await preMixAudioAssets(normalizedAudio, falKey);
+
   const renderer = chooseFalRenderer(visuals, audioAssets);
-  const diagnostics = renderDiagnostics(visuals, audioAssets, renderer, settings);
+  const diagnostics = {
+    ...renderDiagnostics(visuals, audioAssets, renderer, settings),
+    loudnormApplied,
+    audioPreMixed,
+  };
 
+  // Fast path 1: single video, no audio → return the URL directly.
+  if (audioAssets.length === 0 && allVideos && visuals.length === 1) {
+    await updateJobPayload(
+      supabaseAdmin,
+      jobId,
+      { stage: 'downloading_assets', renderer: 'direct_video', renderDiagnostics: diagnostics, shotFailures },
+      80
+    );
+    return { url: visuals[0].url, renderer: 'direct_video', requestId: null as string | null };
+  }
+
+  // Fast path 2: multi-video, no audio → merge-videos.
   if (audioAssets.length === 0 && allVideos) {
-    if (visuals.length === 1) {
-      await updateJobPayload(
-        supabaseAdmin,
-        jobId,
-        { stage: 'downloading_assets', renderer: 'direct_video', renderDiagnostics: diagnostics, shotFailures },
-        80
-      );
-      return { url: visuals[0].url, renderer: 'direct_video', requestId: null as string | null };
-    }
-
     const mergeInput: Record<string, unknown> = {
       video_urls: visuals.map((asset) => asset.url),
       target_fps: fps,
@@ -498,7 +571,6 @@ async function renderWithFal(
     if (width >= 512 && height >= 512 && width <= 2048 && height <= 2048) {
       mergeInput.resolution = { width, height };
     }
-
     await updateJobPayload(
       supabaseAdmin,
       jobId,
@@ -516,6 +588,31 @@ async function renderWithFal(
     return { url: result.url, renderer: MERGE_MODEL, requestId: result.requestId };
   }
 
+  // Fast path 3: single video + single audio with no overlays → merge-audio-video.
+  if (allVideos && visuals.length === 1 && audioAssets.length === 1) {
+    await updateJobPayload(
+      supabaseAdmin,
+      jobId,
+      {
+        stage: 'provider_processing',
+        renderer: MERGE_AUDIO_VIDEO_MODEL,
+        renderDiagnostics: diagnostics,
+        visualTracks: 1,
+        audioTracks: 1,
+        shotFailures,
+      },
+      55,
+      { provider: 'fal_remote', provider_status: 'processing' }
+    );
+    const result = await runFalForVideoUrl(
+      MERGE_AUDIO_VIDEO_MODEL,
+      { video_url: visuals[0].url, audio_url: audioAssets[0].url, output_format: 'mp4' },
+      falKey
+    );
+    return { url: result.url, renderer: MERGE_AUDIO_VIDEO_MODEL, requestId: result.requestId };
+  }
+
+  // General path: timeline compose with overlays / mixed media / multiple tracks.
   await updateJobPayload(
     supabaseAdmin,
     jobId,
