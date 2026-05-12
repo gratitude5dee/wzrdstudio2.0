@@ -1,65 +1,75 @@
-## Add GMI Cloud models to the studio catalog
+## Goal
 
-The frontend selectors in **Project Setup** and **Timeline → Settings** read from `src/lib/studio-model-constants.ts`. Add entries for the 9 GMI Cloud models below so users can pick them, with credit costs derived from GMI's per-second / per-image pricing (1 credit ≈ $0.01 to match existing tariffs like `seedance-2.0-i2v` = 30 credits ≈ $0.30 for a 5s clip).
+Two changes:
 
-### 1. Image models — append to `gmiImageGenerationModels` (`src/lib/studio-model-constants.ts:487-534`)
+1. Make **GMI GPT Image 2** and **GMI Seedance 2.0 I2V** the actual pre-selected defaults everywhere (settings panel, project setup, store, credit fallbacks).
+2. Round out the Director's Cut stitching pipeline to use the full **fal-ai/ffmpeg-api** suite (merge-videos, compose, merge-audio-video, merge-audios, loudnorm, extract-frame, metadata, waveform) instead of only `merge-videos` + `compose`.
 
-| ID | Name | Pricing | Credits |
-|---|---|---|---|
-| `gmi/gpt-image-2-generate` | GPT Image 2 | $0.06/image (medium) | 6 |
-| `gmi/gpt-image-2-edit` | GPT Image 2 Edit | $0.06/image (medium) | 6 |
-| `gmi/gemini-3-pro-image-preview` | Gemini 3 Pro Image | $0.134/image | 14 |
-| `gmi/luma-uni-1.1` | Luma Uni 1.1 | $0.001/image | 1 |
+---
 
-GPT-Image-2-Edit and Luma Uni 1.1 also expose `image-to-image` (pass `image` URL); I'll create separate edit-mode entries with `workflowType: 'image-to-image'` and `supports: ['prompt','image','size','quality']`.
+## Part 1 — Default model presets
 
-### 2. Video models — append to the GMI video block (`src/lib/studio-model-constants.ts:1693-1805`)
+Currently five places still hard-code old fallbacks (`gmi/seedream-5.0(-lite)`, `gmi/kling-v3-omni`, `gmi/ltx-fast-i2v`). Replace each with the new defaults:
 
-| ID | Name | Pricing | Credits (5s) | Credits (8s) |
-|---|---|---|---|---|
-| `gmi/happyhorse-1.0-i2v` | HappyHorse 1.0 I2V | $0.28/s | 140 (5s) | — |
-| `gmi/wan-2.7-i2v` | Wan 2.7 I2V | $0.15/s | 75 (5s) | — |
-| `gmi/wan-2.7-r2v` | Wan 2.7 R2V | $0.15/s | 75 (5s) | — |
-| `gmi/veo-3.1-generate-001` | Veo 3.1 | $0.40/s | — | 320 (8s) |
-| `gmi/veo-3.1-lite-generate-001` | Veo 3.1 Lite | $0.05/s (720p+audio) | — | 40 (8s) |
+| File | Lines | Change |
+|---|---|---|
+| `src/components/project-setup/ProjectContext.tsx` | 84–85, 135–136, 373–374 | `baseImageModel` → `'gmi/gpt-image-2'`, `baseVideoModel` → `'gmi/seedance-2.0-i2v'` (initial state, create payload, hydrate fallback) |
+| `src/store/projectSettingsStore.ts` | 102–103, 130–131 | Same two replacements (load + create defaults) |
+| `src/components/studio/panels/SettingsPanel.tsx` | 304, 313 | `selectedId` fallback → new defaults |
+| `src/components/project-setup/TabNavigation.tsx` | 214, 237 | `value` fallback → new defaults |
+| `src/lib/constants/credits.ts` | 94, 103 | `getModelById` fallback ids → new defaults |
 
-Each entry sets `provider: 'gmi-cloud'`, `category: 'video-generation'`, `mediaType: 'video'`, `workflowType: 'image-to-video'` (or `text-to-video` for Veo 3.1 when no `image`), and `supports`/`defaults` matching the GMI payload schema (`prompt`, `first_frame`/`image`/`reference_image`/`reference_video`, `last_frame`/`lastFrame`, `resolution`, `duration`/`durationSeconds`, `ratio`/`aspectRatio`, `seed`, `watermark`, `generate_audio`, `negative_prompt`, `personGeneration`).
+No DB migration needed — `base_image_model` / `base_video_model` columns are nullable; existing projects keep their saved values. New projects get the new defaults.
 
-### 3. Backend routing — `supabase/functions/_shared/gmi-types.ts`
+---
 
-The `translateGmiQueuePayload` switch (line 422) needs cases so each model is sent with the correct field naming GMI expects:
+## Part 2 — Director's Cut: full fal ffmpeg suite
 
-- **`gmi/happyhorse-1.0-i2v`**, **`gmi/wan-2.7-i2v`** → reuse `translateWanI2vPayload` (same shape: `prompt`, `first_frame`, `last_frame`, `resolution`, `duration`, `prompt_extend`, `watermark`, `seed`).
-- **`gmi/wan-2.7-r2v`** → reuse `translateWanR2vPayload` (`reference_video[]`, `reference_image[]`, `ratio`, `duration`).
-- **`gmi/veo-3.1-generate-001`**, **`gmi/veo-3.1-lite-generate-001`** → new `translateVeo31Payload` that maps internal `image_url`→`image`, `last_frame`→`lastFrame`, `duration`→`durationSeconds`, `aspect_ratio`→`aspectRatio`, `generate_audio`→`generateAudio`, `negative_prompt`→`negativePrompt`, plus `personGeneration` and `resolution`.
-- **`gmi/gpt-image-2-generate`** → new branch passing `prompt`, `size`, `quality`, `output_format`, `n`.
-- **`gmi/gpt-image-2-edit`** → new branch passing `prompt`, `image`, `mask`, `size`, `quality`, `n`.
-- **`gmi/gemini-3-pro-image-preview`** → new branch passing `prompt`, `image[]`, `image_size`, `aspect_ratio`, `image_output_format` (and pass-through for `contents` multi-turn).
-- **`gmi/luma-uni-1.1`** → new branch passing `prompt`, `aspect_ratio`, optional `image`.
+Current state (`supabase/functions/_shared/export-helpers.ts`):
+- Picks `direct_video` for single video, `merge-videos` for all-video sequences, `compose` for mixed/audio cases.
+- Submits via raw `queue.fal.run` POST + manual polling.
 
-The endpoint slug GMI expects is the part after `gmi/`. Verify `resolveSharedGmiEndpointId` (in `shared/gmi-model-catalog.ts`) covers these — most already exist in `shared/generated/gmi-model-catalog.ts` with matching IDs (`gmi/happyhorse-1.0-i2v`, `gmi/wan-2.7-i2v`, `gmi/wan-2.7-r2v`, `gmi/veo-3-1-lite-generate-001`, `gmi/gemini-3-pro-image-preview`, `gmi/gpt-image-2`). For the IDs I'm adding that don't match the generated file (e.g. `gmi/veo-3.1-generate-001` vs `gmi/veo-3-1-generate-preview`, `gmi/gpt-image-2-generate`/`gmi/gpt-image-2-edit` vs `gmi/gpt-image-2`, `gmi/luma-uni-1.1` not in catalog), add an alias map in `gmi-types.ts` from internal ID → GMI endpoint slug so the queue receives the slug GMI documents:
+Add a shared helper module `supabase/functions/_shared/fal-ffmpeg.ts` that wraps all 8 endpoints with one consistent submit+poll signature, then plug it into the Director's Cut renderer:
 
 ```
-'gmi/veo-3.1-generate-001'      → 'veo-3.1-generate-001'
-'gmi/veo-3.1-lite-generate-001' → 'veo-3.1-lite-generate-001'
-'gmi/gpt-image-2-generate'      → 'gpt-image-2-generate'
-'gmi/gpt-image-2-edit'          → 'gpt-image-2-edit'
-'gmi/luma-uni-1.1'              → 'luma-uni-1.1'
-'gmi/happyhorse-1.0-i2v'        → 'happyhorse1.0-i2v'
-'gmi/wan-2.7-i2v'               → 'wan2.7-i2v'
-'gmi/wan-2.7-r2v'               → 'wan2.7-r2v'
-'gmi/gemini-3-pro-image-preview'→ 'gemini-3-pro-image-preview'
+supabase/functions/_shared/fal-ffmpeg.ts
+  - mergeVideos({ video_urls, output_format? })
+  - compose({ width, height, fps, duration_seconds, tracks, output_format? })
+  - mergeAudioVideo({ video_url, audio_url, keep_video_audio?, output_format? })
+  - mergeAudios({ audio_urls, output_format? })
+  - loudnorm({ audio_url, target_i?, target_tp?, target_lra?, output_format? })
+  - extractFrame({ video_url, position?|timestamp_seconds?, output_format? })
+  - metadata({ file_url })
+  - waveform({ audio_url, sample_rate?, channels?, points? })
 ```
 
-### 4. Server-side credit hold — `supabase/functions/_shared/credits.ts`
+All wrappers reuse the existing `falQueueSubmit` + `falPollUntilDone` + `extractVideoUrl` helpers (move them into `fal-ffmpeg.ts` and re-export from `export-helpers.ts` to avoid duplication).
 
-Add an entry per new model ID matching the credits values from §1/§2 so `credits_reserve` deducts the correct amount.
+Pipeline upgrades inside `processAssetsRemote` / `renderWithFal`:
 
-### 5. No changes needed to
+1. **Audio normalization pre-pass** — if any voiceover/music track is present, run each audio URL through `loudnorm` (target_i = -16 LUFS, target_tp = -1.5, target_lra = 11) before composing, and substitute the normalized URL into the compose tracks. Skip on failure (best-effort).
+2. **Multi-audio mix** — if multiple `voiceover`/`music` audio tracks need to play simultaneously, pre-mix them with `mergeAudios` so `compose` only has to handle one audio stream.
+3. **Renderer selection** stays the same (direct → merge-videos → compose), but now compose receives normalized audio. When the only output needed is "video + single audio" (no overlays), prefer the lighter `mergeAudioVideo` over `compose`.
+4. **Thumbnail capture** — after the final video is rendered, call `extractFrame` (`position: "middle"`, `output_format: "png"`) and store the URL on `final_project_assets.metadata.thumbnail_url` so Director's Cut history can show a poster frame.
+5. **Metadata stamping** — call `metadata` on the final video and store `{ duration_ms, width, height, fps, codec }` into `final_project_assets.metadata.media_info` for downstream UI (eliminates guesswork from `DEFAULT_VIDEO_DURATION_MS`).
+6. **Waveform** — optional, gated behind `settings.includeWaveform === true`; not wired to UI in this pass but exposed via the helper for future use.
 
-- `ProjectContext.tsx`, `TabNavigation.tsx`, `SettingsPanel.tsx` (presets stay on Seedream/LTX as previously chosen — the user only asked to *add* options, not switch defaults again).
-- DB schema — additions are purely catalog/routing.
+Diagnostics (`renderDiagnostics`) gain three new fields: `loudnormApplied`, `audioPreMixed`, `posterFrameUrl`. Surfaced through the existing `provider_payload` so `useDirectorCut` debug summary can show them with no schema change.
 
-### Open question
+No new env vars (uses existing `FAL_KEY`). No DB migration (all new info lives inside existing JSONB `metadata` columns).
 
-Several models have variable pricing (Veo 3.1 Lite 720p vs 1080p, GPT Image 2 quality tiers). I'll use the **medium / 720p+audio** tier for the catalog credit cost, since that matches GMI's headline price quoted in your message. If you want the dropdown to expose quality/resolution as user-selectable controls (e.g. `quality: low/medium/high` for GPT Image 2) with credit cost adjusting accordingly, say so and I'll add multi-tier variants instead of one default entry.
+---
+
+## Technical notes
+
+- Single point of change for the renderer keeps the Editframe fallback path untouched.
+- `loudnorm` step is wrapped in `Promise.allSettled` so a single audio failure doesn't block the cut.
+- Polling timeout (`MAX_POLL = 180`, `POLL_MS = 3s` → ~9 min) reused as-is; metadata/extract-frame typically return in <10s so no tuning needed.
+- Tests: extend `src/hooks/__tests__/useDirectorCut.test.tsx` only if the debug summary shape changes consumer code; the hook itself stays API-compatible.
+
+---
+
+## Out of scope
+
+- No UI for waveform display, poster frame override, or loudnorm target controls (helpers are ready when you want them).
+- No changes to GMI image/video generation pipelines — only the post-production stitching layer.
