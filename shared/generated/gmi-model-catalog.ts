@@ -7825,7 +7825,7 @@ export const GENERATED_GMI_MODEL_CATALOG: GeneratedGmiCatalogEntry[] = [
     },
     {
       "id": "gmi/gpt-image-2",
-      "endpointId": "gpt-image-2",
+      "endpointId": "gpt-image-2-generate",
       "provider": "gmi-cloud",
       "providerLabel": "OpenAI",
       "name": "GPT Image 2",
@@ -7933,7 +7933,8 @@ export const GENERATED_GMI_MODEL_CATALOG: GeneratedGmiCatalogEntry[] = [
         }
       ],
       "aliases": [
-        "gpt-image-2"
+        "gpt-image-2",
+        "gpt-image-2-generate"
       ],
       "enabled": true,
       "credits": 5,
