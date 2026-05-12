@@ -4,7 +4,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fal } from "https://esm.sh/@fal-ai/client@1.2.3";
 import { mergeFalModelInputs, resolveFalModelOrFallback } from "../_shared/falai-client.ts";
-import { executeGmiQueueModel, pollGmiQueueStatus } from "../_shared/gmi-client.ts";
+import { executeGmiQueueModel, executeGmiSyncImage, isGmiSyncImageModel, pollGmiQueueStatus } from "../_shared/gmi-client.ts";
 import { getCatalogModelById } from "../_shared/ai-model-catalog.ts";
 import {
   createAssetLineage,
