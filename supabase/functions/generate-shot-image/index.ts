@@ -81,7 +81,7 @@ function getImageSizeFromAspectRatio(aspectRatio: string): string {
 }
 
 function isRetryableGmiModelFailure(message: string): boolean {
-  return /does not exist|not found|no matching target server|target server|model .*unavailable|temporary backend|temporarily unavailable|aborted|timed out|timeout|429|404|5\d{2}/i.test(message);
+  return /does not exist|not found|no matching target server|target server|model .*unavailable|temporary backend|temporarily unavailable|aborted|timed out|timeout|429|404|5\d{2}|multiples of 16|invalid payload parameters|size dimensions/i.test(message);
 }
 
 // GPT Image 2 requires both edges to be multiples of 16. 1920x1080 is invalid (1080 % 16 != 0).
