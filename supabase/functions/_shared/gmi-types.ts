@@ -373,10 +373,18 @@ function translateVeo31Payload(payload: GmiQueuePayload): GmiQueuePayload {
   });
 }
 
-function normalizeGptImageSize(value: unknown): '1024x1024' | '1024x1536' | '1536x1024' {
+const VALID_GPT_IMAGE_SIZES = new Set([
+  '1024x1024', '1024x1536', '1536x1024',
+  '1920x1080', '1080x1920',
+  '2048x1536', '1536x2048',
+  '2560x1440', '1440x2560',
+  '3840x2160', '2160x3840',
+]);
+
+function normalizeGptImageSize(value: unknown): string {
   const v = asString(value);
-  if (v === '1024x1536' || v === '1536x1024') return v;
-  return '1024x1024';
+  if (v && VALID_GPT_IMAGE_SIZES.has(v)) return v;
+  return '1920x1080';
 }
 
 function normalizeGptImageQuality(value: unknown): 'low' | 'medium' | 'high' | 'auto' {
