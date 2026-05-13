@@ -211,24 +211,24 @@ const DirectorCutPage = () => {
         .from('timeline_assets')
         .select('*')
         .eq('project_id', projectId)
-        .order('order_index', { ascending: true });
+        .order('position_order', { ascending: true });
       if (rowsError) throw new Error(rowsError.message);
       if (!rows || rows.length === 0) throw new Error('No synced timeline assets found. Sync first.');
 
       const visuals = rows
-        .filter((r: any) => (r.asset_type === 'video' || r.asset_type === 'image') && r.url)
-        .map((r: any) => ({
-          url: r.url as string,
-          durationMs: Number(r.duration_ms ?? r.metadata?.duration_ms ?? 3000),
+        .filter((r) => (r.asset_type === 'video' || r.asset_type === 'image') && r.source_url)
+        .map((r) => ({
+          url: r.source_url as string,
+          durationMs: Number(r.duration_ms ?? 3000),
           kind: (r.asset_type === 'video' ? 'video' : 'image') as 'video' | 'image',
         }));
-      const audioRow = rows.find((r: any) => r.asset_type === 'audio' && r.url);
+      const audioRow = rows.find((r) => r.asset_type === 'audio' && r.source_url);
       if (visuals.length === 0) throw new Error('No visual timeline assets to render.');
 
       const result = await renderTimelineWasm({
         projectId,
         visuals,
-        audio: audioRow ? { url: audioRow.url } : null,
+        audio: audioRow ? { url: audioRow.source_url } : null,
         onProgress: (pct, message) =>
           setWasmState({ status: 'rendering', message: `${message ?? 'Rendering'} (${pct}%)` }),
       });
