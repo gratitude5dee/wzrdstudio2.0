@@ -124,7 +124,10 @@ export async function renderTimelineWasm(input: WasmRenderInput): Promise<WasmRe
   await ff.deleteFile(finalName).catch(() => undefined);
   await ff.deleteFile('concat.txt').catch(() => undefined);
 
-  const blob = new Blob([data as Uint8Array], { type: 'video/mp4' });
+  const bytes = data as Uint8Array;
+  const buf = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buf).set(bytes);
+  const blob = new Blob([buf], { type: 'video/mp4' });
 
   onProgress?.(95, 'Uploading export');
   const { data: userData } = await supabase.auth.getUser();
