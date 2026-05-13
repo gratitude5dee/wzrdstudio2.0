@@ -403,30 +403,36 @@ export function buildFalTracks(
   const tracks: FalTrack[] = [];
   let cursorMs = 0;
 
-  visualAssets.forEach((asset) => {
+  visualAssets.forEach((asset, index) => {
     const duration = Math.max(assetDuration(asset), 1000);
     const timestamp = assetStartMs(asset, cursorMs);
     tracks.push({
+      id: `visual-${index}-${asset.id}`,
       type: asset.type === 'image' ? 'image' : 'video',
-      url: asset.url,
-      start: +(timestamp / 1000).toFixed(3),
-      end: +((timestamp + duration) / 1000).toFixed(3),
-      x: 0,
-      y: 0,
-      width: canvas.width,
-      height: canvas.height,
+      keyframes: [{
+        url: asset.url,
+        timestamp,
+        duration,
+        x: 0,
+        y: 0,
+        width: canvas.width,
+        height: canvas.height,
+      }],
     });
     cursorMs = Math.max(cursorMs, timestamp + duration);
   });
 
-  audioAssets.forEach((asset) => {
+  audioAssets.forEach((asset, index) => {
     const start = getNumber(asset.metadata?.start_ms, 0);
     const duration = asset.duration_ms ?? getNumber(asset.metadata?.duration_ms, cursorMs || 5000);
     tracks.push({
+      id: `audio-${index}-${asset.id}`,
       type: 'audio',
-      url: asset.url,
-      start: +(start / 1000).toFixed(3),
-      end: +((start + duration) / 1000).toFixed(3),
+      keyframes: [{
+        url: asset.url,
+        timestamp: start,
+        duration,
+      }],
     });
   });
 
@@ -434,11 +440,14 @@ export function buildFalTracks(
 }
 
 function computeTimelineDurationSeconds(tracks: FalTrack[]): number {
-  let maxEnd = 0;
+  let maxEndMs = 0;
   for (const t of tracks) {
-    if (t.end > maxEnd) maxEnd = t.end;
+    for (const k of t.keyframes) {
+      const end = k.timestamp + k.duration;
+      if (end > maxEndMs) maxEndMs = end;
+    }
   }
-  return Math.max(Math.ceil(maxEnd), 1);
+  return Math.max(Math.ceil(maxEndMs / 1000), 1);
 }
 
 async function updateJobPayload(
