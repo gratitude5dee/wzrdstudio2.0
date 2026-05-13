@@ -642,7 +642,16 @@ async function renderWithFal(
     { provider: 'fal_remote', provider_status: 'processing' }
   );
 
-  const result = await runFalForVideoUrl(COMPOSE_MODEL, { tracks: buildFalTracks(visuals, audioAssets) }, falKey);
+  const composeTracks = buildFalTracks(visuals, audioAssets, { width, height });
+  const composeInput: Record<string, unknown> = {
+    width,
+    height,
+    fps,
+    duration_seconds: computeTimelineDurationSeconds(composeTracks),
+    tracks: composeTracks,
+    output_format: 'mp4',
+  };
+  const result = await runFalForVideoUrl(COMPOSE_MODEL, composeInput, falKey);
   return { url: result.url, renderer: COMPOSE_MODEL, requestId: result.requestId };
 }
 
