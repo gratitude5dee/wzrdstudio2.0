@@ -390,36 +390,50 @@ async function preflightAssets(assets: ExportAsset[]) {
   return { usable, failures };
 }
 
-export function buildFalTracks(visualAssets: ExportAsset[], audioAssets: ExportAsset[]): FalTrack[] {
+export function buildFalTracks(
+  visualAssets: ExportAsset[],
+  audioAssets: ExportAsset[],
+  canvas: { width: number; height: number } = { width: 1920, height: 1080 }
+): FalTrack[] {
   const tracks: FalTrack[] = [];
   let cursorMs = 0;
 
-  visualAssets.forEach((asset, index) => {
-    const duration = assetDuration(asset);
+  visualAssets.forEach((asset) => {
+    const duration = Math.max(assetDuration(asset), 1000);
     const timestamp = assetStartMs(asset, cursorMs);
     tracks.push({
-      id: `visual-${index}`,
       type: asset.type === 'image' ? 'image' : 'video',
-      keyframes: [{ timestamp, duration, url: asset.url }],
+      url: asset.url,
+      start: +(timestamp / 1000).toFixed(3),
+      end: +((timestamp + duration) / 1000).toFixed(3),
+      x: 0,
+      y: 0,
+      width: canvas.width,
+      height: canvas.height,
     });
     cursorMs = Math.max(cursorMs, timestamp + duration);
   });
 
-  audioAssets.forEach((asset, index) => {
+  audioAssets.forEach((asset) => {
+    const start = getNumber(asset.metadata?.start_ms, 0);
+    const duration = asset.duration_ms ?? getNumber(asset.metadata?.duration_ms, cursorMs || 5000);
     tracks.push({
-      id: `${asset.subtype ?? 'audio'}-${index}`,
       type: 'audio',
-      keyframes: [
-        {
-          timestamp: getNumber(asset.metadata?.start_ms, 0),
-          duration: asset.duration_ms ?? getNumber(asset.metadata?.duration_ms, cursorMs || 5000),
-          url: asset.url,
-        },
-      ],
+      url: asset.url,
+      start: +(start / 1000).toFixed(3),
+      end: +((start + duration) / 1000).toFixed(3),
     });
   });
 
   return tracks;
+}
+
+function computeTimelineDurationSeconds(tracks: FalTrack[]): number {
+  let maxEnd = 0;
+  for (const t of tracks) {
+    if (t.end > maxEnd) maxEnd = t.end;
+  }
+  return Math.max(Math.ceil(maxEnd), 1);
 }
 
 async function updateJobPayload(
