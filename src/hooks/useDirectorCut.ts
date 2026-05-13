@@ -4,6 +4,8 @@ import { supabase } from '@/integrations/supabase/client';
 
 const POLL_INTERVAL_MS = 2000;
 
+export type DirectorCutExportMode = 'blocked' | 'complete' | 'available_content';
+
 export interface DirectorCutSummary {
   totalShots: number;
   syncedAssets: number;
@@ -16,6 +18,9 @@ export interface DirectorCutSummary {
   audioAssets: number;
   canExport: boolean;
   blockingReason: string | null;
+  exportMode?: DirectorCutExportMode;
+  isCompleteCut?: boolean;
+  skippedShotCount?: number;
 }
 
 export interface DirectorCutMissingShotDetail {
@@ -23,6 +28,7 @@ export interface DirectorCutMissingShotDetail {
   sceneId: string | null;
   sceneNumber: number | null;
   shotNumber: number | null;
+  orderIndex?: number;
   reason: string;
   imageStatus?: string | null;
   videoStatus?: string | null;
@@ -61,9 +67,15 @@ export interface ShotFailureInfo {
   assetId: string;
   orderIndex: number;
   reason: string;
+  shotId?: string;
+  sceneNumber?: number | null;
+  shotNumber?: number | null;
 }
 
 export interface DirectorCutDebugSummary {
+  exportMode?: DirectorCutExportMode | null;
+  isCompleteCut?: boolean | null;
+  skippedShotCount?: number | null;
   renderer?: string | null;
   stage?: string | null;
   falRequestId?: string | null;
@@ -90,6 +102,9 @@ export interface DirectorCutJobState {
   providerPayload?: Record<string, unknown> | null;
   shotFailures?: ShotFailureInfo[];
   partialSuccess?: boolean;
+  exportMode?: DirectorCutExportMode | null;
+  isCompleteCut?: boolean | null;
+  skippedShotCount?: number | null;
   renderer?: string | null;
   falRequestId?: string | null;
   providerJobId?: string | null;
@@ -109,6 +124,14 @@ const asString = (value: unknown): string | null =>
 const asNumber = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) ? value : null;
 
+const asBoolean = (value: unknown): boolean | null =>
+  typeof value === 'boolean' ? value : null;
+
+const asExportMode = (value: unknown): DirectorCutExportMode | null => {
+  const mode = asString(value);
+  return mode === 'blocked' || mode === 'complete' || mode === 'available_content' ? mode : null;
+};
+
 const normalizeShotFailures = (value: unknown): ShotFailureInfo[] => {
   if (!Array.isArray(value)) return [];
   return value
@@ -119,7 +142,14 @@ const normalizeShotFailures = (value: unknown): ShotFailureInfo[] => {
       const orderIndex = asNumber(record.orderIndex);
       const reason = asString(record.reason);
       if (!assetId || orderIndex === null || !reason) return null;
-      return { assetId, orderIndex, reason };
+      return {
+        assetId,
+        orderIndex,
+        reason,
+        shotId: asString(record.shotId) ?? undefined,
+        sceneNumber: asNumber(record.sceneNumber),
+        shotNumber: asNumber(record.shotNumber),
+      };
     })
     .filter((failure): failure is ShotFailureInfo => Boolean(failure));
 };
@@ -134,6 +164,7 @@ const normalizeMissingShotDetails = (value: unknown): DirectorCutMissingShotDeta
       const sceneId = asString(record.sceneId);
       const sceneNumber = asNumber(record.sceneNumber);
       const shotNumber = asNumber(record.shotNumber);
+      const orderIndex = asNumber(record.orderIndex);
       const reason = asString(record.reason) ?? 'Missing shot image or video';
       if (!shotId) return null;
       return {
@@ -141,6 +172,7 @@ const normalizeMissingShotDetails = (value: unknown): DirectorCutMissingShotDeta
         sceneId,
         sceneNumber,
         shotNumber,
+        orderIndex: orderIndex ?? undefined,
         reason,
         imageStatus: asString(record.imageStatus),
         videoStatus: asString(record.videoStatus),
@@ -156,19 +188,19 @@ const normalizeDirectorCutSummary = (value: unknown): DirectorCutSummary => {
   const visualAssets = asNumber(record.visualAssets) ?? readyVideos + fallbackImages;
   const missingShots = asNumber(record.missingShots) ?? 0;
   const totalShots = asNumber(record.totalShots) ?? 0;
+  const skippedShotCount = asNumber(record.skippedShotCount) ?? missingShots;
+  const canExport =
+    typeof record.canExport === 'boolean'
+      ? record.canExport
+      : totalShots > 0 && visualAssets > 0;
+  const exportMode = asExportMode(record.exportMode) ?? (!canExport ? 'blocked' : skippedShotCount > 0 ? 'available_content' : 'complete');
   const blockingReason =
     asString(record.blockingReason) ??
     (totalShots === 0
       ? "No ordered shots are available for Director's Cut."
-      : missingShots > 0
-        ? `${missingShots} ordered ${missingShots === 1 ? 'shot is' : 'shots are'} missing an image or video. Generate all visuals before starting Director's Cut.`
-        : visualAssets === 0
-          ? "No shot image or video assets are available for Director's Cut."
-          : null);
-  const canExport =
-    typeof record.canExport === 'boolean'
-      ? record.canExport
-      : totalShots > 0 && visualAssets > 0 && missingShots === 0;
+      : visualAssets === 0
+        ? "No generated shot image or video assets are available for Director's Cut."
+        : null);
 
   return {
     totalShots,
@@ -182,6 +214,9 @@ const normalizeDirectorCutSummary = (value: unknown): DirectorCutSummary => {
     audioAssets: asNumber(record.audioAssets) ?? 0,
     canExport,
     blockingReason: canExport ? null : blockingReason,
+    exportMode,
+    isCompleteCut: asBoolean(record.isCompleteCut) ?? exportMode === 'complete',
+    skippedShotCount,
   };
 };
 
@@ -219,6 +254,9 @@ async function extractDirectorCutFunctionError(
 }
 
 const buildDebugSummary = (payload: Record<string, unknown>, providerJobId?: string | null): DirectorCutDebugSummary => ({
+  exportMode: asExportMode(payload.exportMode),
+  isCompleteCut: asBoolean(payload.isCompleteCut),
+  skippedShotCount: asNumber(payload.skippedShotCount),
   renderer: asString(payload.renderer),
   stage: asString(payload.stage),
   falRequestId: asString(payload.falRequestId),
@@ -292,6 +330,9 @@ export function useDirectorCut(projectId: string | undefined) {
 
           const payload = statusData.providerPayload ?? {};
           const debugSummary = buildDebugSummary(payload, statusData.providerJobId);
+          const shotFailures = normalizeShotFailures(payload.shotFailures);
+          const skippedShotCount = debugSummary.skippedShotCount ?? (shotFailures.length > 0 ? shotFailures.length : null);
+          const partialSuccess = !!payload.partialSuccess || (skippedShotCount ?? 0) > 0 || shotFailures.length > 0;
           const nextState: DirectorCutJobState = {
             jobId,
             status: statusData.status as DirectorCutJobState['status'],
@@ -303,8 +344,11 @@ export function useDirectorCut(projectId: string | undefined) {
             providerStatus: statusData.providerStatus ?? null,
             fallbackUsed: statusData.fallbackUsed ?? false,
             providerPayload: statusData.providerPayload ?? null,
-            shotFailures: normalizeShotFailures(payload.shotFailures),
-            partialSuccess: !!payload.partialSuccess,
+            shotFailures,
+            partialSuccess,
+            exportMode: debugSummary.exportMode,
+            isCompleteCut: debugSummary.isCompleteCut,
+            skippedShotCount,
             renderer: debugSummary.renderer,
             falRequestId: debugSummary.falRequestId,
             providerJobId: debugSummary.providerJobId,
@@ -319,9 +363,10 @@ export function useDirectorCut(projectId: string | undefined) {
 
           if (nextState.status === 'completed') {
             stopPolling();
-            if (nextState.partialSuccess && nextState.shotFailures && nextState.shotFailures.length > 0) {
+            const skippedCount = nextState.skippedShotCount ?? nextState.shotFailures?.length ?? 0;
+            if (nextState.partialSuccess && skippedCount > 0) {
               toast.success(
-                `Director's Cut is ready (${nextState.shotFailures.length} shot(s) skipped due to errors)`
+                `Director's Cut is ready (${skippedCount} shot(s) skipped)`
               );
             } else {
               toast.success("Director's Cut is ready");
@@ -396,7 +441,7 @@ export function useDirectorCut(projectId: string | undefined) {
       if (!ensuredSummary.canExport) {
         throw new Error(
           ensuredSummary.blockingReason ??
-            "Director's Cut is blocked until every ordered shot has an image or video."
+            "Director's Cut needs at least one generated shot image or video."
         );
       }
 
@@ -418,18 +463,37 @@ export function useDirectorCut(projectId: string | undefined) {
         throw new Error("Director's Cut did not return a job ID");
       }
 
+      const providerPayload =
+        data?.providerPayload && typeof data.providerPayload === 'object'
+          ? (data.providerPayload as Record<string, unknown>)
+          : null;
+      const initialShotFailures = normalizeShotFailures(providerPayload?.shotFailures);
+      const initialSkippedShotCount =
+        asNumber(data?.skippedShotCount) ??
+        asNumber(providerPayload?.skippedShotCount) ??
+        ensuredSummary.skippedShotCount ??
+        (initialShotFailures.length > 0 ? initialShotFailures.length : null);
+      const initialExportMode =
+        asExportMode(data?.exportMode) ?? asExportMode(providerPayload?.exportMode) ?? ensuredSummary.exportMode ?? null;
       const initialJob: DirectorCutJobState = {
         jobId,
         status: 'processing',
         progress: clampProgress(data?.progress ?? 5),
-        stage: 'syncing_assets',
+        stage: (providerPayload?.stage as DirectorCutStage) ?? 'syncing_assets',
         provider: data?.provider ?? 'fal',
         providerStatus: data?.providerStatus ?? 'queued',
         fallbackUsed: !!data?.fallbackUsed,
         outputUrl: null,
-        providerPayload: null,
-        shotFailures: [],
-        partialSuccess: false,
+        providerPayload,
+        shotFailures: initialShotFailures,
+        partialSuccess: !!providerPayload?.partialSuccess || (initialSkippedShotCount ?? 0) > 0,
+        exportMode: initialExportMode,
+        isCompleteCut:
+          asBoolean(data?.isCompleteCut) ??
+          asBoolean(providerPayload?.isCompleteCut) ??
+          ensuredSummary.isCompleteCut ??
+          null,
+        skippedShotCount: initialSkippedShotCount,
       };
       setJob(initialJob);
       startPolling(jobId);

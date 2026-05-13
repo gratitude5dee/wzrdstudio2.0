@@ -410,11 +410,100 @@ describe('useDirectorCut', () => {
     });
 
     expect(result.current.error).toBe(
-      "3 ordered shots are missing an image or video. Generate all visuals before starting Director's Cut."
+      "No generated shot image or video assets are available for Director's Cut."
     );
     expect(invokeMock).not.toHaveBeenCalledWith('director-cut', {
       body: { action: 'create', projectId: 'project-1' },
     });
+  });
+
+  it('starts when ready visuals exist with missing shots', async () => {
+    invokeMock.mockImplementation(async (_name: string, args: { body: { action: string } }) => {
+      if (args.body.action === 'sync') {
+        return {
+          data: {
+            summary: {
+              totalShots: 15,
+              syncedAssets: 3,
+              visualAssets: 3,
+              readyShots: 3,
+              readyVideos: 1,
+              fallbackImages: 2,
+              missingShots: 12,
+              skippedShotCount: 12,
+              exportMode: 'available_content',
+              isCompleteCut: false,
+              canExport: true,
+              blockingReason: null,
+            },
+          },
+          error: null,
+        };
+      }
+      if (args.body.action === 'create') {
+        return {
+          data: {
+            jobId: 'partial-available-job',
+            progress: 5,
+            provider: 'fal_remote',
+            providerStatus: 'queued',
+            skippedShotCount: 12,
+            exportMode: 'available_content',
+            isCompleteCut: false,
+            providerPayload: {
+              stage: 'syncing_assets',
+              skippedShotCount: 12,
+              exportMode: 'available_content',
+              isCompleteCut: false,
+              partialSuccess: true,
+              shotFailures: [
+                {
+                  assetId: 'shot-4',
+                  orderIndex: 3,
+                  shotId: 'shot-4',
+                  sceneNumber: 2,
+                  shotNumber: 1,
+                  reason: 'Missing shot image or video',
+                },
+              ],
+            },
+          },
+          error: null,
+        };
+      }
+      if (args.body.action === 'status') {
+        return {
+          data: {
+            status: 'processing',
+            progress: 20,
+            providerPayload: {
+              stage: 'provider_processing',
+              skippedShotCount: 12,
+              exportMode: 'available_content',
+              isCompleteCut: false,
+              partialSuccess: true,
+            },
+          },
+          error: null,
+        };
+      }
+      return { data: {}, error: null };
+    });
+
+    const { result } = renderHook(() => useDirectorCut('project-1'));
+
+    await act(async () => {
+      const response = await result.current.startDirectorCut();
+      expect(response?.jobId).toBe('partial-available-job');
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith('director-cut', {
+      body: { action: 'create', projectId: 'project-1' },
+    });
+    expect(result.current.summary?.canExport).toBe(true);
+    expect(result.current.summary?.skippedShotCount).toBe(12);
+    expect(result.current.job?.partialSuccess).toBe(true);
+    expect(result.current.job?.exportMode).toBe('available_content');
   });
 
   it('blocks audio-only synced assets before creating a job', async () => {
@@ -433,7 +522,7 @@ describe('useDirectorCut', () => {
               audioAssets: 1,
               canExport: false,
               blockingReason:
-                "2 ordered shots are missing an image or video. Generate all visuals before starting Director's Cut.",
+                "No generated shot image or video assets are available for Director's Cut.",
             },
           },
           error: null,
@@ -450,7 +539,7 @@ describe('useDirectorCut', () => {
     });
 
     expect(result.current.error).toBe(
-      "2 ordered shots are missing an image or video. Generate all visuals before starting Director's Cut."
+      "No generated shot image or video assets are available for Director's Cut."
     );
     expect(invokeMock).not.toHaveBeenCalledWith('director-cut', {
       body: { action: 'create', projectId: 'project-1' },

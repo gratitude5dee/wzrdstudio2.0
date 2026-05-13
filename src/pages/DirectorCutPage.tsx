@@ -108,6 +108,9 @@ const buildDirectorCutDebugDetails = (job: DirectorCutJobState) =>
       providerStatus: job.providerStatus,
       providerJobId: job.providerJobId,
       stage: job.debugSummary?.stage ?? job.stage,
+      exportMode: job.exportMode,
+      isCompleteCut: job.isCompleteCut,
+      skippedShotCount: job.skippedShotCount,
       renderer: job.renderer,
       falRequestId: job.falRequestId,
       falError: job.falError,
@@ -121,6 +124,17 @@ const buildDirectorCutDebugDetails = (job: DirectorCutJobState) =>
     null,
     2
   );
+
+const formatShotFailureLabel = (failure: {
+  orderIndex: number;
+  sceneNumber?: number | null;
+  shotNumber?: number | null;
+}) => {
+  if (typeof failure.sceneNumber === 'number' && typeof failure.shotNumber === 'number') {
+    return `Scene ${failure.sceneNumber}, shot ${failure.shotNumber}`;
+  }
+  return `Shot #${failure.orderIndex + 1}`;
+};
 
 const DirectorCutPage = () => {
   const { projectId } = useParams<{ projectId?: string }>();
@@ -167,6 +181,9 @@ const DirectorCutPage = () => {
   const setupError =
     job?.fallbackStatus === 'unavailable' &&
     /EDITFRAME_API_KEY|FAL_KEY/i.test(`${job.fallbackError ?? ''} ${job.error ?? ''}`);
+  const skippedShotCount = summary?.skippedShotCount ?? summary?.missingShots ?? 0;
+  const hasAvailableContentWarning = !!summary?.canExport && skippedShotCount > 0;
+  const isStrictlyBlocked = !!summary && !summary.canExport;
 
   const copyDebugDetails = async () => {
     if (!job) return;
@@ -213,15 +230,43 @@ const DirectorCutPage = () => {
             <StatCard label="Missing" value={summary?.missingShots ?? 0} tone="warn" />
           </div>
 
-          {summary && !summary.canExport && (
+          {summary && hasAvailableContentWarning && (
             <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-5">
               <div className="flex items-start gap-3">
                 <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" />
                 <div className="min-w-0">
-                  <p className="font-medium text-amber-100">Full-cut export is blocked</p>
+                  <p className="font-medium text-amber-100">
+                    {skippedShotCount} {skippedShotCount === 1 ? 'shot' : 'shots'} will be skipped
+                  </p>
+                  <p className="mt-1 text-sm text-amber-100/75">
+                    Director&apos;s Cut will export the generated visuals that are ready now. Missing shots remain listed below.
+                  </p>
+                  {summary.missingShotDetails.length > 0 && (
+                    <ul className="mt-3 grid gap-1 text-xs text-amber-100/65 sm:grid-cols-2">
+                      {summary.missingShotDetails.slice(0, 10).map((shot) => (
+                        <li key={shot.shotId}>
+                          Scene {shot.sceneNumber ?? 'n/a'}, shot {shot.shotNumber ?? 'n/a'}: {shot.reason}
+                        </li>
+                      ))}
+                      {summary.missingShotDetails.length > 10 && (
+                        <li>+{summary.missingShotDetails.length - 10} more missing shots</li>
+                      )}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {summary && isStrictlyBlocked && (
+            <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-5">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" />
+                <div className="min-w-0">
+                  <p className="font-medium text-amber-100">Director&apos;s Cut export is blocked</p>
                   <p className="mt-1 text-sm text-amber-100/75">
                     {summary.blockingReason ??
-                      "Generate an image or video for every ordered shot before starting Director's Cut."}
+                      "Generate at least one shot image or video before starting Director's Cut."}
                   </p>
                   {summary.missingShotDetails.length > 0 && (
                     <ul className="mt-3 grid gap-1 text-xs text-amber-100/65 sm:grid-cols-2">
@@ -340,6 +385,9 @@ const DirectorCutPage = () => {
                         </div>
                         <DebugRow label="Renderer" value={job.renderer} />
                         <DebugRow label="Stage" value={job.debugSummary?.stage ?? job.stage} />
+                        <DebugRow label="Export mode" value={job.exportMode} />
+                        <DebugRow label="Complete cut" value={job.isCompleteCut === null || job.isCompleteCut === undefined ? null : String(job.isCompleteCut)} />
+                        <DebugRow label="Skipped shots" value={job.skippedShotCount} />
                         <DebugRow label="Fal request" value={job.falRequestId} />
                         <DebugRow label="Provider job" value={job.providerJobId} />
                         <DebugRow label="Fallback status" value={job.fallbackStatus} />
@@ -356,7 +404,7 @@ const DirectorCutPage = () => {
                         <ul className="mt-1 space-y-1">
                           {job.shotFailures.map((failure) => (
                             <li key={`${failure.assetId}-${failure.orderIndex}`} className="text-xs text-rose-100/70">
-                              Shot #{failure.orderIndex + 1}: {failure.reason}
+                              {formatShotFailureLabel(failure)}: {failure.reason}
                             </li>
                           ))}
                         </ul>
@@ -433,16 +481,16 @@ const DirectorCutPage = () => {
                 <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-400" />
                 <div>
                   <p className="font-medium text-amber-200">
-                    {job.shotFailures.length} shot(s) were skipped
+                    {job.skippedShotCount ?? job.shotFailures.length} shot(s) were skipped
                   </p>
                   <p className="mt-1 text-sm text-amber-200/70">
-                    The final video was produced from the remaining successful shots.
-                    Re-generate the failed shots and run Director&apos;s Cut again for a complete export.
+                    The final video was built from available generated shots. Missing or failed shots were skipped;
+                    generate them and run Director&apos;s Cut again for a complete cut.
                   </p>
                   <ul className="mt-3 space-y-1">
                     {job.shotFailures.map((failure) => (
                       <li key={failure.assetId} className="text-xs text-amber-200/60">
-                        Shot #{failure.orderIndex + 1}: {failure.reason}
+                        {formatShotFailureLabel(failure)}: {failure.reason}
                       </li>
                     ))}
                   </ul>

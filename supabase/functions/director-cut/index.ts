@@ -1,18 +1,26 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import {
-  ExportAsset,
-  ExportSettings,
   ExportProcessingError,
   processAssetsRemote,
 } from '../_shared/export-helpers.ts';
+import type { ExportAsset, ExportSettings } from '../_shared/export-helpers.ts';
+import {
+  buildDirectorCutTimeline,
+  missingShotDetailsToFailures,
+} from '../_shared/director-cut-timeline.ts';
+import type {
+  DirectorCutSceneRow,
+  DirectorCutShotRow,
+  DirectorCutSummary,
+  ProjectVisualAssetRow,
+  ShotFailureInfo,
+} from '../_shared/director-cut-timeline.ts';
 import { safeLog } from '../_shared/safe-logger.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 const EXPORT_BUCKET = 'final-exports';
-const DEFAULT_IMAGE_DURATION_MS = 5000;
-const DEFAULT_VIDEO_DURATION_MS = 6000;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -36,29 +44,7 @@ interface RequestBody {
   settings?: ExportSettings;
 }
 
-interface MissingShotDetail {
-  shotId: string;
-  sceneId: string | null;
-  sceneNumber: number | null;
-  shotNumber: number | null;
-  reason: string;
-  imageStatus?: string | null;
-  videoStatus?: string | null;
-}
-
-interface DirectorCutSummary {
-  totalShots: number;
-  syncedAssets: number;
-  visualAssets: number;
-  readyShots: number;
-  readyVideos: number;
-  fallbackImages: number;
-  missingShots: number;
-  missingShotDetails: MissingShotDetail[];
-  audioAssets: number;
-  canExport: boolean;
-  blockingReason: string | null;
-}
+type SupabaseAdminClient = ReturnType<typeof createClient>;
 
 type TimelineAssetRole = 'shot_visual' | 'voiceover' | 'sfx' | 'music';
 
@@ -87,7 +73,7 @@ const mapTimelineAssetsToExportAssets = (assets: TimelineAssetRow[]): ExportAsse
     });
 
 
-const assertProjectAccess = async (supabaseAdmin: any, userId: string, projectId: string) => {
+const assertProjectAccess = async (supabaseAdmin: SupabaseAdminClient, userId: string, projectId: string) => {
   const { data: project, error: projectError } = await supabaseAdmin
     .from('projects')
     .select('id, user_id')
@@ -101,55 +87,7 @@ const assertProjectAccess = async (supabaseAdmin: any, userId: string, projectId
   return project;
 };
 
-const buildBlockingReason = (input: {
-  totalShots: number;
-  visualAssets: number;
-  missingShots: number;
-}) => {
-  if (input.totalShots === 0) {
-    return "No ordered shots are available for Director's Cut.";
-  }
-  if (input.missingShots > 0) {
-    const label = input.missingShots === 1 ? 'shot is' : 'shots are';
-    return `${input.missingShots} ordered ${label} missing an image or video. Generate all visuals before starting Director's Cut.`;
-  }
-  if (input.visualAssets === 0) {
-    return "No shot image or video assets are available for Director's Cut.";
-  }
-  return null;
-};
-
-const buildSummary = (input: {
-  totalShots: number;
-  syncedAssets: number;
-  readyVideos: number;
-  fallbackImages: number;
-  missingShotDetails: MissingShotDetail[];
-  audioAssets: number;
-}): DirectorCutSummary => {
-  const visualAssets = input.readyVideos + input.fallbackImages;
-  const missingShots = input.missingShotDetails.length;
-  const blockingReason = buildBlockingReason({
-    totalShots: input.totalShots,
-    visualAssets,
-    missingShots,
-  });
-  return {
-    totalShots: input.totalShots,
-    syncedAssets: input.syncedAssets,
-    visualAssets,
-    readyShots: visualAssets,
-    readyVideos: input.readyVideos,
-    fallbackImages: input.fallbackImages,
-    missingShots,
-    missingShotDetails: input.missingShotDetails,
-    audioAssets: input.audioAssets,
-    canExport: blockingReason === null,
-    blockingReason,
-  };
-};
-
-const loadOrderedScenesAndShots = async (supabaseAdmin: any, projectId: string) => {
+const loadOrderedScenesAndShots = async (supabaseAdmin: SupabaseAdminClient, projectId: string) => {
   const { data: scenes, error: scenesError } = await supabaseAdmin
     .from('scenes')
     .select('id, scene_number')
@@ -163,7 +101,7 @@ const loadOrderedScenesAndShots = async (supabaseAdmin: any, projectId: string) 
   const { data: shots, error: shotsError } = await supabaseAdmin
     .from('shots')
     .select(
-      'id, scene_id, shot_number, image_url, video_url, audio_url, audio_status, image_status, video_status, prompt_idea, visual_prompt, dialogue, sound_effects'
+      'id, scene_id, shot_number, image_url, upscaled_image_url, video_url, audio_url, audio_status, image_status, video_status, prompt_idea, visual_prompt, dialogue, sound_effects'
     )
     .eq('project_id', projectId);
 
@@ -172,65 +110,56 @@ const loadOrderedScenesAndShots = async (supabaseAdmin: any, projectId: string) 
   }
 
   return {
-    scenes: scenes || [],
-    shots: shots || [],
+    scenes: (scenes || []) as DirectorCutSceneRow[],
+    shots: (shots || []) as DirectorCutShotRow[],
   };
 };
 
-const summarizeShotReadiness = (
-  scenes: any[],
-  shots: any[],
-  syncedAssets = 0,
-  audioAssets = 0
-): DirectorCutSummary => {
-  let readyVideos = 0;
-  let fallbackImages = 0;
-  let orderedShotCount = 0;
-  const missingShotDetails: MissingShotDetail[] = [];
+const loadGeneratedProjectVisualAssets = async (
+  supabaseAdmin: SupabaseAdminClient,
+  userId: string,
+  projectId: string
+): Promise<ProjectVisualAssetRow[]> => {
+  const { data: richAssets, error: richError } = await supabaseAdmin
+    .from('project_assets')
+    .select('id, user_id, project_id, asset_type, asset_category, processing_status, is_archived, cdn_url, preview_url, thumbnail_url, media_metadata, created_at')
+    .eq('project_id', projectId)
+    .eq('user_id', userId)
+    .eq('asset_category', 'generated')
+    .eq('processing_status', 'completed')
+    .eq('is_archived', false)
+    .in('asset_type', ['image', 'video'])
+    .not('cdn_url', 'is', null)
+    .not('media_metadata->>shot_id', 'is', null)
+    .order('created_at', { ascending: false });
 
-  for (const scene of scenes) {
-    const sceneShots = shots
-      .filter((shot: any) => shot.scene_id === scene.id)
-      .sort((a: any, b: any) => (a.shot_number ?? 0) - (b.shot_number ?? 0));
-    orderedShotCount += sceneShots.length;
-
-    for (const shot of sceneShots) {
-      const hasVideo = !!shot.video_url;
-      const hasImage = !!shot.image_url;
-
-      if (hasVideo) {
-        readyVideos += 1;
-        continue;
-      }
-      if (hasImage) {
-        fallbackImages += 1;
-        continue;
-      }
-
-      missingShotDetails.push({
-        shotId: shot.id,
-        sceneId: shot.scene_id ?? null,
-        sceneNumber: typeof scene.scene_number === 'number' ? scene.scene_number : null,
-        shotNumber: typeof shot.shot_number === 'number' ? shot.shot_number : null,
-        reason: 'Missing shot image or video',
-        imageStatus: typeof shot.image_status === 'string' ? shot.image_status : null,
-        videoStatus: typeof shot.video_status === 'string' ? shot.video_status : null,
-      });
-    }
+  if (!richError) {
+    return (richAssets || []) as ProjectVisualAssetRow[];
   }
 
-  return buildSummary({
-    totalShots: orderedShotCount,
-    syncedAssets,
-    readyVideos,
-    fallbackImages,
-    missingShotDetails,
-    audioAssets,
+  safeLog('warn', 'director-cut.project_assets.rich_lookup_failed', {
+    error: richError.message,
+    projectId,
   });
+
+  const { data: legacyAssets, error: legacyError } = await supabaseAdmin
+    .from('project_assets')
+    .select('id, project_id, type, url, thumbnail_url, metadata, created_at')
+    .eq('project_id', projectId)
+    .in('type', ['image', 'video'])
+    .not('url', 'is', null)
+    .not('metadata->>shot_id', 'is', null)
+    .order('created_at', { ascending: false });
+
+  if (legacyError) {
+    throw new Error(`Failed to fetch generated project visual assets: ${legacyError.message}`);
+  }
+
+  return (legacyAssets || []) as ProjectVisualAssetRow[];
 };
 
 const getDirectorCutReadiness = async (
-  supabaseAdmin: any,
+  supabaseAdmin: SupabaseAdminClient,
   userId: string,
   projectId: string,
   syncedAssets = 0,
@@ -238,7 +167,20 @@ const getDirectorCutReadiness = async (
 ) => {
   await assertProjectAccess(supabaseAdmin, userId, projectId);
   const { scenes, shots } = await loadOrderedScenesAndShots(supabaseAdmin, projectId);
-  return summarizeShotReadiness(scenes, shots, syncedAssets, audioAssets);
+  const projectVisualAssets = await loadGeneratedProjectVisualAssets(supabaseAdmin, userId, projectId);
+  const { summary } = buildDirectorCutTimeline({
+    projectId,
+    userId,
+    scenes,
+    shots,
+    projectVisualAssets,
+  });
+
+  return {
+    ...summary,
+    syncedAssets,
+    audioAssets,
+  };
 };
 
 const preflightFailureResponse = (summary: DirectorCutSummary) =>
@@ -255,10 +197,11 @@ const preflightFailureResponse = (summary: DirectorCutSummary) =>
     }
   );
 
-const syncTimelineAssets = async (supabaseAdmin: any, userId: string, projectId: string) => {
+const syncTimelineAssets = async (supabaseAdmin: SupabaseAdminClient, userId: string, projectId: string) => {
   await assertProjectAccess(supabaseAdmin, userId, projectId);
 
   const { scenes, shots } = await loadOrderedScenesAndShots(supabaseAdmin, projectId);
+  const projectVisualAssets = await loadGeneratedProjectVisualAssets(supabaseAdmin, userId, projectId);
 
   const { data: finalAudioAssets, error: finalAudioError } = await supabaseAdmin
     .from('final_project_assets')
@@ -273,116 +216,14 @@ const syncTimelineAssets = async (supabaseAdmin: any, userId: string, projectId:
 
   await supabaseAdmin.from('timeline_assets').delete().eq('project_id', projectId);
 
-  let sequenceIndex = 0;
-  let timelineMs = 0;
-  let readyVideos = 0;
-  let fallbackImages = 0;
-  let audioAssets = 0;
-  let orderedShotCount = 0;
-  const missingShotDetails: MissingShotDetail[] = [];
-  const rowsToInsert: Record<string, unknown>[] = [];
-
-  for (const scene of scenes) {
-    const sceneShots = shots
-      .filter((shot: any) => shot.scene_id === scene.id)
-      .sort((a: any, b: any) => (a.shot_number ?? 0) - (b.shot_number ?? 0));
-    orderedShotCount += sceneShots.length;
-
-    for (const shot of sceneShots) {
-      const hasVideo = !!shot.video_url;
-      const hasImage = !!shot.image_url;
-      const segmentDurationMs = hasVideo ? DEFAULT_VIDEO_DURATION_MS : DEFAULT_IMAGE_DURATION_MS;
-
-      if (!hasVideo && !hasImage) {
-        missingShotDetails.push({
-          shotId: shot.id,
-          sceneId: shot.scene_id ?? null,
-          sceneNumber: typeof scene.scene_number === 'number' ? scene.scene_number : null,
-          shotNumber: typeof shot.shot_number === 'number' ? shot.shot_number : null,
-          reason: 'Missing shot image or video',
-          imageStatus: typeof shot.image_status === 'string' ? shot.image_status : null,
-          videoStatus: typeof shot.video_status === 'string' ? shot.video_status : null,
-        });
-        continue;
-      }
-
-      if (hasVideo) {
-        readyVideos += 1;
-      } else {
-        fallbackImages += 1;
-      }
-
-      rowsToInsert.push({
-        project_id: projectId,
-        scene_id: shot.scene_id,
-        shot_id: shot.id,
-        position_order: sequenceIndex,
-        asset_type: hasVideo ? 'video' : 'image',
-        source_url: hasVideo ? shot.video_url : shot.image_url,
-        duration_ms: segmentDurationMs,
-        metadata: {
-          asset_role: 'shot_visual',
-          start_ms: timelineMs,
-          duration_ms: segmentDurationMs,
-          track: 'visual',
-          thumbnail_url: shot.image_url,
-          scene_number: scene.scene_number,
-          shot_number: shot.shot_number,
-          prompt_idea: shot.prompt_idea,
-          visual_prompt: shot.visual_prompt,
-          fallback_image_segment: !hasVideo,
-        },
-        user_id: userId,
-      });
-
-      if (shot.audio_url) {
-        rowsToInsert.push({
-          project_id: projectId,
-          scene_id: shot.scene_id,
-          shot_id: shot.id,
-          position_order: sequenceIndex,
-          asset_type: 'audio',
-          source_url: shot.audio_url,
-          duration_ms: null,
-          metadata: {
-            asset_role: 'voiceover',
-            start_ms: timelineMs,
-            track: 'voiceover',
-            scene_number: scene.scene_number,
-            shot_number: shot.shot_number,
-            dialogue: shot.dialogue,
-            sound_effects: shot.sound_effects,
-          },
-          user_id: userId,
-        });
-        audioAssets += 1;
-      }
-      sequenceIndex += 1;
-      timelineMs += segmentDurationMs;
-    }
-  }
-
-  for (const asset of finalAudioAssets || []) {
-    if (!asset.file_url) continue;
-    rowsToInsert.push({
-      project_id: projectId,
-      scene_id: null,
-      shot_id: null,
-      position_order: 0,
-      asset_type: 'audio',
-      source_url: asset.file_url,
-      duration_ms: asset.duration_ms,
-      metadata: {
-        ...((asset.metadata ?? {}) as Record<string, unknown>),
-        asset_role: 'music',
-        start_ms: 0,
-        track: 'music',
-        final_project_asset_id: asset.id,
-      },
-      user_id: userId,
-    });
-    audioAssets += 1;
-  }
+  const { rowsToInsert, summary } = buildDirectorCutTimeline({
+    projectId,
+    userId,
+    scenes,
+    shots,
+    projectVisualAssets,
+    finalAudioAssets: finalAudioAssets || [],
+  });
 
   if (rowsToInsert.length > 0) {
     const { error: insertError } = await supabaseAdmin
@@ -394,24 +235,30 @@ const syncTimelineAssets = async (supabaseAdmin: any, userId: string, projectId:
     }
   }
 
-  return buildSummary({
-    totalShots: orderedShotCount,
-    syncedAssets: rowsToInsert.length,
-    readyVideos,
-    fallbackImages,
-    missingShotDetails,
-    audioAssets,
-  });
+  return summary;
 };
 
 const runDirectorCutJob = async (
-  supabaseAdmin: any,
+  supabaseAdmin: SupabaseAdminClient,
   userId: string,
   projectId: string,
   jobId: string,
   assets: ExportAsset[],
-  settings?: ExportSettings
+  settings: ExportSettings | undefined,
+  readinessSummary: DirectorCutSummary
 ) => {
+  const skippedShotFailures = missingShotDetailsToFailures(readinessSummary.missingShotDetails);
+  const partialExportPayload = {
+    exportMode: readinessSummary.exportMode,
+    isCompleteCut: readinessSummary.isCompleteCut,
+    skippedShotCount: readinessSummary.skippedShotCount,
+    missingShots: readinessSummary.missingShots,
+    missingShotDetails: readinessSummary.missingShotDetails,
+    partialSuccess: readinessSummary.skippedShotCount > 0,
+    failedShotCount: skippedShotFailures.length,
+    shotFailures: skippedShotFailures,
+  };
+
   try {
     await supabaseAdmin
       .from('export_jobs')
@@ -419,7 +266,10 @@ const runDirectorCutJob = async (
         provider: 'fal_remote',
         provider_status: 'processing',
         progress: 10,
-        provider_payload: { stage: 'submitting_to_provider' },
+        provider_payload: {
+          stage: 'submitting_to_provider',
+          ...partialExportPayload,
+        },
       })
       .eq('id', jobId);
 
@@ -433,15 +283,24 @@ const runDirectorCutJob = async (
       userId
     );
     const { publicUrl, shotFailures } = result;
+    const combinedShotFailures: ShotFailureInfo[] = [
+      ...skippedShotFailures,
+      ...shotFailures,
+    ];
 
     const completedPayload: Record<string, unknown> = {
       ...(result.providerPayload ?? {}),
       stage: 'completed',
+      exportMode: readinessSummary.exportMode,
+      isCompleteCut: readinessSummary.isCompleteCut && shotFailures.length === 0,
+      skippedShotCount: readinessSummary.skippedShotCount,
+      missingShots: readinessSummary.missingShots,
+      missingShotDetails: readinessSummary.missingShotDetails,
+      partialSuccess: combinedShotFailures.length > 0,
+      failedShotCount: combinedShotFailures.length,
     };
-    if (shotFailures.length > 0) {
-      completedPayload.shotFailures = shotFailures;
-      completedPayload.partialSuccess = true;
-      completedPayload.failedShotCount = shotFailures.length;
+    if (combinedShotFailures.length > 0) {
+      completedPayload.shotFailures = combinedShotFailures;
     }
 
     await supabaseAdmin
@@ -470,7 +329,10 @@ const runDirectorCutJob = async (
         metadata: {
           export_job_id: jobId,
           source: 'director_cut',
-          partial_success: shotFailures.length > 0,
+          partial_success: combinedShotFailures.length > 0,
+          export_mode: readinessSummary.exportMode,
+          is_complete_cut: readinessSummary.isCompleteCut && shotFailures.length === 0,
+          skipped_shot_count: readinessSummary.skippedShotCount,
           thumbnail_url: result.posterFrameUrl ?? null,
           media_info: result.mediaInfo ?? null,
         },
@@ -481,14 +343,33 @@ const runDirectorCutJob = async (
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Processing failed';
+    const remoteShotFailures = error instanceof ExportProcessingError ? error.shotFailures : [];
+    const combinedShotFailures = [...skippedShotFailures, ...remoteShotFailures];
     const providerPayload = error instanceof ExportProcessingError
       ? {
           ...error.providerPayload,
           stage: 'failed',
-          shotFailures: error.shotFailures,
-          failedShotCount: error.shotFailures.length,
+          exportMode: readinessSummary.exportMode,
+          isCompleteCut: false,
+          skippedShotCount: readinessSummary.skippedShotCount,
+          missingShots: readinessSummary.missingShots,
+          missingShotDetails: readinessSummary.missingShotDetails,
+          partialSuccess: combinedShotFailures.length > 0,
+          shotFailures: combinedShotFailures,
+          failedShotCount: combinedShotFailures.length,
         }
-      : { stage: 'failed', error: message };
+      : {
+          stage: 'failed',
+          error: message,
+          exportMode: readinessSummary.exportMode,
+          isCompleteCut: false,
+          skippedShotCount: readinessSummary.skippedShotCount,
+          missingShots: readinessSummary.missingShots,
+          missingShotDetails: readinessSummary.missingShotDetails,
+          partialSuccess: skippedShotFailures.length > 0,
+          shotFailures: skippedShotFailures,
+          failedShotCount: skippedShotFailures.length,
+        };
     safeLog('error', 'director-cut.processing.failed', { error, jobId, projectId, providerPayload });
     await supabaseAdmin
       .from('export_jobs')
@@ -626,10 +507,25 @@ serve(async (req) => {
           ...readinessSummary,
           syncedAssets: timelineAssets?.length ?? 0,
           canExport: false,
+          exportMode: 'blocked',
+          isCompleteCut: false,
           blockingReason:
             "Synced timeline assets are stale. Sync timeline assets before retrying Director's Cut.",
         });
       }
+
+      const skippedShotFailures = missingShotDetailsToFailures(readinessSummary.missingShotDetails);
+      const initialProviderPayload = {
+        stage: 'syncing_assets',
+        exportMode: readinessSummary.exportMode,
+        isCompleteCut: readinessSummary.isCompleteCut,
+        skippedShotCount: readinessSummary.skippedShotCount,
+        missingShots: readinessSummary.missingShots,
+        missingShotDetails: readinessSummary.missingShotDetails,
+        partialSuccess: readinessSummary.skippedShotCount > 0,
+        failedShotCount: skippedShotFailures.length,
+        shotFailures: skippedShotFailures,
+      };
 
       const { data: job, error: jobError } = await supabaseAdmin
         .from('export_jobs')
@@ -643,7 +539,7 @@ serve(async (req) => {
           provider: 'fal_remote',
           provider_status: 'queued',
           fallback_used: false,
-          provider_payload: { stage: 'syncing_assets' },
+          provider_payload: initialProviderPayload,
         })
         .select()
         .single();
@@ -659,12 +555,16 @@ serve(async (req) => {
         projectId,
         job.id,
         exportAssets,
-        settings
+        settings,
+        readinessSummary
       );
 
       // Edge Runtime background execution
-      // deno-lint-ignore no-explicit-any
-      const maybeEdgeRuntime = (globalThis as any).EdgeRuntime;
+      const maybeEdgeRuntime = (
+        globalThis as typeof globalThis & {
+          EdgeRuntime?: { waitUntil?: (promise: Promise<unknown>) => void };
+        }
+      ).EdgeRuntime;
       if (maybeEdgeRuntime?.waitUntil) {
         maybeEdgeRuntime.waitUntil(runPromise);
       } else {
@@ -680,6 +580,10 @@ serve(async (req) => {
           provider: 'fal_remote',
           providerStatus: 'queued',
           fallbackUsed: false,
+          exportMode: readinessSummary.exportMode,
+          isCompleteCut: readinessSummary.isCompleteCut,
+          skippedShotCount: readinessSummary.skippedShotCount,
+          providerPayload: initialProviderPayload,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );

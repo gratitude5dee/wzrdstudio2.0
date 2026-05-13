@@ -135,16 +135,19 @@ describe('DirectorCutPage', () => {
     expect(screen.getByRole('button', { name: /copy debug details/i })).toBeInTheDocument();
   });
 
-  it('disables export and shows missing-shot preflight details', () => {
+  it('shows available-content warning and keeps export enabled when some shots are missing', () => {
     useDirectorCutMock.mockReturnValue({
       summary: {
-        totalShots: 2,
-        syncedAssets: 1,
-        visualAssets: 1,
-        readyShots: 1,
+        totalShots: 15,
+        syncedAssets: 3,
+        visualAssets: 3,
+        readyShots: 3,
         readyVideos: 1,
-        fallbackImages: 0,
-        missingShots: 1,
+        fallbackImages: 2,
+        missingShots: 12,
+        skippedShotCount: 12,
+        exportMode: 'available_content',
+        isCompleteCut: false,
         missingShotDetails: [
           {
             shotId: 'shot-2',
@@ -155,9 +158,8 @@ describe('DirectorCutPage', () => {
           },
         ],
         audioAssets: 0,
-        canExport: false,
-        blockingReason:
-          "1 ordered shot is missing an image or video. Generate all visuals before starting Director's Cut.",
+        canExport: true,
+        blockingReason: null,
       },
       job: null,
       error: null,
@@ -170,8 +172,50 @@ describe('DirectorCutPage', () => {
 
     renderPage();
 
-    expect(screen.getByText('Full-cut export is blocked')).toBeInTheDocument();
+    expect(screen.getByText('12 shots will be skipped')).toBeInTheDocument();
     expect(screen.getByText(/Scene 1, shot 2: Missing shot image or video/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /start director/i })).not.toBeDisabled();
+  });
+
+  it('shows strict blocked banner only when no visual assets exist', () => {
+    useDirectorCutMock.mockReturnValue({
+      summary: {
+        totalShots: 2,
+        syncedAssets: 0,
+        visualAssets: 0,
+        readyShots: 0,
+        readyVideos: 0,
+        fallbackImages: 0,
+        missingShots: 2,
+        skippedShotCount: 2,
+        exportMode: 'blocked',
+        isCompleteCut: false,
+        missingShotDetails: [
+          {
+            shotId: 'shot-1',
+            sceneId: 'scene-1',
+            sceneNumber: 1,
+            shotNumber: 1,
+            reason: 'Missing shot image or video',
+          },
+        ],
+        audioAssets: 0,
+        canExport: false,
+        blockingReason: "No generated shot image or video assets are available for Director's Cut.",
+      },
+      job: null,
+      error: null,
+      isSyncing: false,
+      isStarting: false,
+      isPolling: false,
+      syncAssets: vi.fn(async () => null),
+      startDirectorCut: vi.fn(async () => null),
+    });
+
+    renderPage();
+
+    expect(screen.getByText("Director's Cut export is blocked")).toBeInTheDocument();
+    expect(screen.queryByText(/shots will be skipped/i)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /start director/i })).toBeDisabled();
   });
 });
