@@ -60,7 +60,6 @@ const REQUIRED_ACTION_IDS = [
   'asset.text-to-3d',
   'asset.preview-convert',
   'embed.url',
-  'embed.editframe',
   'embed.remotion',
   'embed.hyperframes',
   'embed.browser-agent',

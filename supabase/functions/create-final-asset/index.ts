@@ -1,6 +1,7 @@
 // ============================================================================
 // EDGE FUNCTION: create-final-asset
-// PURPOSE: Stitch together final project assets via remote FAL API
+// PURPOSE: Stitch together final project assets via remote FAL API.
+// Client falls back to in-browser ffmpeg.wasm when this server path fails.
 // ROUTE: POST /functions/v1/create-final-asset
 // ============================================================================
 
@@ -11,9 +12,6 @@ import {
   ExportAsset,
   ExportProcessingError,
   ExportSettings,
-  createEditframeAsyncRender,
-  finalizeEditframeRender,
-  getEditframeSetupStatus,
   processAssetsRemote,
 } from '../_shared/export-helpers.ts';
 
@@ -22,11 +20,13 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '
 const EXPORT_BUCKET = 'final-exports';
 
 interface RequestBody {
-  action?: 'create' | 'status' | 'setup' | 'reconcile';
+  action?: 'create' | 'status' | 'finalize_local';
   projectId?: string;
   assets?: ExportAsset[];
   jobId?: string;
   settings?: ExportSettings;
+  // For finalize_local: a Supabase Storage path of an already-uploaded mp4.
+  outputUrl?: string;
 }
 
 const corsHeaders = {
@@ -64,13 +64,7 @@ serve(async (req) => {
     }
 
     const body = (await req.json()) as RequestBody;
-    const { action = 'create', projectId, assets, jobId, settings } = body;
-
-    if (action === 'setup') {
-      return new Response(JSON.stringify(getEditframeSetupStatus()), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+    const { action = 'create', projectId, assets, jobId, settings, outputUrl } = body;
 
     if (action === 'status' && jobId) {
       const { data: job, error } = await supabaseAdmin
@@ -102,7 +96,8 @@ serve(async (req) => {
       );
     }
 
-    if (action === 'reconcile' && jobId) {
+    // Client-side WASM render finished; record the result in the job row.
+    if (action === 'finalize_local' && jobId && outputUrl) {
       const { data: job, error } = await supabaseAdmin
         .from('export_jobs')
         .select('*')
@@ -117,39 +112,44 @@ serve(async (req) => {
         });
       }
 
-      try {
-        const result = await finalizeEditframeRender(supabaseAdmin, job, EXPORT_BUCKET);
-        return new Response(
-          JSON.stringify({
-            status: 'completed',
-            jobId: job.id,
-            outputUrl: result.publicUrl,
-            providerPayload: result.providerPayload,
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Reconcile failed';
-        await supabaseAdmin
-          .from('export_jobs')
-          .update({
-            status: 'failed',
-            error_message: message,
-            provider_status: 'failed',
-            completed_at: new Date().toISOString(),
-            provider_payload: {
-              ...(job.provider_payload ?? {}),
-              stage: 'failed',
-              reconcileError: message,
-            },
-          })
-          .eq('id', job.id);
+      const completedPayload = {
+        ...(job.provider_payload ?? {}),
+        stage: 'completed',
+        renderer: 'wasm_local',
+        clientFallback: 'wasm',
+      };
 
-        return new Response(JSON.stringify({ error: message }), {
-          status: 409,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
+      await supabaseAdmin
+        .from('export_jobs')
+        .update({
+          status: 'completed',
+          progress: 100,
+          output_url: outputUrl,
+          provider: 'wasm_local',
+          provider_status: 'completed',
+          fallback_used: true,
+          completed_at: new Date().toISOString(),
+          provider_payload: completedPayload,
+        })
+        .eq('id', jobId);
+
+      await supabaseAdmin.from('final_project_assets').insert({
+        project_id: job.project_id,
+        user_id: user.id,
+        asset_type: 'video',
+        file_url: outputUrl,
+        metadata: {
+          name: 'WASM Local Export',
+          asset_subtype: 'final_export',
+          export_job_id: jobId,
+          url: outputUrl,
+        },
+      });
+
+      return new Response(
+        JSON.stringify({ status: 'completed', jobId, outputUrl }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     if (!projectId || !assets || assets.length === 0) {
@@ -172,22 +172,6 @@ serve(async (req) => {
       });
     }
 
-    if (settings?.provider === 'editframe' && settings.renderMode === 'async') {
-      const setup = getEditframeSetupStatus();
-      if (!setup.ready) {
-        return new Response(
-          JSON.stringify({
-            error: 'Editframe setup incomplete',
-            setup,
-          }),
-          {
-            status: 412,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          }
-        );
-      }
-    }
-
     const { data: job, error: jobError } = await supabaseAdmin
       .from('export_jobs')
       .insert({
@@ -197,7 +181,7 @@ serve(async (req) => {
         progress: 0,
         settings,
         started_at: new Date().toISOString(),
-        provider: settings?.provider === 'editframe' ? 'editframe_remote' : 'fal_remote',
+        provider: 'fal_remote',
         provider_status: 'processing',
         fallback_used: false,
       })
@@ -209,29 +193,6 @@ serve(async (req) => {
     }
 
     try {
-      if (settings?.provider === 'editframe' && settings.renderMode === 'async') {
-        const asyncResult = await createEditframeAsyncRender(
-          supabaseAdmin,
-          projectId,
-          assets,
-          job.id,
-          settings
-        );
-
-        return new Response(
-          JSON.stringify({
-            status: 'processing',
-            jobId: job.id,
-            provider: 'editframe_remote',
-            providerJobId: asyncResult.renderId,
-            progress: 50,
-            shotFailures: asyncResult.shotFailures,
-            providerPayload: asyncResult.providerPayload,
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
       const result = await processAssetsRemote(
         supabaseAdmin,
         projectId,
@@ -299,7 +260,20 @@ serve(async (req) => {
         })
         .eq('id', job.id);
 
-      throw processingError;
+      // Return 200 with structured failure so the client can fall back to WASM
+      // without losing the diagnostics.
+      return new Response(
+        JSON.stringify({
+          status: 'failed',
+          jobId: job.id,
+          error: message,
+          providerPayload,
+          assets,
+          settings,
+          clientFallback: 'wasm',
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
   } catch (error) {
     safeLog('error', 'create-final-asset.error', { error });

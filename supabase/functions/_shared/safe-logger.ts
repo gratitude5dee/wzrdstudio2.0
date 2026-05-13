@@ -29,7 +29,6 @@ function safeProviderPayload(value: unknown) {
     'providerJobId',
     'provider_job_id',
     'falRequestId',
-    'editframeRenderId',
     'fallbackStatus',
     'fallbackReason',
     'fallbackUsed',

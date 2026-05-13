@@ -9,7 +9,7 @@ import { usePropertySync } from '@/hooks/editor/usePropertySync';
 import { EditorHeader } from './EditorHeader';
 import { EditorIconBar, EditorTab } from './EditorIconBar';
 import { EditorMediaPanel } from './EditorMediaPanel';
-import { EditframeWorkbenchCanvas } from './EditframeWorkbenchCanvas';
+import { WasmWorkbenchCanvas } from './WasmWorkbenchCanvas';
 import PropertiesPanel from './properties/PropertiesPanel';
 import { editorTheme } from '@/lib/editor/theme';
 import { toast } from 'sonner';
@@ -219,27 +219,15 @@ export default function VideoEditorMain() {
 
     setIsExporting(true);
     try {
-      setExportState({ status: 'processing', message: 'Checking Editframe setup' });
-      const { data: setupData, error: setupError } = await supabase.functions.invoke('create-final-asset', {
-        body: { action: 'setup' },
-      });
-
-      if (setupError) throw setupError;
-      if (setupData?.ready === false) {
-        const setupErrors = setupData.setupErrors ?? ['Editframe server secrets are not configured'];
-        setExportState({ status: 'setup_error', setupErrors, message: setupErrors.join('\n') });
-        toast.error('Editframe setup incomplete');
-        return;
-      }
-
-      toast.info('Submitting Editframe render...');
+      setExportState({ status: 'processing', message: 'Submitting FAL render…' });
+      toast.info('Submitting FAL render…');
       const { data, error } = await supabase.functions.invoke('create-final-asset', {
         body: {
           projectId: activeProjectId,
           assets: exportAssets,
           settings: {
-            provider: 'editframe',
-            renderMode: 'async',
+            provider: 'fal',
+            renderMode: 'sync',
             includeAudio: true,
             resolution: `${composition.width}x${composition.height}`,
             fps: composition.fps,
@@ -249,50 +237,22 @@ export default function VideoEditorMain() {
 
       if (error) throw error;
       const jobId = data?.jobId;
-      setExportState({
-        status: data?.status === 'processing' ? 'processing' : 'completed',
-        jobId,
-        providerJobId: data?.providerJobId,
-        outputUrl: data?.outputUrl,
-        message: data?.status === 'processing' ? 'Waiting for Editframe webhook' : 'Export complete',
-      });
-
-      if (jobId) {
-        for (let attempt = 0; attempt < 24; attempt += 1) {
-          await new Promise((resolve) => setTimeout(resolve, 3500));
-          const { data: statusData, error: statusError } = await supabase.functions.invoke('create-final-asset', {
-            body: { action: 'status', jobId, projectId: activeProjectId },
-          });
-          if (statusError) throw statusError;
-          if (statusData?.status === 'completed' && statusData?.outputUrl) {
-            setExportState({
-              status: 'completed',
-              jobId,
-              providerJobId: data?.providerJobId,
-              outputUrl: statusData.outputUrl,
-              message: 'Export complete',
-            });
-            toast.success('Editor export complete');
-            return;
-          }
-          if (statusData?.status === 'failed') {
-            setExportState({
-              status: 'failed',
-              jobId,
-              providerJobId: data?.providerJobId,
-              message: statusData.error || 'Editframe export failed',
-            });
-            toast.error(statusData.error || 'Editframe export failed');
-            return;
-          }
-          setExportState((current) => ({
-            ...current,
-            status: 'processing',
-            message: statusData?.providerPayload?.stage ?? 'Rendering with Editframe',
-          }));
-        }
+      if (data?.status === 'failed') {
+        setExportState({
+          status: 'failed',
+          jobId,
+          message: `${data.error ?? 'FAL render failed'} (in-browser WASM fallback coming soon)`,
+        });
+        toast.error(data.error ?? 'FAL render failed');
+        return;
       }
-      toast.success('Editor export submitted');
+      setExportState({
+        status: data?.status === 'completed' ? 'completed' : 'processing',
+        jobId,
+        outputUrl: data?.outputUrl,
+        message: data?.status === 'completed' ? 'Export complete' : 'Rendering with FAL ffmpeg',
+      });
+      if (data?.status === 'completed') toast.success('Editor export complete');
     } catch (error) {
       console.error('Editor export failed:', error);
       setExportState({
@@ -365,12 +325,12 @@ export default function VideoEditorMain() {
             <div className="min-w-0">
               <span className="font-medium">
                 {exportState.status === 'setup_error'
-                  ? 'Editframe setup required'
+                  ? 'FAL setup required'
                   : exportState.status === 'completed'
                     ? 'Export complete'
                     : exportState.status === 'failed'
                       ? 'Export failed'
-                      : 'Editframe render processing'}
+                      : 'FAL render processing'}
               </span>
               {exportState.message && <span className="ml-2 text-zinc-400">{exportState.message}</span>}
               {exportState.outputUrl && (
@@ -412,7 +372,7 @@ export default function VideoEditorMain() {
 
         {/* Center - Canvas + Timeline */}
         <div className="flex-1 flex flex-col min-w-0">
-          <EditframeWorkbenchCanvas
+          <WasmWorkbenchCanvas
             clips={clips}
             audioTracks={audioTracks}
             composition={composition}

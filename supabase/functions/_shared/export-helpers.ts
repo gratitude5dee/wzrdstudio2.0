@@ -1,13 +1,10 @@
 // @ts-nocheck
 // ============================================================================
 // SHARED: export-helpers.ts
-// PURPOSE: Remote video stitching via fal first, Editframe fallback.
+// PURPOSE: Remote video stitching via fal-ai/ffmpeg-api. Client falls back to
+// in-browser ffmpeg.wasm when this server path fails.
 // ============================================================================
 
-import {
-  buildEditframeCompositionHtml,
-  type EditframeCompositionAsset,
-} from './editframeComposition.ts';
 import { safeLog } from './safe-logger.ts';
 import {
   extractFrame as falExtractFrame,
@@ -36,8 +33,8 @@ export interface ExportSettings {
   codec?: string;
   quality?: string;
   includeAudio?: boolean;
-  provider?: 'auto' | 'fal' | 'editframe';
-  renderMode?: 'sync' | 'async';
+  provider?: 'auto' | 'fal';
+  renderMode?: 'sync';
 }
 
 export interface ShotFailure {
@@ -65,7 +62,7 @@ type FalTrack = FalComposeTrack;
 export interface ProcessAssetsResult {
   publicUrl: string;
   shotFailures: ShotFailure[];
-  provider: 'fal_remote' | 'editframe_remote';
+  provider: 'fal_remote';
   fallbackUsed: boolean;
   providerPayload: Record<string, unknown>;
   posterFrameUrl?: string | null;
@@ -100,7 +97,6 @@ const FAL_QUEUE_URL = 'https://queue.fal.run';
 const MERGE_MODEL = 'fal-ai/ffmpeg-api/merge-videos';
 const COMPOSE_MODEL = 'fal-ai/ffmpeg-api/compose';
 const MERGE_AUDIO_VIDEO_MODEL = 'fal-ai/ffmpeg-api/merge-audio-video';
-const EDITFRAME_RENDERER = 'editframe/render-api';
 const MAX_POLL = 180;
 const POLL_MS = 3000;
 
@@ -123,24 +119,6 @@ function parseResolution(resolution = '1920x1080') {
   const width = Number.isFinite(rawWidth) && rawWidth > 0 ? Math.round(rawWidth) : 1920;
   const height = Number.isFinite(rawHeight) && rawHeight > 0 ? Math.round(rawHeight) : 1080;
   return { width, height };
-}
-
-export function getEditframeSetupStatus() {
-  const hasApiKey = Boolean(Deno.env.get('EDITFRAME_API_KEY'));
-  const hasWebhookSecret = Boolean(Deno.env.get('EDITFRAME_WEBHOOK_SECRET'));
-  const setupErrors = [
-    !hasApiKey ? 'EDITFRAME_API_KEY is not configured' : '',
-    !hasWebhookSecret ? 'EDITFRAME_WEBHOOK_SECRET is not configured' : '',
-  ].filter(Boolean);
-
-  return {
-    provider: 'editframe',
-    renderer: EDITFRAME_RENDERER,
-    hasApiKey,
-    hasWebhookSecret,
-    ready: setupErrors.length === 0,
-    setupErrors,
-  };
 }
 
 function assetDuration(asset: ExportAsset): number {
@@ -402,13 +380,12 @@ export function buildFalTracks(
 ): FalTrack[] {
   const tracks: FalTrack[] = [];
   let cursorMs = 0;
-  const imageKeyframes: FalComposeKeyframe[] = [];
-  const videoKeyframes: FalComposeKeyframe[] = [];
+  const visualKeyframes: FalComposeKeyframe[] = [];
 
   visualAssets.forEach((asset) => {
     const duration = Math.max(assetDuration(asset), 1000);
     const timestamp = assetStartMs(asset, cursorMs);
-    const keyframe = {
+    visualKeyframes.push({
       url: asset.url!,
       timestamp,
       duration,
@@ -416,23 +393,15 @@ export function buildFalTracks(
       y: 0,
       width: canvas.width,
       height: canvas.height,
-    };
-    if (asset.type === 'video') {
-      videoKeyframes.push(keyframe);
-    } else {
-      imageKeyframes.push(keyframe);
-    }
+    });
     cursorMs = Math.max(cursorMs, timestamp + duration);
   });
 
-  // fal-ai/ffmpeg-api/compose rejects multiple video tracks. Keep the timeline
-  // sequential by grouping media keyframes into at most one image track and one
-  // video track instead of emitting one track per shot.
-  if (imageKeyframes.length > 0) {
-    tracks.push({ id: 'visual-images', type: 'image', keyframes: imageKeyframes });
-  }
-  if (videoKeyframes.length > 0) {
-    tracks.push({ id: 'visual-videos', type: 'video', keyframes: videoKeyframes });
+  // fal-ai/ffmpeg-api/compose rejects multiple video tracks (and treats image
+  // tracks as video for that constraint). Emit ONE visual track containing all
+  // image and video keyframes sequentially.
+  if (visualKeyframes.length > 0) {
+    tracks.push({ id: 'visual-main', type: 'video', keyframes: visualKeyframes });
   }
 
   audioAssets.forEach((asset, index) => {
@@ -682,402 +651,12 @@ async function renderWithFal(
   return { url: result.url, renderer: COMPOSE_MODEL, requestId: result.requestId };
 }
 
-export function exportAssetToEditframeAsset(asset: ExportAsset): EditframeCompositionAsset {
-  const metadata = asset.metadata ?? {};
-  return {
-    id: asset.id,
-    type: asset.type,
-    url: asset.url,
-    text: typeof metadata.text === 'string' ? metadata.text : undefined,
-    name: typeof metadata.name === 'string' ? metadata.name : undefined,
-    durationMs: asset.duration_ms ?? getOptionalNumber(metadata.duration_ms),
-    orderIndex: asset.order_index,
-    startMs: getOptionalNumber(metadata.start_ms),
-    trimStartMs: getOptionalNumber(metadata.trimStartMs) ?? getOptionalNumber(metadata.trim_start_ms),
-    trimEndMs: getOptionalNumber(metadata.trimEndMs) ?? getOptionalNumber(metadata.trim_end_ms),
-    volume: getNumber(metadata.volume, 1),
-    muted: metadata.isMuted === true,
-    fadeInMs: getOptionalNumber(metadata.fadeInMs) ?? getOptionalNumber(metadata.fadeInDuration) ?? getOptionalNumber(metadata.fade_in_ms),
-    fadeOutMs: getOptionalNumber(metadata.fadeOutMs) ?? getOptionalNumber(metadata.fadeOutDuration) ?? getOptionalNumber(metadata.fade_out_ms),
-    role: asset.subtype,
-    transforms: metadata.transforms as EditframeCompositionAsset['transforms'],
-    style: metadata.style as EditframeCompositionAsset['style'],
-    effects: Array.isArray(metadata.effects) ? metadata.effects as EditframeCompositionAsset['effects'] : undefined,
-    transition: metadata.transition as EditframeCompositionAsset['transition'],
-    metadata,
-  };
-}
+// Editframe integration removed. Client falls back to ffmpeg.wasm when FAL fails.
 
-function extractRenderId(render: unknown): string {
-  if (!render || typeof render !== 'object') return '';
-  const record = render as Record<string, unknown>;
-  const data = record.data && typeof record.data === 'object'
-    ? record.data as Record<string, unknown>
-    : {};
-  return String(record.id ?? record.render_id ?? record.renderId ?? data.id ?? '');
-}
-
-async function loadEditframeApi() {
-  const override = (globalThis as {
-    __WZRD_EDITFRAME_API__?: {
-      Client: new (key: string) => unknown;
-      createRender: (client: unknown, payload: Record<string, unknown>) => Promise<unknown>;
-      getRenderProgress: (client: unknown, id: string) => Promise<AsyncIterable<{ progress?: number }>>;
-      downloadRender: (client: unknown, id: string) => Promise<Response>;
-    };
-  }).__WZRD_EDITFRAME_API__;
-  if (override) return override;
-  return await import('https://esm.sh/@editframe/api');
-}
-
-function describeEditframeFallbackFailure(message: string) {
-  if (/download/i.test(message)) {
-    return `Fal render failed; Editframe fallback download failed: ${message}`;
-  }
-  return `Fal render failed; Editframe fallback failed: ${message}`;
-}
-
-async function createEditframeRender(
-  assets: ExportAsset[],
-  settings: ExportSettings,
-  jobId: string,
-) {
-  const editframeKey = Deno.env.get('EDITFRAME_API_KEY');
-  if (!editframeKey) {
-    throw new Error('EDITFRAME_API_KEY is not configured');
-  }
-
-  const { Client, createRender } = await loadEditframeApi();
-  const { width, height } = parseResolution(settings.resolution);
-  const composition = buildEditframeCompositionHtml(assets.map(exportAssetToEditframeAsset), {
-    width,
-    height,
-    fps: settings.fps ?? 30,
-    compositionId: `wzrd-export-${jobId}`,
-  });
-  const client = new Client(editframeKey);
-  const render = await createRender(client, {
-    html: composition.html,
-    width: composition.width,
-    height: composition.height,
-    fps: composition.fps,
-    duration_ms: composition.durationMs,
-    output: {
-      container: 'mp4',
-      video: { codec: 'h264' },
-      audio: { codec: 'aac' },
-    },
-  });
-  const renderId = extractRenderId(render);
-  if (!renderId) {
-    throw new Error('Editframe createRender returned no render id');
-  }
-
-  return { renderId, composition };
-}
-
-export async function createEditframeAsyncRender(
-  supabaseAdmin: any,
-  projectId: string,
-  assets: ExportAsset[],
-  jobId: string,
-  settings: ExportSettings = {}
-) {
-  const setup = getEditframeSetupStatus();
-  if (!setup.ready) {
-    const payload = {
-      stage: 'setup_required',
-      renderer: EDITFRAME_RENDERER,
-      setupErrors: setup.setupErrors,
-    };
-    await updateJobPayload(supabaseAdmin, jobId, payload, undefined, {
-      provider: 'editframe_remote',
-      provider_status: 'setup_required',
-      fallback_used: false,
-    });
-    throw new ExportProcessingError(setup.setupErrors.join('; '), payload, []);
-  }
-
-  const sorted = [...assets].sort((a, b) => a.order_index - b.order_index);
-  const preflight = await preflightAssets(sorted);
-  const shotFailures = preflight.failures;
-  const usable = preflight.usable.filter((a) => a.type !== 'audio' || settings.includeAudio !== false);
-  const visualCount = usable.filter((a) => a.type === 'image' || a.type === 'video' || a.type === 'text' || a.type === 'element').length;
-
-  if (visualCount === 0) {
-    const payload = {
-      stage: 'failed',
-      renderer: 'url_preflight',
-      shotFailures,
-      failedShotCount: shotFailures.length,
-    };
-    await updateJobPayload(supabaseAdmin, jobId, payload);
-    throw new ExportProcessingError('No reachable visual assets available for Editframe render', payload, shotFailures);
-  }
-
-  await updateJobPayload(
-    supabaseAdmin,
-    jobId,
-    {
-      stage: 'provider_processing',
-      renderer: EDITFRAME_RENDERER,
-      renderMode: 'async',
-      shotFailures,
-      failedShotCount: shotFailures.length,
-    },
-    35,
-    {
-      provider: 'editframe_remote',
-      provider_status: 'processing',
-      fallback_used: false,
-    }
-  );
-
-  const { renderId, composition } = await createEditframeRender(usable, settings, jobId);
-  const providerPayload = {
-    stage: 'waiting_for_webhook',
-    renderer: EDITFRAME_RENDERER,
-    renderMode: 'async',
-    editframeRenderId: renderId,
-    durationMs: composition.durationMs,
-    width: composition.width,
-    height: composition.height,
-    fps: composition.fps,
-    shotFailures,
-    failedShotCount: shotFailures.length,
-  };
-
-  await updateJobPayload(supabaseAdmin, jobId, providerPayload, 50, {
-    provider: 'editframe_remote',
-    provider_status: 'processing',
-    provider_job_id: renderId,
-  });
-
-  return {
-    renderId,
-    durationMs: composition.durationMs,
-    shotFailures,
-    providerPayload,
-  };
-}
-
-export async function finalizeEditframeRender(
-  supabaseAdmin: any,
-  job: {
-    id: string;
-    project_id: string;
-    user_id: string;
-    output_url?: string | null;
-    status?: string | null;
-    provider_job_id?: string | null;
-    provider_payload?: Record<string, unknown> | null;
-  },
-  exportBucket: string
-) {
-  if (job.status === 'completed' && job.output_url) {
-    return {
-      publicUrl: job.output_url,
-      providerPayload: {
-        ...(job.provider_payload ?? {}),
-        stage: 'completed',
-        idempotentReplay: true,
-      },
-    };
-  }
-
-  const editframeKey = Deno.env.get('EDITFRAME_API_KEY');
-  if (!editframeKey) {
-    throw new Error('EDITFRAME_API_KEY is not configured');
-  }
-  const renderId = job.provider_job_id;
-  if (!renderId) {
-    throw new Error('Export job has no Editframe render id');
-  }
-
-  const { Client, downloadRender } = await loadEditframeApi();
-  const client = new Client(editframeKey);
-  const response = await downloadRender(client, renderId);
-  if (!response.ok) {
-    throw new Error(`Editframe download failed (${response.status})`);
-  }
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  const publicUrl = await uploadFinalVideo(supabaseAdmin, job.project_id, job.id, exportBucket, bytes, job.user_id);
-  const providerPayload = {
-    ...(job.provider_payload ?? {}),
-    stage: 'completed',
-    fallbackStatus: 'completed',
-    editframeRenderId: renderId,
-  };
-
-  await supabaseAdmin
-    .from('export_jobs')
-    .update({
-      status: 'completed',
-      progress: 100,
-      output_url: publicUrl,
-      provider: 'editframe_remote',
-      provider_status: 'completed',
-      fallback_used: Boolean(job.provider_payload?.fallbackReason),
-      provider_payload: providerPayload,
-      completed_at: new Date().toISOString(),
-    })
-    .eq('id', job.id);
-
-  await supabaseAdmin
-    .from('final_project_assets')
-    .insert({
-      project_id: job.project_id,
-      user_id: job.user_id,
-      asset_type: 'video',
-      file_url: publicUrl,
-      metadata: {
-        name: 'Editframe Export',
-        asset_subtype: 'final_export',
-        export_job_id: job.id,
-        editframe_render_id: renderId,
-        url: publicUrl,
-      },
-    });
-
-  return { publicUrl, providerPayload };
-}
-
-async function renderWithEditframeFallback(
-  supabaseAdmin: any,
-  projectId: string,
-  jobId: string,
-  exportBucket: string,
-  assets: ExportAsset[],
-  settings: ExportSettings,
-  falError: string,
-  shotFailures: ShotFailure[],
-  fallbackUsed = true,
-  falRequestId?: string,
-  ownerId?: string | null
-): Promise<ProcessAssetsResult> {
-  const editframeKey = Deno.env.get('EDITFRAME_API_KEY');
-  const fallbackVisuals = assets.filter((asset) => asset.type !== 'audio');
-  const fallbackAudio = assets.filter((asset) => asset.type === 'audio');
-  const fallbackBasePayload = {
-    stage: 'fallback_processing',
-    renderer: EDITFRAME_RENDERER,
-    renderDiagnostics: renderDiagnostics(fallbackVisuals, fallbackAudio, EDITFRAME_RENDERER, settings),
-    fallbackReason: fallbackUsed ? 'fal_failed' : 'editframe_selected',
-    falError,
-    ...(falRequestId ? { falRequestId } : {}),
-    shotFailures,
-    failedShotCount: shotFailures.length,
-  };
-
-  if (!editframeKey) {
-    const payload = {
-      ...fallbackBasePayload,
-      stage: 'failed',
-      fallbackStatus: 'unavailable',
-      fallbackError: 'EDITFRAME_API_KEY is not configured',
-    };
-    await updateJobPayload(supabaseAdmin, jobId, payload, undefined, {
-      provider: fallbackUsed ? 'fal_remote' : 'editframe_remote',
-      provider_status: 'failed',
-      fallback_used: fallbackUsed,
-      ...(falRequestId ? { provider_job_id: falRequestId } : {}),
-    });
-    throw new ExportProcessingError(
-      `Fal render failed; Editframe fallback unavailable: EDITFRAME_API_KEY is not configured. Fal error: ${falError}`,
-      payload,
-      shotFailures
-    );
-  }
-
-  await updateJobPayload(supabaseAdmin, jobId, fallbackBasePayload, 55, {
-    provider: 'editframe_remote',
-    provider_status: 'processing',
-    fallback_used: fallbackUsed,
-  });
-
-  try {
-    const { Client, getRenderProgress, downloadRender } = await loadEditframeApi();
-    const { renderId, composition } = await createEditframeRender(assets, settings, jobId);
-    const client = new Client(editframeKey);
-
-    await updateJobPayload(
-      supabaseAdmin,
-      jobId,
-      { ...fallbackBasePayload, editframeRenderId: renderId, durationMs: composition.durationMs },
-      60,
-      { provider_job_id: renderId }
-    );
-
-    const progressIterator = await getRenderProgress(client, renderId);
-    for await (const event of progressIterator) {
-      const rawProgress = getNumber(event?.progress, 0);
-      const normalized = rawProgress > 1 ? rawProgress / 100 : rawProgress;
-      const progress = 60 + Math.round(Math.min(1, Math.max(0, normalized)) * 20);
-      await updateJobPayload(
-        supabaseAdmin,
-        jobId,
-        { ...fallbackBasePayload, editframeRenderId: renderId, fallbackStatus: 'rendering' },
-        progress
-      );
-    }
-
-    await updateJobPayload(
-      supabaseAdmin,
-      jobId,
-      { ...fallbackBasePayload, editframeRenderId: renderId, stage: 'downloading_assets' },
-      85
-    );
-    const response = await downloadRender(client, renderId);
-    if (!response.ok) {
-      throw new Error(`Editframe download failed (${response.status})`);
-    }
-    const bytes = new Uint8Array(await response.arrayBuffer());
-
-    await updateJobPayload(
-      supabaseAdmin,
-      jobId,
-      { ...fallbackBasePayload, editframeRenderId: renderId, stage: 'uploading_final_video' },
-      90
-    );
-    const publicUrl = await uploadFinalVideo(supabaseAdmin, projectId, jobId, exportBucket, bytes, ownerId);
-    const providerPayload = {
-      ...fallbackBasePayload,
-      editframeRenderId: renderId,
-      stage: 'completed',
-      fallbackStatus: 'completed',
-    };
-    await updateJobPayload(supabaseAdmin, jobId, providerPayload, 95);
-
-    return {
-      publicUrl,
-      shotFailures,
-      provider: 'editframe_remote',
-      fallbackUsed,
-      providerPayload,
-    };
-  } catch (fallbackError) {
-    const message = errorMessage(fallbackError, 'Editframe fallback failed');
-    const payload = {
-      ...fallbackBasePayload,
-      stage: 'failed',
-      fallbackStatus: 'failed',
-      fallbackError: message,
-    };
-    await updateJobPayload(supabaseAdmin, jobId, payload, undefined, {
-      provider: 'editframe_remote',
-      provider_status: 'failed',
-      fallback_used: fallbackUsed,
-    });
-    throw new ExportProcessingError(
-      `${describeEditframeFallbackFailure(message)}. Fal error: ${falError}`,
-      payload,
-      shotFailures
-    );
-  }
-}
 
 /**
- * Process assets remotely through fal first, then Editframe fallback.
+ * Process assets remotely through fal-ai/ffmpeg-api. On failure the client
+ * should fall back to in-browser ffmpeg.wasm rendering.
  */
 export async function processAssetsRemote(
   supabaseAdmin: any,
@@ -1116,21 +695,6 @@ export async function processAssetsRemote(
   }
 
   const falKey = Deno.env.get('FAL_KEY');
-  if (settings.provider === 'editframe') {
-    return renderWithEditframeFallback(
-      supabaseAdmin,
-      projectId,
-      jobId,
-      exportBucket,
-      [...visuals, ...audioAssets],
-      settings,
-      'Editframe selected by export settings',
-      shotFailures,
-      false,
-      undefined,
-      ownerId
-    );
-  }
 
   const plannedRenderer = chooseFalRenderer(visuals, audioAssets);
   const diagnostics = renderDiagnostics(visuals, audioAssets, plannedRenderer, settings);
@@ -1220,45 +784,29 @@ export async function processAssetsRemote(
   } catch (falError) {
     const falMessage = errorMessage(falError, 'FAL render failed');
     const falRequestId = falError instanceof FalRenderError ? falError.requestId : undefined;
-    safeLog('warn', 'export.fal.failed_fallback_started', {
+    safeLog('warn', 'export.fal.failed', {
       error: falError,
       falRequestId,
       visualCount: visuals.length,
       audioCount: audioAssets.length,
     });
-    await updateJobPayload(
-      supabaseAdmin,
-      jobId,
-      {
-        stage: 'fallback_processing',
-        renderer: EDITFRAME_RENDERER,
-        renderDiagnostics: diagnostics,
-        fallbackReason: 'fal_failed',
-        falError: falMessage,
-        ...(falRequestId ? { falRequestId } : {}),
-        shotFailures,
-        failedShotCount: shotFailures.length,
-      },
-      50,
-      {
-        provider: 'fal_remote',
-        provider_status: 'failed',
-        ...(falRequestId ? { provider_job_id: falRequestId } : {}),
-      }
-    );
-
-    return renderWithEditframeFallback(
-      supabaseAdmin,
-      projectId,
-      jobId,
-      exportBucket,
-      [...visuals, ...audioAssets],
-      settings,
-      falMessage,
+    const failurePayload = {
+      stage: 'failed',
+      renderer: 'fal_remote',
+      renderDiagnostics: diagnostics,
+      falError: falMessage,
+      ...(falRequestId ? { falRequestId } : {}),
       shotFailures,
-      true,
-      falRequestId,
-      ownerId
-    );
+      failedShotCount: shotFailures.length,
+      clientFallback: 'wasm',
+      clientFallbackHint: 'Retry the export with renderMode=local to use ffmpeg.wasm in the browser.',
+    };
+    await updateJobPayload(supabaseAdmin, jobId, failurePayload, 50, {
+      provider: 'fal_remote',
+      provider_status: 'failed',
+      fallback_used: false,
+      ...(falRequestId ? { provider_job_id: falRequestId } : {}),
+    });
+    throw new ExportProcessingError(falMessage, failurePayload, shotFailures);
   }
 }
