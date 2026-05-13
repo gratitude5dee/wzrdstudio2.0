@@ -1,16 +1,18 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, Circle, Copy, Film, Loader2, Play, RefreshCw, Scissors, TriangleAlert, Video } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import AppHeader from '@/components/AppHeader';
+import { supabase } from '@/integrations/supabase/client';
 import { supabaseService } from '@/services/supabaseService';
 import { useAppStore } from '@/store/appStore';
 import { useDirectorCut, STAGE_LABELS, type DirectorCutJobState, type DirectorCutStage } from '@/hooks/useDirectorCut';
 import { cn } from '@/lib/utils';
 import { appRoutes } from '@/lib/routes';
 import { DIRECTORS_CUT_CREDITS } from '@/lib/constants/credits';
+import { renderTimelineWasm, finalizeLocalRender } from '@/lib/render/wasmRenderer';
 
 const StatCard = ({
   label,
@@ -195,6 +197,49 @@ const DirectorCutPage = () => {
       toast.success("Director's Cut debug details copied");
     } catch (copyError) {
       const message = copyError instanceof Error ? copyError.message : 'Failed to copy debug details';
+      toast.error(message);
+    }
+  };
+
+  const [wasmState, setWasmState] = useState<{ status: 'idle' | 'rendering' | 'done' | 'failed'; message?: string; outputUrl?: string }>({ status: 'idle' });
+
+  const renderLocallyWasm = async () => {
+    if (!projectId) return;
+    try {
+      setWasmState({ status: 'rendering', message: 'Loading timeline assets…' });
+      const { data: rows, error: rowsError } = await supabase
+        .from('timeline_assets')
+        .select('*')
+        .eq('project_id', projectId)
+        .order('position_order', { ascending: true });
+      if (rowsError) throw new Error(rowsError.message);
+      if (!rows || rows.length === 0) throw new Error('No synced timeline assets found. Sync first.');
+
+      const visuals = rows
+        .filter((r) => (r.asset_type === 'video' || r.asset_type === 'image') && r.source_url)
+        .map((r) => ({
+          url: r.source_url as string,
+          durationMs: Number(r.duration_ms ?? 3000),
+          kind: (r.asset_type === 'video' ? 'video' : 'image') as 'video' | 'image',
+        }));
+      const audioRow = rows.find((r) => r.asset_type === 'audio' && r.source_url);
+      if (visuals.length === 0) throw new Error('No visual timeline assets to render.');
+
+      const result = await renderTimelineWasm({
+        projectId,
+        visuals,
+        audio: audioRow ? { url: audioRow.source_url } : null,
+        onProgress: (pct, message) =>
+          setWasmState({ status: 'rendering', message: `${message ?? 'Rendering'} (${pct}%)` }),
+      });
+      if (job?.jobId) {
+        await finalizeLocalRender(job.jobId, projectId, result.publicUrl);
+      }
+      setWasmState({ status: 'done', outputUrl: result.publicUrl, message: 'Local WASM render complete' });
+      toast.success('Local WASM render complete');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'WASM render failed';
+      setWasmState({ status: 'failed', message });
       toast.error(message);
     }
   };
@@ -430,7 +475,27 @@ const DirectorCutPage = () => {
                   >
                     Retry Export
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-orange-300/50 text-orange-100 hover:bg-orange-500/20"
+                    onClick={renderLocallyWasm}
+                    disabled={wasmState.status === 'rendering'}
+                  >
+                    {wasmState.status === 'rendering' ? 'Rendering locally…' : 'Render locally (WASM)'}
+                  </Button>
                 </div>
+                {wasmState.status !== 'idle' && (
+                  <p className="mt-2 text-xs text-rose-100/80">
+                    WASM: {wasmState.message}
+                    {wasmState.outputUrl && (
+                      <>
+                        {' · '}
+                        <a className="underline" href={wasmState.outputUrl} target="_blank" rel="noreferrer">Open MP4</a>
+                      </>
+                    )}
+                  </p>
+                )}
               </div>
             )}
           </div>
