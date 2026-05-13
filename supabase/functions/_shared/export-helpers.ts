@@ -46,17 +46,17 @@ export interface ShotFailure {
   reason: string;
 }
 
-interface FalTrackKeyframe {
-  timestamp: number;
-  duration: number;
+interface FalComposeTrack {
+  type: 'video' | 'audio' | 'image' | 'text';
   url: string;
+  start: number;
+  end: number;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
 }
-
-interface FalTrack {
-  id: string;
-  type: 'video' | 'audio' | 'image';
-  keyframes: FalTrackKeyframe[];
-}
+type FalTrack = FalComposeTrack;
 
 export interface ProcessAssetsResult {
   publicUrl: string;
