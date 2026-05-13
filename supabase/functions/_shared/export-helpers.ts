@@ -402,25 +402,38 @@ export function buildFalTracks(
 ): FalTrack[] {
   const tracks: FalTrack[] = [];
   let cursorMs = 0;
+  const imageKeyframes: FalComposeKeyframe[] = [];
+  const videoKeyframes: FalComposeKeyframe[] = [];
 
-  visualAssets.forEach((asset, index) => {
+  visualAssets.forEach((asset) => {
     const duration = Math.max(assetDuration(asset), 1000);
     const timestamp = assetStartMs(asset, cursorMs);
-    tracks.push({
-      id: `visual-${index}-${asset.id}`,
-      type: asset.type === 'image' ? 'image' : 'video',
-      keyframes: [{
-        url: asset.url,
-        timestamp,
-        duration,
-        x: 0,
-        y: 0,
-        width: canvas.width,
-        height: canvas.height,
-      }],
-    });
+    const keyframe = {
+      url: asset.url!,
+      timestamp,
+      duration,
+      x: 0,
+      y: 0,
+      width: canvas.width,
+      height: canvas.height,
+    };
+    if (asset.type === 'video') {
+      videoKeyframes.push(keyframe);
+    } else {
+      imageKeyframes.push(keyframe);
+    }
     cursorMs = Math.max(cursorMs, timestamp + duration);
   });
+
+  // fal-ai/ffmpeg-api/compose rejects multiple video tracks. Keep the timeline
+  // sequential by grouping media keyframes into at most one image track and one
+  // video track instead of emitting one track per shot.
+  if (imageKeyframes.length > 0) {
+    tracks.push({ id: 'visual-images', type: 'image', keyframes: imageKeyframes });
+  }
+  if (videoKeyframes.length > 0) {
+    tracks.push({ id: 'visual-videos', type: 'video', keyframes: videoKeyframes });
+  }
 
   audioAssets.forEach((asset, index) => {
     const start = getNumber(asset.metadata?.start_ms, 0);
