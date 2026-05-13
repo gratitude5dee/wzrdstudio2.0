@@ -810,19 +810,3 @@ export async function processAssetsRemote(
     throw new ExportProcessingError(falMessage, failurePayload, shotFailures);
   }
 }
-
-    return renderWithEditframeFallback(
-      supabaseAdmin,
-      projectId,
-      jobId,
-      exportBucket,
-      [...visuals, ...audioAssets],
-      settings,
-      falMessage,
-      shotFailures,
-      true,
-      falRequestId,
-      ownerId
-    );
-  }
-}
