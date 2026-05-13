@@ -325,12 +325,12 @@ export default function VideoEditorMain() {
             <div className="min-w-0">
               <span className="font-medium">
                 {exportState.status === 'setup_error'
-                  ? 'Editframe setup required'
+                  ? 'FAL setup required'
                   : exportState.status === 'completed'
                     ? 'Export complete'
                     : exportState.status === 'failed'
                       ? 'Export failed'
-                      : 'Editframe render processing'}
+                      : 'FAL render processing'}
               </span>
               {exportState.message && <span className="ml-2 text-zinc-400">{exportState.message}</span>}
               {exportState.outputUrl && (
@@ -372,7 +372,7 @@ export default function VideoEditorMain() {
 
         {/* Center - Canvas + Timeline */}
         <div className="flex-1 flex flex-col min-w-0">
-          <EditframeWorkbenchCanvas
+          <WasmWorkbenchCanvas
             clips={clips}
             audioTracks={audioTracks}
             composition={composition}
