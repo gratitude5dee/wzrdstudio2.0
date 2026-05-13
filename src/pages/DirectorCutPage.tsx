@@ -475,7 +475,27 @@ const DirectorCutPage = () => {
                   >
                     Retry Export
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-orange-300/50 text-orange-100 hover:bg-orange-500/20"
+                    onClick={renderLocallyWasm}
+                    disabled={wasmState.status === 'rendering'}
+                  >
+                    {wasmState.status === 'rendering' ? 'Rendering locally…' : 'Render locally (WASM)'}
+                  </Button>
                 </div>
+                {wasmState.status !== 'idle' && (
+                  <p className="mt-2 text-xs text-rose-100/80">
+                    WASM: {wasmState.message}
+                    {wasmState.outputUrl && (
+                      <>
+                        {' · '}
+                        <a className="underline" href={wasmState.outputUrl} target="_blank" rel="noreferrer">Open MP4</a>
+                      </>
+                    )}
+                  </p>
+                )}
               </div>
             )}
           </div>
