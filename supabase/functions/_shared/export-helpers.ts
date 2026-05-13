@@ -655,7 +655,8 @@ async function renderWithFal(
 
 
 /**
- * Process assets remotely through fal first, then Editframe fallback.
+ * Process assets remotely through fal-ai/ffmpeg-api. On failure the client
+ * should fall back to in-browser ffmpeg.wasm rendering.
  */
 export async function processAssetsRemote(
   supabaseAdmin: any,
@@ -694,21 +695,6 @@ export async function processAssetsRemote(
   }
 
   const falKey = Deno.env.get('FAL_KEY');
-  if (settings.provider === 'editframe') {
-    return renderWithEditframeFallback(
-      supabaseAdmin,
-      projectId,
-      jobId,
-      exportBucket,
-      [...visuals, ...audioAssets],
-      settings,
-      'Editframe selected by export settings',
-      shotFailures,
-      false,
-      undefined,
-      ownerId
-    );
-  }
 
   const plannedRenderer = chooseFalRenderer(visuals, audioAssets);
   const diagnostics = renderDiagnostics(visuals, audioAssets, plannedRenderer, settings);
@@ -798,32 +784,32 @@ export async function processAssetsRemote(
   } catch (falError) {
     const falMessage = errorMessage(falError, 'FAL render failed');
     const falRequestId = falError instanceof FalRenderError ? falError.requestId : undefined;
-    safeLog('warn', 'export.fal.failed_fallback_started', {
+    safeLog('warn', 'export.fal.failed', {
       error: falError,
       falRequestId,
       visualCount: visuals.length,
       audioCount: audioAssets.length,
     });
-    await updateJobPayload(
-      supabaseAdmin,
-      jobId,
-      {
-        stage: 'fallback_processing',
-        renderer: EDITFRAME_RENDERER,
-        renderDiagnostics: diagnostics,
-        fallbackReason: 'fal_failed',
-        falError: falMessage,
-        ...(falRequestId ? { falRequestId } : {}),
-        shotFailures,
-        failedShotCount: shotFailures.length,
-      },
-      50,
-      {
-        provider: 'fal_remote',
-        provider_status: 'failed',
-        ...(falRequestId ? { provider_job_id: falRequestId } : {}),
-      }
-    );
+    const failurePayload = {
+      stage: 'failed',
+      renderer: 'fal_remote',
+      renderDiagnostics: diagnostics,
+      falError: falMessage,
+      ...(falRequestId ? { falRequestId } : {}),
+      shotFailures,
+      failedShotCount: shotFailures.length,
+      clientFallback: 'wasm',
+      clientFallbackHint: 'Retry the export with renderMode=local to use ffmpeg.wasm in the browser.',
+    };
+    await updateJobPayload(supabaseAdmin, jobId, failurePayload, 50, {
+      provider: 'fal_remote',
+      provider_status: 'failed',
+      fallback_used: false,
+      ...(falRequestId ? { provider_job_id: falRequestId } : {}),
+    });
+    throw new ExportProcessingError(falMessage, failurePayload, shotFailures);
+  }
+}
 
     return renderWithEditframeFallback(
       supabaseAdmin,
