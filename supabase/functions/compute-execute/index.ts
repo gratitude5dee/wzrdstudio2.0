@@ -838,7 +838,6 @@ const ACTION_EXECUTOR_REGISTRY: Record<string, ActionExecutor> = {
   'asset.text-to-3d': 'model_3d',
   'asset.preview-convert': 'transform',
   'embed.url': 'embed',
-  'embed.editframe': 'embed',
   'embed.remotion': 'embed',
   'embed.hyperframes': 'embed',
   'embed.browser-agent': 'embed',
