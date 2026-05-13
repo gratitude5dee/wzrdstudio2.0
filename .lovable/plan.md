@@ -1,43 +1,20 @@
-## Diagnosis
+## Fix Director's Cut 500 error
 
-The current failure is not a generic Edge Function issue. The logs show the exact provider rejection:
+**Root cause:** The `director-cut` Edge Function selects `shots.upscaled_image_url`, but that column was never added to the database.
 
-```text
-400: gpt-image-2: size dimensions must be multiples of 16 (got 1920x1080)
-```
+### Changes
 
-`1920` is valid, but `1080` is not divisible by 16. The `generate-shot-image` function maps a 16:9 project to `1920x1080`, then sends that to GMI as `gpt-image-2-generate`, so GMI rejects the request before generation starts.
+1. **DB migration** (already prepared, awaiting approval): Add `upscaled_image_url TEXT` column to `public.shots`.
+   ```sql
+   ALTER TABLE public.shots ADD COLUMN IF NOT EXISTS upscaled_image_url TEXT;
+   ```
 
-## Fix plan
+2. **Fix pre-existing TypeScript build error in `src/hooks/useDirectorCut.ts:154`**
+   The mapper returns objects where `shotId` is optional, but the type predicate `ShotFailureInfo` requires it. Either widen the inline return type to match `ShotFailureInfo` (which has optional `shotId`), or change the predicate to a simple `Boolean` filter with explicit cast. Cleanest fix: drop the predicate and use:
+   ```ts
+   .filter((f): f is NonNullable<typeof f> => f !== null);
+   ```
 
-1. **Correct GPT Image 2 size mapping**
-   - Update `supabase/functions/generate-shot-image/index.ts` so `getGptImageSizeForAspectRatio()` returns valid multiples-of-16 dimensions.
-   - Use reliable, documented sizes:
-     - `16:9` → `2048x1152`
-     - `9:16` → `1152x2048`
-     - `1:1` → `1024x1024`
-     - `4:3` → `1536x1152`
-     - `3:4` → `1152x1536`
-   - These preserve aspect ratios and satisfy GPT Image 2 constraints.
-
-2. **Harden shared GMI payload normalization**
-   - Update `supabase/functions/_shared/gmi-types.ts` so GPT Image 2 no longer treats invalid sizes like `1920x1080` as valid.
-   - Replace the static allow-list with a validator that checks:
-     - both dimensions are multiples of 16,
-     - max edge is within limit,
-     - total pixels are within GPT Image 2 limits,
-     - long:short ratio is not over `3:1`.
-   - This prevents future catalog/default/client values from reintroducing the same provider-side 400.
-
-3. **Improve fallback behavior for provider validation errors**
-   - Add this specific `multiples of 16` provider error to the retryable/fallback classifier in `generate-shot-image`.
-   - That way, if a future GMI model rejects dimensions, the function can try the next configured image model instead of immediately returning 500.
-
-4. **Make the frontend error useful instead of opaque**
-   - Update the image-generation hook/page call site so when the Edge Function returns JSON with an error, the thrown error includes that message rather than only `Edge Function returned a non-2xx status code`.
-   - This keeps future provider errors visible in the UI/logs.
-
-5. **Validate**
-   - Run a targeted search to confirm no remaining GPT Image 2 path sends `1920x1080` / `1080x1920`.
-   - Deploy the updated Edge Function.
-   - Check recent Edge Function logs after deploy for the corrected request body containing `2048x1152` for `16:9` shots.
+### Validation
+- Reload the Director's Cut page; the 500 should be gone.
+- Confirm `bun run build` passes.
