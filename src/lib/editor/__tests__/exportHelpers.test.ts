@@ -310,21 +310,40 @@ describe('fal and Editframe export fixtures', () => {
 
     expect(tracks).toMatchObject([
       {
-        id: 'visual-0',
+        id: 'visual-images',
         type: 'image',
         keyframes: [{ timestamp: 0, duration: 4200 }],
       },
       {
-        id: 'visual-1',
+        id: 'visual-videos',
         type: 'video',
         keyframes: [{ timestamp: 4200, duration: 5200 }],
       },
       {
-        id: 'voiceover-0',
+        id: 'audio-0-narration-1',
         type: 'audio',
         keyframes: [{ timestamp: 0, duration: 8000 }],
       },
     ]);
+  });
+
+  it('groups multiple compose video segments into one fal video track', () => {
+    const tracks = buildFalTracks([
+      { id: 'video-a', type: 'video', url: 'https://media.example.com/a.mp4', duration_ms: 3000, order_index: 0 },
+      { id: 'video-b', type: 'video', url: 'https://media.example.com/b.mp4', duration_ms: 4000, order_index: 1, metadata: { start_ms: 3000 } },
+    ], [
+      { id: 'voiceover', type: 'audio', url: 'https://media.example.com/voice.mp3', duration_ms: 7000, order_index: 2 },
+    ]);
+
+    const videoTracks = tracks.filter((track) => track.type === 'video');
+    expect(videoTracks).toHaveLength(1);
+    expect(videoTracks[0]).toMatchObject({
+      id: 'visual-videos',
+      keyframes: [
+        { url: 'https://media.example.com/a.mp4', timestamp: 0, duration: 3000 },
+        { url: 'https://media.example.com/b.mp4', timestamp: 3000, duration: 4000 },
+      ],
+    });
   });
 
   it('preserves trims, transforms, transitions, effects, and audio fades for Editframe fallback', () => {
