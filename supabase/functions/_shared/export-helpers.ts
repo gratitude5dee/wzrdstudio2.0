@@ -1,13 +1,10 @@
 // @ts-nocheck
 // ============================================================================
 // SHARED: export-helpers.ts
-// PURPOSE: Remote video stitching via fal first, Editframe fallback.
+// PURPOSE: Remote video stitching via fal-ai/ffmpeg-api. Client falls back to
+// in-browser ffmpeg.wasm when this server path fails.
 // ============================================================================
 
-import {
-  buildEditframeCompositionHtml,
-  type EditframeCompositionAsset,
-} from './editframeComposition.ts';
 import { safeLog } from './safe-logger.ts';
 import {
   extractFrame as falExtractFrame,
@@ -36,8 +33,8 @@ export interface ExportSettings {
   codec?: string;
   quality?: string;
   includeAudio?: boolean;
-  provider?: 'auto' | 'fal' | 'editframe';
-  renderMode?: 'sync' | 'async';
+  provider?: 'auto' | 'fal';
+  renderMode?: 'sync';
 }
 
 export interface ShotFailure {
@@ -65,7 +62,7 @@ type FalTrack = FalComposeTrack;
 export interface ProcessAssetsResult {
   publicUrl: string;
   shotFailures: ShotFailure[];
-  provider: 'fal_remote' | 'editframe_remote';
+  provider: 'fal_remote';
   fallbackUsed: boolean;
   providerPayload: Record<string, unknown>;
   posterFrameUrl?: string | null;
@@ -100,7 +97,6 @@ const FAL_QUEUE_URL = 'https://queue.fal.run';
 const MERGE_MODEL = 'fal-ai/ffmpeg-api/merge-videos';
 const COMPOSE_MODEL = 'fal-ai/ffmpeg-api/compose';
 const MERGE_AUDIO_VIDEO_MODEL = 'fal-ai/ffmpeg-api/merge-audio-video';
-const EDITFRAME_RENDERER = 'editframe/render-api';
 const MAX_POLL = 180;
 const POLL_MS = 3000;
 
@@ -123,24 +119,6 @@ function parseResolution(resolution = '1920x1080') {
   const width = Number.isFinite(rawWidth) && rawWidth > 0 ? Math.round(rawWidth) : 1920;
   const height = Number.isFinite(rawHeight) && rawHeight > 0 ? Math.round(rawHeight) : 1080;
   return { width, height };
-}
-
-export function getEditframeSetupStatus() {
-  const hasApiKey = Boolean(Deno.env.get('EDITFRAME_API_KEY'));
-  const hasWebhookSecret = Boolean(Deno.env.get('EDITFRAME_WEBHOOK_SECRET'));
-  const setupErrors = [
-    !hasApiKey ? 'EDITFRAME_API_KEY is not configured' : '',
-    !hasWebhookSecret ? 'EDITFRAME_WEBHOOK_SECRET is not configured' : '',
-  ].filter(Boolean);
-
-  return {
-    provider: 'editframe',
-    renderer: EDITFRAME_RENDERER,
-    hasApiKey,
-    hasWebhookSecret,
-    ready: setupErrors.length === 0,
-    setupErrors,
-  };
 }
 
 function assetDuration(asset: ExportAsset): number {
