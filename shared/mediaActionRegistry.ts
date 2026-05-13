@@ -1474,7 +1474,6 @@ export const MEDIA_ACTIONS: MediaActionDefinition[] = [
     outputPreviewType: 'json',
   },
   {
-    actionId: 'embed.editframe',
     nodeKind: 'Transform',
     label: 'Editframe Render',
     description: 'Render an Editframe HTML composition through a server-side action.',
@@ -1629,7 +1628,6 @@ export function getPaletteMediaActions(): MediaActionDefinition[] {
     'asset.image-to-3d',
     'asset.text-to-3d',
     'embed.url',
-    'embed.editframe',
     'embed.remotion',
     'batch.cartesian',
     'output.materialize',
