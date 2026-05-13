@@ -14,6 +14,7 @@ import PropertiesPanel from './properties/PropertiesPanel';
 import { editorTheme } from '@/lib/editor/theme';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { renderTimelineWasm, finalizeLocalRender } from '@/lib/render/wasmRenderer';
 
 export default function VideoEditorMain() {
   const { projectId } = useParams();
@@ -237,13 +238,45 @@ export default function VideoEditorMain() {
 
       if (error) throw error;
       const jobId = data?.jobId;
-      if (data?.status === 'failed') {
-        setExportState({
-          status: 'failed',
-          jobId,
-          message: `${data.error ?? 'FAL render failed'} (in-browser WASM fallback coming soon)`,
+      const tryWasmFallback = async (reason: string) => {
+        toast.info('Falling back to in-browser WASM renderer…');
+        setExportState({ status: 'processing', jobId, message: `WASM fallback: ${reason}` });
+        const visualClipsForWasm = clips
+          .slice()
+          .sort((a, b) => (a.startTime ?? 0) - (b.startTime ?? 0))
+          .filter((c) => Boolean(c.url) && (c.type === 'video' || c.type === 'image'))
+          .map((c) => ({
+            url: c.url as string,
+            durationMs: c.duration ?? 3000,
+            kind: (c.type === 'image' ? 'image' : 'video') as 'image' | 'video',
+          }));
+        const firstAudio = audioTracks.find((t) => Boolean(t.url));
+        const result = await renderTimelineWasm({
+          projectId: activeProjectId,
+          visuals: visualClipsForWasm,
+          audio: firstAudio ? { url: firstAudio.url } : null,
+          width: composition.width,
+          height: composition.height,
+          fps: composition.fps,
+          onProgress: (pct, message) =>
+            setExportState((prev) => ({ ...prev, status: 'processing', jobId, message: `${message ?? 'Rendering'} (${pct}%)` })),
         });
-        toast.error(data.error ?? 'FAL render failed');
+        if (jobId) await finalizeLocalRender(jobId, activeProjectId, result.publicUrl);
+        setExportState({ status: 'completed', jobId, outputUrl: result.publicUrl, message: 'WASM export complete' });
+        toast.success('Local WASM export complete');
+      };
+
+      if (data?.status === 'failed') {
+        try {
+          await tryWasmFallback(data.error ?? 'FAL render failed');
+        } catch (wasmErr) {
+          setExportState({
+            status: 'failed',
+            jobId,
+            message: `${data.error ?? 'FAL render failed'} · WASM fallback: ${wasmErr instanceof Error ? wasmErr.message : 'failed'}`,
+          });
+          toast.error('Both FAL and WASM renderers failed');
+        }
         return;
       }
       setExportState({
