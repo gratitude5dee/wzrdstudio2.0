@@ -151,7 +151,7 @@ const normalizeShotFailures = (value: unknown): ShotFailureInfo[] => {
         shotNumber: asNumber(record.shotNumber),
       };
     })
-    .filter((failure): failure is ShotFailureInfo => failure !== null);
+    .filter((failure): failure is ShotFailureInfo => failure !== null) as ShotFailureInfo[];
 };
 
 const normalizeMissingShotDetails = (value: unknown): DirectorCutMissingShotDetail[] => {
