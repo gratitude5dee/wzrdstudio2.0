@@ -56,7 +56,7 @@ export const STAGE_LABELS: Record<DirectorCutStage, string> = {
   preflighting_assets: 'Checking media URLs',
   submitting_to_provider: 'Submitting to provider',
   provider_processing: 'Provider processing',
-  fallback_processing: 'Editframe fallback',
+  fallback_processing: 'Local WASM fallback',
   downloading_assets: 'Downloading assets',
   uploading_final_video: 'Uploading final video',
   failed: 'Failed',
