@@ -1,60 +1,57 @@
-## Director's Cut export — fix FAL compose payload + fallback
+## Fix Director's Cut FAL compose 422 (id + keyframes required)
 
-### Root cause (confirmed by FAL docs)
+### Root cause
 
-Our `buildFalTracks()` in `supabase/functions/_shared/export-helpers.ts:393` emits a non-FAL schema:
+FAL's actual `fal-ai/ffmpeg-api/compose` schema (per the 422 response body) requires each track to have:
+- `id: string`
+- `keyframes: [{ url, timestamp, duration, ... }]`
 
-```json
-{ "tracks": [{ "id": "...", "type": "image", "keyframes": [{ "timestamp", "duration", "url" }] }] }
+The previous fix flattened tracks to `{ type, url, start, end, x, y, width, height }` based on a docs snippet that did not match the live endpoint. FAL rejects every compose call with:
+
+```
+missing: body.tracks[i].id
+missing: body.tracks[i].keyframes
 ```
 
-`fal-ai/ffmpeg-api/compose` expects a flat per-track object plus canvas metadata:
-
-```json
-{ "width": 1920, "height": 1080, "fps": 30, "duration_seconds": <total>,
-  "tracks": [{ "type": "image"|"video"|"audio"|"text",
-               "url": "...", "start": <s>, "end": <s>,
-               "x": 0, "y": 0, "width": <w>, "height": <h> }],
-  "output_format": "mp4" }
-```
-
-So every Director's Cut compose call fails with HTTP 400. The Editframe fallback then can't run because `EDITFRAME_API_KEY` is not configured, so the whole job dies.
+Editframe fallback is also unconfigured (`EDITFRAME_API_KEY` missing), so the whole job dies.
 
 ### Changes
 
-1. **Rewrite `buildFalTracks()` to FAL's compose schema** (`supabase/functions/_shared/export-helpers.ts`)
-   - Convert millisecond timestamps/durations to seconds (`start`, `end`).
-   - For visual clips, fill `x: 0, y: 0, width, height` from the resolution we already parse in `runWithFal`.
-   - For audio, omit geometry; keep `type: "audio"`, `url`, `start`, `end`.
-   - Drop the `id` field; FAL ignores it.
-
-2. **Wrap the compose call with the canvas envelope** (`runWithFal`, around `export-helpers.ts:631`)
+1. **Rewrite `buildFalTracks()`** in `supabase/functions/_shared/export-helpers.ts` to emit FAL's documented shape:
    ```ts
-   await runFalForVideoUrl(COMPOSE_MODEL, {
-     width, height, fps,
-     duration_seconds: Math.ceil(timelineDurationMs / 1000),
-     tracks: buildFalTracks(visuals, audioAssets, { width, height }),
-     output_format: 'mp4',
-   }, falKey);
+   {
+     id: string,                   // stable per-track id
+     type: 'video' | 'image' | 'audio',
+     keyframes: [{
+       url: string,
+       timestamp: number,          // ms
+       duration: number,           // ms
+       x?: 0, y?: 0,
+       width?: canvas.width,
+       height?: canvas.height,
+     }]
+   }
    ```
-   Compute `timelineDurationMs` from `Math.max(...end timestamps)`.
+   - Visual tracks: one keyframe per asset, with x/y/width/height.
+   - Audio tracks: one keyframe per asset, no geometry.
+   - `id` = `track-${index}` or asset id.
 
-3. **Surface FAL response bodies in errors** (`falGetResult`, `runFalForVideoUrl`)
-   - Include `await res.text()` in the thrown error so the next failure is debuggable instead of a bare "400".
-   - Log the submitted payload (truncated) into `provider_payload.lastFalAttempt`.
+2. **Update `runWithFal` compose call** to send the canvas envelope FAL accepts alongside the new tracks:
+   ```ts
+   { tracks, output_format: 'mp4', resolution: { width, height }, fps }
+   ```
+   Drop `duration_seconds` (compose derives it from keyframes; 422 didn't mention it but `start/end` were never valid here).
 
-4. **Editframe fallback secret**
-   - The fallback path is wired but inert without `EDITFRAME_API_KEY`. After the FAL fix lands, ask the user whether they want to enable it; if yes, request the secret and the fallback will be live.
-   - Until then, keep the current "fallback unavailable" message but add the actionable hint: "Add EDITFRAME_API_KEY to Supabase secrets to enable Editframe fallback."
+3. **Keep richer FAL error surfacing** already added (`falGetResult` includes response body) — no change needed beyond what's in place.
 
-5. **Skipped-shot UX (frontend)** — Director's Cut page already receives `provider_payload.shotFailures` for `available_content` jobs but does not surface them. Add a banner listing missing scenes/shots so the user knows what to generate before re-exporting.
+4. **Out of scope:** Editframe fallback secret and missing-shot UX banner — track separately. The compose fix alone unblocks current exports since 2 of 14 shots have media.
 
 ### Validation
 
-- Re-run the failing export. Expect FAL to accept the compose payload and return a video URL.
-- Confirm `provider_payload.lastFalAttempt` and any future 400 carry the actual error body.
-- Trigger an artificial FAL failure (e.g., bad URL) and confirm we now receive a clear "Add EDITFRAME_API_KEY…" message in the UI.
+Re-run the export (`/projects/1f37efc1.../directors-cut`) and confirm:
+- `provider_payload` no longer logs the `missing id/keyframes` 422.
+- A `final_video_url` is produced from the 3 available visuals.
 
-### Out of scope
-- Generating the 12 missing shot assets — that's a content task, not a renderer bug.
-- Migrating to the official `@fal-ai/client` SDK; we keep the existing direct queue HTTP layer to minimize surface area.
+### Files touched
+
+- `supabase/functions/_shared/export-helpers.ts` — `FalComposeTrack` interface, `buildFalTracks()`, `runWithFal()` compose input.
