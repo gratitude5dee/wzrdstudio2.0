@@ -131,7 +131,9 @@ describe('processAssetsRemote', () => {
     const tracks = (composeRequest?.input?.tracks ?? []) as unknown[];
     expect(result.provider).toBe('fal_remote');
     expect(result.publicUrl).toBe('https://storage.example.com/final.mp4');
-    expect(tracks).toHaveLength(14);
+    expect(tracks).toHaveLength(1);
+    expect(tracks[0]).toMatchObject({ id: 'visual-images', type: 'image' });
+    expect(((tracks[0] as { keyframes: unknown[] }).keyframes)).toHaveLength(14);
     expect(requests.some((request) => request.url.includes('merge-videos'))).toBe(false);
     expect(uploadMock).toHaveBeenCalledWith(
       expect.stringMatching(/^user-1\/project-1\/job-1\/final_export_\d+\.mp4$/),
