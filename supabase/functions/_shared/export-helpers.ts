@@ -306,8 +306,9 @@ async function falPollUntilDone(requestId: string, statusUrl: string | undefined
 
 async function falGetResult(responseUrl: string, falKey: string) {
   const res = await fetch(responseUrl, { headers: { Authorization: `Key ${falKey}` } });
-  if (!res.ok) throw new Error(`FAL result fetch failed (${res.status})`);
-  return res.json();
+  const text = await res.text();
+  if (!res.ok) throw new Error(`FAL result fetch failed (${res.status}): ${text}`);
+  try { return JSON.parse(text); } catch { return {}; }
 }
 
 async function runFalForVideoUrl(
