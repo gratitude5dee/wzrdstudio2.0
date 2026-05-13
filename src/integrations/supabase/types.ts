@@ -8241,6 +8241,7 @@ export type Database = {
           shot_type: string | null
           sound_effects: string | null
           updated_at: string | null
+          upscaled_image_url: string | null
           video_asset_id: string | null
           video_status: string | null
           video_url: string | null
@@ -8268,6 +8269,7 @@ export type Database = {
           shot_type?: string | null
           sound_effects?: string | null
           updated_at?: string | null
+          upscaled_image_url?: string | null
           video_asset_id?: string | null
           video_status?: string | null
           video_url?: string | null
@@ -8295,6 +8297,7 @@ export type Database = {
           shot_type?: string | null
           sound_effects?: string | null
           updated_at?: string | null
+          upscaled_image_url?: string | null
           video_asset_id?: string | null
           video_status?: string | null
           video_url?: string | null
@@ -10182,6 +10185,127 @@ export type Database = {
           id?: string
           name?: string
           updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      wzrd_agent_messages: {
+        Row: {
+          content: string | null
+          created_at: string
+          id: string
+          role: string
+          session_id: string
+          tool_calls: Json | null
+          tool_name: string | null
+          user_id: string
+        }
+        Insert: {
+          content?: string | null
+          created_at?: string
+          id?: string
+          role: string
+          session_id: string
+          tool_calls?: Json | null
+          tool_name?: string | null
+          user_id: string
+        }
+        Update: {
+          content?: string | null
+          created_at?: string
+          id?: string
+          role?: string
+          session_id?: string
+          tool_calls?: Json | null
+          tool_name?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wzrd_agent_messages_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "wzrd_agent_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wzrd_agent_processes: {
+        Row: {
+          command: string
+          created_at: string
+          id: string
+          name: string
+          pid: number | null
+          port: number | null
+          preview_url: string | null
+          session_id: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          command: string
+          created_at?: string
+          id?: string
+          name: string
+          pid?: number | null
+          port?: number | null
+          preview_url?: string | null
+          session_id: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          command?: string
+          created_at?: string
+          id?: string
+          name?: string
+          pid?: number | null
+          port?: number | null
+          preview_url?: string | null
+          session_id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wzrd_agent_processes_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "wzrd_agent_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wzrd_agent_sessions: {
+        Row: {
+          created_at: string
+          id: string
+          last_used_at: string
+          metadata: Json
+          sandbox_id: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_used_at?: string
+          metadata?: Json
+          sandbox_id?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_used_at?: string
+          metadata?: Json
+          sandbox_id?: string | null
+          status?: string
           user_id?: string
         }
         Relationships: []
