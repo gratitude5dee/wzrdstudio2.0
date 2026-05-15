@@ -2,7 +2,7 @@ import { CSSProperties, useMemo } from 'react';
 import { AbsoluteFill, Audio, Img, Sequence, Video, useCurrentFrame, useVideoConfig, interpolate } from 'remotion';
 import { AudioTrack, Clip, ClipTransition, CompositionSettings, Keyframe } from '@/store/videoEditorStore';
 
-interface EditorCompositionProps {
+export interface EditorCompositionProps {
   clips: Clip[];
   audioTracks: AudioTrack[];
   composition: CompositionSettings;
@@ -154,6 +154,37 @@ function getTransitionStyle(
   }
 }
 
+const getEffectFilter = (effects: Clip['effects'] = []) => {
+  const filters = effects.flatMap((effect) => {
+    const value = effect.params.value;
+    const amount = effect.params.amount;
+    const radius = effect.params.radius;
+
+    switch (effect.id) {
+      case 'brightness':
+        return [`brightness(${value ?? 100}%)`];
+      case 'contrast':
+        return [`contrast(${value ?? 100}%)`];
+      case 'saturation':
+        return [`saturate(${value ?? 100}%)`];
+      case 'exposure':
+        return [`brightness(${100 + (value ?? 0)}%)`];
+      case 'blur':
+        return [`blur(${radius ?? 0}px)`];
+      case 'grayscale':
+        return [`grayscale(${amount ?? 0}%)`];
+      case 'sepia':
+        return [`sepia(${amount ?? 0}%)`];
+      case 'invert':
+        return [`invert(${amount ?? 0}%)`];
+      default:
+        return [];
+    }
+  });
+
+  return filters.join(' ');
+};
+
 const ClipLayer = ({ clip, keyframes, isSelected, fps, durationInFrames }: ClipLayerProps) => {
   const frame = useCurrentFrame();
   const config = useVideoConfig();
@@ -162,6 +193,7 @@ const ClipLayer = ({ clip, keyframes, isSelected, fps, durationInFrames }: ClipL
 
   // Compute transition styles for clip entry
   const transitionStyles = getTransitionStyle(frame, durationInFrames, clip.transition, fps);
+  const effectFilter = getEffectFilter(clip.effects);
 
   // Base opacity from transforms (modulated by transition)
   const baseOpacity = transform.opacity;
@@ -177,13 +209,17 @@ const ClipLayer = ({ clip, keyframes, isSelected, fps, durationInFrames }: ClipL
     objectFit: 'cover',
     transform: `${baseTransform}${transitionTransform}`,
     opacity: finalOpacity,
-    filter: transitionStyles.filter,
+    filter: [effectFilter, transitionStyles.filter].filter(Boolean).join(' ') || undefined,
     clipPath: transitionStyles.clipPath,
     boxShadow: isSelected ? '0 0 0 3px rgba(155,135,245,0.8)' : 'none',
     transition: 'box-shadow 0.2s ease-in-out',
   };
 
-  return clip.type === 'video' ? <Video src={clip.url} style={style} /> : <Img src={clip.url} style={style} />;
+  return clip.type === 'video' ? (
+    <Video src={clip.url} style={style} startFrom={msToStartFrame(clip.trimStart ?? 0, fps)} />
+  ) : (
+    <Img src={clip.url} style={style} />
+  );
 };
 
 const getTransformForTime = (clip: Clip, keyframes: Keyframe[], time: number) => {

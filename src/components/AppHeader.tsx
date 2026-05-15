@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { appRoutes, getCanonicalProjectRoute, getProjectViewFromPath } from '@/lib/routes';
 import { useUserTier } from '@/hooks/useUserTier';
+import { isDevAuthBypassEnabled } from '@/lib/devAuthBypass';
 
 type ViewMode = 'studio' | 'timeline' | 'editor';
 
@@ -107,12 +108,20 @@ export const AppHeader = ({
   const currentView = getCurrentView();
 
   useEffect(() => {
+    if (isDevAuthBypassEnabled()) {
+      if (projectIdFromURL && projectIdFromURL !== activeProjectId) {
+        setActiveProject(projectIdFromURL, 'Local Editor Smoke');
+      }
+      return;
+    }
+
     if (projectIdFromURL && projectIdFromURL !== activeProjectId) {
       const fetchProjectName = async () => {
         try {
           const project = await supabaseService.projects.find(projectIdFromURL);
           setActiveProject(projectIdFromURL, project?.title || 'Untitled');
         } catch {
+          // The service already reports the load failure to the user.
         }
       };
       

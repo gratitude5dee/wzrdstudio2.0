@@ -35,11 +35,19 @@ export interface ExportSettings {
   includeAudio?: boolean;
   provider?: 'auto' | 'fal';
   renderMode?: 'sync';
+  renderBackend?: 'fal_remote' | 'remotion_worker' | 'auto';
 }
 
 export interface ShotFailure {
   assetId: string;
   orderIndex: number;
+  reason: string;
+}
+
+export interface RenderWarning {
+  assetId: string;
+  orderIndex: number;
+  features: Array<'transform' | 'transition' | 'effect' | 'keyframe'>;
   reason: string;
 }
 
@@ -226,6 +234,258 @@ function falInputValidationFailures(visualAssets: ExportAsset[], audioAssets: Ex
   }
 
   return failures;
+}
+
+
+interface ComposeKeyframe {
+  timestamp: number;
+  duration: number;
+  url: string;
+}
+
+interface ComposeTrack {
+  id: string;
+  type: 'image' | 'video' | 'audio';
+  keyframes: ComposeKeyframe[];
+}
+
+interface VideoTrimInput {
+  video_url: string;
+  start_time: number;
+  duration: number;
+}
+
+const DEFAULT_COMPOSE_IMAGE_DURATION_MS = 5000;
+const MIN_TRIM_DURATION_SECONDS = 0.05;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === 'object' && !Array.isArray(value);
+
+const numberOr = (value: unknown, fallback: number) =>
+  typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+
+const getMetadataNumber = (asset: ExportAsset, key: string) =>
+  isRecord(asset.metadata) ? numberOr(asset.metadata[key], Number.NaN) : Number.NaN;
+
+const getNestedMetadataNumber = (asset: ExportAsset, parentKey: string, key: string) => {
+  if (!isRecord(asset.metadata)) return Number.NaN;
+  const parent = asset.metadata[parentKey];
+  return isRecord(parent) ? numberOr(parent[key], Number.NaN) : Number.NaN;
+};
+
+const getCachedDurationMs = (asset: ExportAsset) => {
+  const directDuration = numberOr(asset.duration_ms, getMetadataNumber(asset, 'duration_ms'));
+  if (Number.isFinite(directDuration) && directDuration > 0) {
+    return directDuration;
+  }
+
+  const nestedDuration = getNestedMetadataNumber(asset, 'media_metadata', 'duration_ms');
+  if (Number.isFinite(nestedDuration) && nestedDuration > 0) {
+    return nestedDuration;
+  }
+
+  const directSeconds = getMetadataNumber(asset, 'duration_seconds');
+  if (Number.isFinite(directSeconds) && directSeconds > 0) {
+    return directSeconds * 1000;
+  }
+
+  const nestedSeconds = getNestedMetadataNumber(asset, 'media_metadata', 'duration_seconds');
+  if (Number.isFinite(nestedSeconds) && nestedSeconds > 0) {
+    return nestedSeconds * 1000;
+  }
+
+  return Number.NaN;
+};
+
+const getAssetStartMs = (asset: ExportAsset, fallback: number) => {
+  const startTime = getMetadataNumber(asset, 'start_time_ms');
+  return Number.isFinite(startTime) ? Math.max(0, startTime) : Math.max(0, fallback);
+};
+
+const getAssetDurationMs = (asset: ExportAsset, startMs: number) => {
+  const explicitDuration = getCachedDurationMs(asset);
+  if (Number.isFinite(explicitDuration) && explicitDuration > 0) {
+    return explicitDuration;
+  }
+
+  const endTime = getMetadataNumber(asset, 'end_time_ms');
+  if (Number.isFinite(endTime) && endTime > startMs) {
+    return endTime - startMs;
+  }
+
+  return asset.type === 'image' ? DEFAULT_COMPOSE_IMAGE_DURATION_MS : 0;
+};
+
+const hasMaterialTransform = (metadata: Record<string, unknown>) => {
+  const transforms = metadata.transforms;
+  if (!isRecord(transforms)) return false;
+  const position = isRecord(transforms.position) ? transforms.position : {};
+  const scale = isRecord(transforms.scale) ? transforms.scale : {};
+  return (
+    numberOr(position.x, 0) !== 0 ||
+    numberOr(position.y, 0) !== 0 ||
+    numberOr(scale.x, 1) !== 1 ||
+    numberOr(scale.y, 1) !== 1 ||
+    numberOr(transforms.rotation, 0) !== 0 ||
+    numberOr(transforms.opacity, 1) !== 1
+  );
+};
+
+export function collectRenderWarnings(assets: ExportAsset[]): RenderWarning[] {
+  return assets.flatMap((asset) => {
+    if (!isRecord(asset.metadata) || asset.type === 'audio') {
+      return [];
+    }
+
+    const features: RenderWarning['features'] = [];
+    if (hasMaterialTransform(asset.metadata)) features.push('transform');
+    if (isRecord(asset.metadata.transition) && asset.metadata.transition.type !== 'none') {
+      features.push('transition');
+    }
+    if (Array.isArray(asset.metadata.effects) && asset.metadata.effects.length > 0) {
+      features.push('effect');
+    }
+    if (Array.isArray(asset.metadata.keyframes) && asset.metadata.keyframes.length > 0) {
+      features.push('keyframe');
+    }
+
+    if (features.length === 0) {
+      return [];
+    }
+
+    return [
+      {
+        assetId: asset.id,
+        orderIndex: asset.order_index,
+        features,
+        reason: 'FAL compose renders timing and media URLs only; editor transforms, transitions, effects, and keyframes are preserved as metadata but not applied by this backend.',
+      },
+    ];
+  });
+}
+
+const getTrimStartMs = (asset: ExportAsset) => {
+  const trimStart = getMetadataNumber(asset, 'trim_start_ms');
+  return Number.isFinite(trimStart) ? Math.max(0, trimStart) : 0;
+};
+
+const getTrimEndMs = (asset: ExportAsset) => {
+  const trimEnd = getMetadataNumber(asset, 'trim_end_ms');
+  return Number.isFinite(trimEnd) ? Math.max(0, trimEnd) : 0;
+};
+
+export function buildVideoTrimInput(asset: ExportAsset): VideoTrimInput | null {
+  if (asset.type !== 'video' || !asset.url) {
+    return null;
+  }
+
+  const trimStartMs = getTrimStartMs(asset);
+  const trimEndMs = getTrimEndMs(asset);
+  if (trimStartMs <= 0 && trimEndMs <= 0) {
+    return null;
+  }
+
+  const timelineStartMs = getAssetStartMs(asset, 0);
+  const durationMs = getAssetDurationMs(asset, timelineStartMs);
+  const durationSeconds = durationMs / 1000;
+  if (!Number.isFinite(durationSeconds) || durationSeconds < MIN_TRIM_DURATION_SECONDS) {
+    return null;
+  }
+
+  return {
+    video_url: asset.url,
+    start_time: trimStartMs / 1000,
+    duration: durationSeconds,
+  };
+}
+
+export function buildComposeTracks(
+  assets: ExportAsset[],
+  settings: ExportSettings = {}
+): {
+  tracks: ComposeTrack[];
+  shotFailures: ShotFailure[];
+  audioTrackCount: number;
+  timelineDurationMs: number;
+} {
+  const sorted = [...assets].sort((a, b) => a.order_index - b.order_index);
+  const visuals = sorted.filter((asset) => asset.type === 'image' || asset.type === 'video');
+  const audioAssets = settings.includeAudio === false
+    ? []
+    : sorted.filter((asset) => asset.type === 'audio' && !!asset.url);
+
+  const shotFailures: ShotFailure[] = [];
+  const imageKeyframes: ComposeKeyframe[] = [];
+  const videoKeyframes: ComposeKeyframe[] = [];
+  let visualCursor = 0;
+  let timelineDurationMs = 0;
+
+  for (const asset of visuals) {
+    const startMs = getAssetStartMs(asset, visualCursor);
+    const durationMs = getAssetDurationMs(asset, startMs);
+
+    if (!asset.url) {
+      shotFailures.push({ assetId: asset.id, orderIndex: asset.order_index, reason: 'Missing URL' });
+      continue;
+    }
+
+    if (durationMs <= 0) {
+      shotFailures.push({ assetId: asset.id, orderIndex: asset.order_index, reason: 'Missing duration' });
+      continue;
+    }
+
+    const keyframe = {
+      timestamp: startMs,
+      duration: durationMs,
+      url: asset.url,
+    };
+
+    if (asset.type === 'image') {
+      imageKeyframes.push(keyframe);
+    } else {
+      videoKeyframes.push(keyframe);
+    }
+
+    const endMs = startMs + durationMs;
+    visualCursor = Math.max(visualCursor, endMs);
+    timelineDurationMs = Math.max(timelineDurationMs, endMs);
+  }
+
+  const tracks: ComposeTrack[] = [];
+  if (imageKeyframes.length > 0) {
+    tracks.push({ id: 'visual-images', type: 'image', keyframes: imageKeyframes });
+  }
+  if (videoKeyframes.length > 0) {
+    tracks.push({ id: 'visual-videos', type: 'video', keyframes: videoKeyframes });
+  }
+
+  for (const [index, asset] of audioAssets.entries()) {
+    const startMs = getAssetStartMs(asset, 0);
+    const durationMs = getAssetDurationMs(asset, startMs);
+    if (durationMs <= 0) {
+      continue;
+    }
+
+    tracks.push({
+      id: `audio-${index}-${asset.id}`,
+      type: 'audio',
+      keyframes: [
+        {
+          timestamp: startMs,
+          duration: durationMs,
+          url: asset.url!,
+        },
+      ],
+    });
+    timelineDurationMs = Math.max(timelineDurationMs, startMs + durationMs);
+  }
+
+  return {
+    tracks,
+    shotFailures,
+    audioTrackCount: tracks.filter((track) => track.type === 'audio').length,
+    timelineDurationMs,
+  };
 }
 
 export function extractVideoUrl(obj: unknown): string | null {

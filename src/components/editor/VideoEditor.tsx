@@ -7,32 +7,30 @@ import { supabaseService } from '@/services/supabaseService';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import VideoEditorMain from './VideoEditorMain';
+import { useAuth } from '@/providers/AuthProvider';
 
 const VideoEditor = () => {
   const { project, setProjectId, setProjectName } = useVideoEditor();
   
   const navigate = useNavigate();
   const [isCreatingProject, setIsCreatingProject] = useState(false);
-  const [userAuthenticated, setUserAuthenticated] = useState<boolean | null>(null);
+  const { isAuthenticated, loading: authLoading } = useAuth();
   
   // Check if user is authenticated
   useEffect(() => {
+    if (authLoading || isAuthenticated) {
+      return;
+    }
+
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      setUserAuthenticated(!!session);
+      if (!session) {
+        navigate('/login');
+      }
     };
     
     checkAuth();
-    
-    // Subscribe to auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setUserAuthenticated(!!session);
-      }
-    );
-    
-    return () => subscription.unsubscribe();
-  }, []);
+  }, [authLoading, isAuthenticated, navigate]);
   
   // Create a default project if needed
   const handleCreateDefaultProject = async () => {
@@ -66,7 +64,7 @@ const VideoEditor = () => {
   };
   
   // If we're not authenticated, show login prompt
-  if (userAuthenticated === false) {
+  if (!authLoading && !isAuthenticated) {
     return (
       <div className="flex flex-col items-center justify-center h-full bg-[#0A0D16] text-white p-6">
         <h2 className="text-2xl font-bold mb-4">Authentication Required</h2>
@@ -81,7 +79,7 @@ const VideoEditor = () => {
   }
   
   // If we don't have a project ID and are authenticated, show project creation UI
-  if (!project.id && userAuthenticated) {
+  if (!project.id && isAuthenticated) {
     return (
       <div className="flex flex-col items-center justify-center h-full bg-[#0A0D16] text-white p-6">
         <h2 className="text-2xl font-bold mb-4">Create New Project</h2>

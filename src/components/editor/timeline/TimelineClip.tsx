@@ -1,6 +1,5 @@
 import { MouseEvent, PointerEvent as ReactPointerEvent, useCallback, useMemo, useRef, useState } from 'react';
 import { useDrag } from '@/lib/react-dnd';
-import { v4 as uuidv4 } from 'uuid';
 import { Film, Music } from 'lucide-react';
 import { useVideoEditorStore, Clip, AudioTrack } from '@/store/videoEditorStore';
 import {
@@ -22,16 +21,17 @@ interface TimelineClipProps {
 export function TimelineClip({ clip, zoom, onSelect, isSelected }: TimelineClipProps) {
   const updateClip = useVideoEditorStore((state) => state.updateClip);
   const updateAudioTrack = useVideoEditorStore((state) => state.updateAudioTrack);
-  const removeClip = useVideoEditorStore((state) => state.removeClip);
-  const removeAudioTrack = useVideoEditorStore((state) => state.removeAudioTrack);
-  const addClip = useVideoEditorStore((state) => state.addClip);
-  const addAudioTrack = useVideoEditorStore((state) => state.addAudioTrack);
+  const moveTimelineItems = useVideoEditorStore((state) => state.moveTimelineItems);
+  const deleteTimelineItems = useVideoEditorStore((state) => state.deleteTimelineItems);
+  const duplicateTimelineItems = useVideoEditorStore((state) => state.duplicateTimelineItems);
+  const selectedClipIds = useVideoEditorStore((state) => state.selectedClipIds);
+  const selectedAudioTrackIds = useVideoEditorStore((state) => state.selectedAudioTrackIds);
   const timeline = useVideoEditorStore((state) => state.timeline);
   const clips = useVideoEditorStore((state) => state.clips);
   const audioTracks = useVideoEditorStore((state) => state.audioTracks);
   const [isHovered, setIsHovered] = useState(false);
   const [isTrimming, setIsTrimming] = useState(false);
-  const pendingTrim = useRef<{ startTime: number; duration: number } | null>(null);
+  const pendingTrim = useRef<(Partial<Clip> & Pick<Clip, 'startTime' | 'duration' | 'endTime'>) | null>(null);
 
   const duration = clip.duration ?? 1000;
   const widthPx = (duration / 1000) * zoom;
@@ -50,6 +50,19 @@ export function TimelineClip({ clip, zoom, onSelect, isSelected }: TimelineClipP
       }),
     [snapPoints, timeline.gridSize, timeline.snapToGrid]
   );
+
+  const commandSelection = useMemo(() => {
+    if (isSelected && (selectedClipIds.length > 0 || selectedAudioTrackIds.length > 0)) {
+      return {
+        clipIds: selectedClipIds,
+        audioTrackIds: selectedAudioTrackIds,
+      };
+    }
+
+    return clip.type === 'audio'
+      ? { audioTrackIds: [clip.id] }
+      : { clipIds: [clip.id] };
+  }, [clip.id, clip.type, isSelected, selectedAudioTrackIds, selectedClipIds]);
 
   const commitUpdate = useCallback(
     (updates: Partial<Clip> | Partial<AudioTrack>, skipHistory = false) => {
@@ -71,7 +84,7 @@ export function TimelineClip({ clip, zoom, onSelect, isSelected }: TimelineClipP
       const deltaMs = (diff.x / zoom) * 1000;
       if (!deltaMs) return;
       const targetStart = applySnapping((clip.startTime ?? 0) + deltaMs);
-      commitUpdate({ startTime: Math.max(0, targetStart) });
+      moveTimelineItems(commandSelection, Math.max(0, targetStart) - (clip.startTime ?? 0));
     },
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
@@ -89,6 +102,8 @@ export function TimelineClip({ clip, zoom, onSelect, isSelected }: TimelineClipP
     const startX = event.clientX;
     const initialStart = clip.startTime ?? 0;
     const initialDuration = clip.duration ?? 1000;
+    const initialTrimStart = clip.type === 'audio' ? 0 : clip.trimStart ?? 0;
+    const initialTrimEnd = clip.type === 'audio' ? 0 : clip.trimEnd ?? 0;
 
     const onMove = (moveEvent: PointerEvent) => {
       const deltaPx = moveEvent.clientX - startX;
@@ -106,16 +121,25 @@ export function TimelineClip({ clip, zoom, onSelect, isSelected }: TimelineClipP
         newStart = Math.min(newStart, initialStart + initialDuration - 200);
       }
       const snappedStart = edge === 'start' ? applySnapping(newStart) : newStart;
+      const startTime = Math.max(0, snappedStart);
+      const duration = edge === 'start'
+        ? Math.max(200, initialStart + initialDuration - startTime)
+        : newDuration;
+      const endTime = startTime + duration;
+      const trimUpdates: Partial<Clip> =
+        clip.type === 'audio'
+          ? {}
+          : edge === 'start'
+            ? { trimStart: Math.max(0, initialTrimStart + startTime - initialStart) }
+            : { trimEnd: Math.max(0, initialTrimEnd - (duration - initialDuration)) };
       pendingTrim.current = {
-        startTime: Math.max(0, snappedStart),
-        duration: newDuration,
+        startTime,
+        duration,
+        endTime,
+        ...trimUpdates,
       };
       commitUpdate(
-        {
-          startTime: pendingTrim.current.startTime,
-          duration: pendingTrim.current.duration,
-          endTime: pendingTrim.current.startTime + pendingTrim.current.duration,
-        },
+        pendingTrim.current,
         true
       );
     };
@@ -125,14 +149,7 @@ export function TimelineClip({ clip, zoom, onSelect, isSelected }: TimelineClipP
       document.removeEventListener('pointerup', onUp);
       document.removeEventListener('pointercancel', onUp);
       if (pendingTrim.current) {
-        commitUpdate(
-          {
-            startTime: pendingTrim.current.startTime,
-            duration: pendingTrim.current.duration,
-            endTime: pendingTrim.current.startTime + pendingTrim.current.duration,
-          },
-          false
-        );
+        commitUpdate(pendingTrim.current, false);
         pendingTrim.current = null;
       }
       setIsTrimming(false);
@@ -144,30 +161,11 @@ export function TimelineClip({ clip, zoom, onSelect, isSelected }: TimelineClipP
   };
 
   const handleDelete = () => {
-    if (clip.type === 'audio') {
-      removeAudioTrack(clip.id);
-    } else {
-      removeClip(clip.id);
-    }
+    deleteTimelineItems(commandSelection);
   };
 
   const duplicateItem = () => {
-    const offset = timeline.gridSize || 100;
-    if (clip.type === 'audio') {
-      addAudioTrack({
-        ...(clip as AudioTrack),
-        id: uuidv4(),
-        startTime: (clip.startTime ?? 0) + offset,
-        endTime: (clip.endTime ?? (clip.startTime ?? 0) + (clip.duration ?? 0)) + offset,
-      });
-    } else {
-      addClip({
-        ...(clip as Clip),
-        id: uuidv4(),
-        startTime: (clip.startTime ?? 0) + offset,
-        endTime: (clip.endTime ?? (clip.startTime ?? 0) + (clip.duration ?? 0)) + offset,
-      });
-    }
+    duplicateTimelineItems(commandSelection, timeline.gridSize || 100);
   };
 
   const toggleMute = () => {

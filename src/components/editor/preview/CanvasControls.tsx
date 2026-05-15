@@ -9,12 +9,9 @@ import { motion } from 'framer-motion';
 export function CanvasControls() {
   const selectedClipIds = useVideoEditorStore((s) => s.selectedClipIds);
   const selectedAudioTrackIds = useVideoEditorStore((s) => s.selectedAudioTrackIds);
-  const removeClip = useVideoEditorStore((s) => s.removeClip);
-  const removeAudioTrack = useVideoEditorStore((s) => s.removeAudioTrack);
-  const clips = useVideoEditorStore((s) => s.clips);
-  const audioTracks = useVideoEditorStore((s) => s.audioTracks);
-  const addClip = useVideoEditorStore((s) => s.addClip);
-  const addAudioTrack = useVideoEditorStore((s) => s.addAudioTrack);
+  const splitClipAtTime = useVideoEditorStore((s) => s.splitClipAtTime);
+  const deleteSelectedItems = useVideoEditorStore((s) => s.deleteSelectedItems);
+  const duplicateSelectedItems = useVideoEditorStore((s) => s.duplicateSelectedItems);
   const playback = useVideoEditorStore((s) => s.playback);
   
   const [clickedButton, setClickedButton] = useState<string | null>(null);
@@ -33,10 +30,8 @@ export function CanvasControls() {
       return;
     }
 
-    selectedClipIds.forEach(id => removeClip(id));
-    selectedAudioTrackIds.forEach(id => removeAudioTrack(id));
-    
-    toast.success(`Deleted ${selectedClipIds.length + selectedAudioTrackIds.length} item(s)`);
+    const deletedCount = deleteSelectedItems();
+    toast.success(`Deleted ${deletedCount} item(s)`);
   };
 
   const handleSplit = () => {
@@ -45,36 +40,11 @@ export function CanvasControls() {
       return;
     }
 
-    const clipId = selectedClipIds[0];
-    const clip = clips.find(c => c.id === clipId);
-    if (!clip) return;
-
-    const splitTime = playback.currentTime;
-    if (splitTime <= clip.startTime || splitTime >= (clip.startTime + clip.duration)) {
+    const didSplit = splitClipAtTime(selectedClipIds[0], playback.currentTime);
+    if (!didSplit) {
       toast.error('Playhead must be inside the clip');
       return;
     }
-
-    // Create two new clips from the split
-    const firstDuration = splitTime - clip.startTime;
-    const secondDuration = clip.duration - firstDuration;
-
-    const firstClip = {
-      ...clip,
-      id: crypto.randomUUID(),
-      duration: firstDuration,
-    };
-
-    const secondClip = {
-      ...clip,
-      id: crypto.randomUUID(),
-      startTime: splitTime,
-      duration: secondDuration,
-    };
-
-    removeClip(clipId);
-    addClip(firstClip);
-    addClip(secondClip);
 
     toast.success('Clip split successfully');
   };
@@ -85,34 +55,7 @@ export function CanvasControls() {
       return;
     }
 
-    let clonedCount = 0;
-
-    selectedClipIds.forEach(id => {
-      const clip = clips.find(c => c.id === id);
-      if (clip) {
-        const clonedClip = {
-          ...clip,
-          id: crypto.randomUUID(),
-          startTime: clip.startTime + clip.duration + 100, // Offset by duration + 100ms
-        };
-        addClip(clonedClip);
-        clonedCount++;
-      }
-    });
-
-    selectedAudioTrackIds.forEach(id => {
-      const track = audioTracks.find(t => t.id === id);
-      if (track) {
-        const clonedTrack = {
-          ...track,
-          id: crypto.randomUUID(),
-          startTime: track.startTime + track.duration + 100,
-        };
-        addAudioTrack(clonedTrack);
-        clonedCount++;
-      }
-    });
-
+    const clonedCount = duplicateSelectedItems();
     toast.success(`Cloned ${clonedCount} item(s)`);
   };
 

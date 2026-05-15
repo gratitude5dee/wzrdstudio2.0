@@ -1,4 +1,11 @@
 import { create } from 'zustand';
+import {
+  deleteTimelineSelection,
+  duplicateTimelineSelection,
+  moveTimelineSelection,
+  splitClipAtTime as splitTimelineClipAtTime,
+} from '@/lib/editor/timelineCommands';
+import { isDevAuthBypassEnabled } from '@/lib/devAuthBypass';
 import { videoEditorService } from '@/services/videoEditorService';
 
 export interface ProjectMetadata {
@@ -45,10 +52,12 @@ export interface Clip {
   type: 'video' | 'image' | 'text' | 'element';
   name: string;
   url: string;
-  sourceId?: string | null;
   text?: string;
   style?: TextClipStyle;
-  effects?: ClipEffect[];
+  thumbnailUrl?: string | null;
+  previewUrl?: string | null;
+  mediaMetadata?: Record<string, unknown>;
+  sourceId?: string | null;
   startTime: number;
   duration: number;
   endTime?: number;
@@ -57,6 +66,7 @@ export interface Clip {
   trimStart?: number;
   trimEnd?: number;
   transition?: ClipTransition;
+  effects?: ClipEffect[];
   transforms: {
     position: { x: number; y: number };
     scale: { x: number; y: number };
@@ -71,6 +81,9 @@ export interface AudioTrack {
   type: 'audio';
   name: string;
   url: string;
+  thumbnailUrl?: string | null;
+  previewUrl?: string | null;
+  mediaMetadata?: Record<string, unknown>;
   sourceId?: string | null;
   startTime: number;
   duration: number;
@@ -101,6 +114,8 @@ export interface LibraryMediaItem {
   sourceType?: 'ai-generated' | 'uploaded' | 'stock';
   status?: 'processing' | 'completed' | 'failed';
   thumbnailUrl?: string | null;
+  previewUrl?: string | null;
+  mediaMetadata?: Record<string, unknown>;
 }
 
 // Union type for all media items
@@ -125,7 +140,7 @@ export interface Keyframe {
   id: string;
   targetId: string;
   time: number;
-  properties: Record<string, any>;
+  properties: Record<string, unknown>;
   targetType?: 'clip' | 'audio' | 'composition';
   propertyPath?: string;
   easing?: string;
@@ -135,7 +150,7 @@ export interface GenerationParams {
   prompt: string;
   imageUrl?: string;
   model?: string;
-  settings?: Record<string, any>;
+  settings?: Record<string, unknown>;
 }
 
 export interface DialogState {
@@ -220,6 +235,12 @@ export interface VideoEditorState {
   removeClip: (id: string) => void;
   removeClipLocal: (id: string) => void;
   syncClipFromRemote: (clip: Clip) => void;
+  splitClipAtTime: (id: string, timeMs: number) => boolean;
+  moveTimelineItems: (selection: { clipIds?: string[]; audioTrackIds?: string[] }, deltaMs: number) => number;
+  deleteTimelineItems: (selection: { clipIds?: string[]; audioTrackIds?: string[] }, options?: { ripple?: boolean }) => number;
+  duplicateTimelineItems: (selection: { clipIds?: string[]; audioTrackIds?: string[] }, offsetMs?: number) => number;
+  deleteSelectedItems: (options?: { ripple?: boolean }) => number;
+  duplicateSelectedItems: (offsetMs?: number) => number;
 
   addAudioTrack: (track: AudioTrack) => void;
   updateAudioTrack: (id: string, updates: Partial<AudioTrack>, options?: { skipHistory?: boolean }) => void;
@@ -285,6 +306,7 @@ export interface VideoEditorState {
 type HistoryEntry = {
   clips: Clip[];
   audioTracks: AudioTrack[];
+  keyframes: Keyframe[];
   playback: PlaybackState;
   timeline: TimelineState;
   composition: CompositionSettings;
@@ -295,6 +317,7 @@ const cloneSlice = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 const createHistoryEntry = (state: VideoEditorState): HistoryEntry => ({
   clips: cloneSlice(state.clips),
   audioTracks: cloneSlice(state.audioTracks),
+  keyframes: cloneSlice(state.keyframes),
   playback: cloneSlice(state.playback),
   timeline: cloneSlice(state.timeline),
   composition: cloneSlice(state.composition),
@@ -304,6 +327,18 @@ const createId = () =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
     : Math.random().toString(36).slice(2);
+
+const persistEditorTimeline = (state: VideoEditorState) => {
+  const projectId = state.project.id;
+  if (!projectId) return;
+  if (isDevAuthBypassEnabled()) return;
+
+  void videoEditorService
+    .saveAllClipsAndTracks(projectId, state.clips, state.audioTracks, state.composition, state.keyframes)
+    .catch((error) => {
+      console.error('Failed to save editor timeline', error);
+    });
+};
 
 const initialState: Pick<
   VideoEditorState,
@@ -499,10 +534,7 @@ export const useVideoEditorStore = create<VideoEditorState>((set, get) => ({
     set((state) => ({
       clips: [...state.clips, clip],
     }));
-    const projectId = get().project.id;
-    if (projectId) {
-      videoEditorService.saveTimelineClip(projectId, clip);
-    }
+    persistEditorTimeline(get());
   },
   updateClip: (id, updates, options) => {
     let updatedClip: Clip | undefined;
@@ -518,26 +550,14 @@ export const useVideoEditorStore = create<VideoEditorState>((set, get) => ({
           ...clip,
           ...updates,
           transforms: updates.transforms
-            ? {
-                ...clip.transforms,
-                ...updates.transforms,
-                position: {
-                  ...clip.transforms.position,
-                  ...(updates.transforms.position ?? {}),
-                },
-                scale: {
-                  ...clip.transforms.scale,
-                  ...(updates.transforms.scale ?? {}),
-                },
-              }
+            ? { ...clip.transforms, ...updates.transforms }
             : clip.transforms,
         };
         return updatedClip;
       }),
     }));
-    const projectId = get().project.id;
-    if (projectId && updatedClip) {
-      videoEditorService.saveTimelineClip(projectId, updatedClip);
+    if (updatedClip) {
+      persistEditorTimeline(get());
     }
   },
   removeClip: (id) => {
@@ -551,7 +571,7 @@ export const useVideoEditorStore = create<VideoEditorState>((set, get) => ({
       keyframes: state.keyframes.filter((keyframe) => keyframe.targetId !== id),
       selectedKeyframeIds: state.selectedKeyframeIds.filter((keyframeId) => keyframeId !== id),
     }));
-    videoEditorService.deleteTimelineClip(id);
+    persistEditorTimeline(get());
   },
   removeClipLocal: (id) =>
     set((state) => ({
@@ -573,10 +593,7 @@ export const useVideoEditorStore = create<VideoEditorState>((set, get) => ({
     set((state) => ({
       audioTracks: [...state.audioTracks, track],
     }));
-    const projectId = get().project.id;
-    if (projectId) {
-      videoEditorService.saveAudioTrack(projectId, track);
-    }
+    persistEditorTimeline(get());
   },
   updateAudioTrack: (id, updates, options) => {
     let updatedTrack: AudioTrack | undefined;
@@ -592,9 +609,8 @@ export const useVideoEditorStore = create<VideoEditorState>((set, get) => ({
         return updatedTrack;
       }),
     }));
-    const projectId = get().project.id;
-    if (projectId && updatedTrack) {
-      videoEditorService.saveAudioTrack(projectId, updatedTrack);
+    if (updatedTrack) {
+      persistEditorTimeline(get());
     }
   },
   removeAudioTrack: (id) => {
@@ -603,7 +619,7 @@ export const useVideoEditorStore = create<VideoEditorState>((set, get) => ({
       audioTracks: state.audioTracks.filter((track) => track.id !== id),
       selectedAudioTrackIds: state.selectedAudioTrackIds.filter((trackId) => trackId !== id),
     }));
-    videoEditorService.deleteAudioTrack(id);
+    persistEditorTimeline(get());
   },
   removeAudioTrackLocal: (id) =>
     set((state) => ({
@@ -619,6 +635,150 @@ export const useVideoEditorStore = create<VideoEditorState>((set, get) => ({
           : [...state.audioTracks, track],
       };
     }),
+
+  splitClipAtTime: (id, timeMs) => {
+    const state = get();
+    const result = splitTimelineClipAtTime(
+      {
+        clips: state.clips,
+        audioTracks: state.audioTracks,
+        keyframes: state.keyframes,
+      },
+      id,
+      timeMs,
+      createId
+    );
+    if (!result) {
+      return false;
+    }
+
+    state.pushHistory();
+    set({
+      clips: result.clips,
+      audioTracks: result.audioTracks,
+      keyframes: result.keyframes,
+      selectedClipIds: result.selectedClipIds,
+      selectedKeyframeIds: [],
+    });
+    persistEditorTimeline(get());
+    return true;
+  },
+
+  moveTimelineItems: (selection, deltaMs) => {
+    if (!deltaMs) {
+      return 0;
+    }
+    const state = get();
+    const result = moveTimelineSelection(
+      {
+        clips: state.clips,
+        audioTracks: state.audioTracks,
+        keyframes: state.keyframes,
+      },
+      selection,
+      deltaMs
+    );
+    const movedCount = result.movedClipIds.length + result.movedAudioTrackIds.length;
+    if (movedCount === 0 || result.appliedDeltaMs === 0) {
+      return 0;
+    }
+
+    state.pushHistory();
+    set({
+      clips: result.clips,
+      audioTracks: result.audioTracks,
+      keyframes: result.keyframes,
+    });
+    persistEditorTimeline(get());
+    return movedCount;
+  },
+
+  deleteTimelineItems: (selection, options) => {
+    const state = get();
+    const result = deleteTimelineSelection(
+      {
+        clips: state.clips,
+        audioTracks: state.audioTracks,
+        keyframes: state.keyframes,
+      },
+      selection,
+      options
+    );
+    const deletedCount = result.deletedClipIds.length + result.deletedAudioTrackIds.length;
+    if (deletedCount === 0) {
+      return 0;
+    }
+
+    const deletedClipIds = new Set(result.deletedClipIds);
+    const deletedAudioTrackIds = new Set(result.deletedAudioTrackIds);
+    state.pushHistory();
+    set((current) => ({
+      clips: result.clips,
+      audioTracks: result.audioTracks,
+      keyframes: result.keyframes,
+      selectedClipIds: current.selectedClipIds.filter((clipId) => !deletedClipIds.has(clipId)),
+      selectedAudioTrackIds: current.selectedAudioTrackIds.filter((trackId) => !deletedAudioTrackIds.has(trackId)),
+      selectedKeyframeIds: current.selectedKeyframeIds.filter((keyframeId) =>
+        result.keyframes.some((keyframe) => keyframe.id === keyframeId)
+      ),
+      clipConnections: current.clipConnections.filter(
+        (connection) => !deletedClipIds.has(connection.sourceId) && !deletedClipIds.has(connection.targetId)
+      ),
+    }));
+    persistEditorTimeline(get());
+    return deletedCount;
+  },
+
+  duplicateTimelineItems: (selection, offsetMs) => {
+    const state = get();
+    const result = duplicateTimelineSelection(
+      {
+        clips: state.clips,
+        audioTracks: state.audioTracks,
+        keyframes: state.keyframes,
+      },
+      selection,
+      offsetMs ?? (state.timeline.gridSize || 100),
+      createId
+    );
+    const duplicatedCount = result.duplicatedClipIds.length + result.duplicatedAudioTrackIds.length;
+    if (duplicatedCount === 0) {
+      return 0;
+    }
+
+    state.pushHistory();
+    set({
+      clips: result.clips,
+      audioTracks: result.audioTracks,
+      keyframes: result.keyframes,
+      selectedClipIds: result.duplicatedClipIds,
+      selectedAudioTrackIds: result.duplicatedAudioTrackIds,
+    });
+    persistEditorTimeline(get());
+    return duplicatedCount;
+  },
+
+  deleteSelectedItems: (options) => {
+    const state = get();
+    return state.deleteTimelineItems(
+      {
+        clipIds: state.selectedClipIds,
+        audioTrackIds: state.selectedAudioTrackIds,
+      },
+      options
+    );
+  },
+
+  duplicateSelectedItems: (offsetMs) => {
+    const state = get();
+    return state.duplicateTimelineItems(
+      {
+        clipIds: state.selectedClipIds,
+        audioTrackIds: state.selectedAudioTrackIds,
+      },
+      offsetMs
+    );
+  },
 
   selectClip: (id, addToSelection = false) =>
     set((state) => ({
@@ -663,25 +823,16 @@ export const useVideoEditorStore = create<VideoEditorState>((set, get) => ({
     set((state) => ({
       keyframes: [...state.keyframes, keyframe],
     }));
-    const projectId = get().project.id;
-    if (projectId) {
-      videoEditorService.saveKeyframe(projectId, keyframe);
-    }
+    persistEditorTimeline(get());
   },
   updateKeyframe: (id, updates) => {
-    let updatedKeyframe: Keyframe | undefined;
     get().pushHistory();
     set((state) => ({
-      keyframes: state.keyframes.map((keyframe) => {
-        if (keyframe.id !== id) return keyframe;
-        updatedKeyframe = { ...keyframe, ...updates };
-        return updatedKeyframe;
-      }),
+      keyframes: state.keyframes.map((keyframe) =>
+        keyframe.id === id ? { ...keyframe, ...updates } : keyframe
+      ),
     }));
-    const projectId = get().project.id;
-    if (projectId && updatedKeyframe) {
-      videoEditorService.saveKeyframe(projectId, updatedKeyframe);
-    }
+    persistEditorTimeline(get());
   },
   removeKeyframe: (id) => {
     get().pushHistory();
@@ -689,7 +840,7 @@ export const useVideoEditorStore = create<VideoEditorState>((set, get) => ({
       keyframes: state.keyframes.filter((keyframe) => keyframe.id !== id),
       selectedKeyframeIds: state.selectedKeyframeIds.filter((keyframeId) => keyframeId !== id),
     }));
-    videoEditorService.deleteKeyframe(id);
+    persistEditorTimeline(get());
   },
   selectKeyframe: (id, addToSelection = false) =>
     set((state) => ({
@@ -785,37 +936,13 @@ export const useVideoEditorStore = create<VideoEditorState>((set, get) => ({
     if (state.selectedClipIds.length === 0 && state.selectedAudioTrackIds.length === 0) {
       return;
     }
-    state.pushHistory();
-    set((current) => ({
-      clips: current.clips.map((clip) =>
-        current.selectedClipIds.includes(clip.id)
-          ? {
-              ...clip,
-              startTime: Math.max(0, (clip.startTime ?? 0) + deltaMs),
-              endTime: Math.max(0, (clip.endTime ?? (clip.startTime ?? 0) + (clip.duration ?? 0)) + deltaMs),
-            }
-          : clip
-      ),
-      audioTracks: current.audioTracks.map((track) =>
-        current.selectedAudioTrackIds.includes(track.id)
-          ? {
-              ...track,
-              startTime: Math.max(0, (track.startTime ?? 0) + deltaMs),
-              endTime: Math.max(0, (track.endTime ?? (track.startTime ?? 0) + (track.duration ?? 0)) + deltaMs),
-            }
-          : track
-      ),
-    }));
-    const updated = get();
-    const projectId = updated.project.id;
-    if (projectId) {
-      updated.clips
-        .filter((clip) => updated.selectedClipIds.includes(clip.id))
-        .forEach((clip) => videoEditorService.saveTimelineClip(projectId, clip));
-      updated.audioTracks
-        .filter((track) => updated.selectedAudioTrackIds.includes(track.id))
-        .forEach((track) => videoEditorService.saveAudioTrack(projectId, track));
-    }
+    state.moveTimelineItems(
+      {
+        clipIds: state.selectedClipIds,
+        audioTrackIds: state.selectedAudioTrackIds,
+      },
+      deltaMs
+    );
   },
 
   setCompositionSettings: (settings) => {
@@ -823,20 +950,12 @@ export const useVideoEditorStore = create<VideoEditorState>((set, get) => ({
     set((state) => ({
       composition: { ...state.composition, ...settings },
     }));
-    const projectId = get().project.id;
-    if (projectId) {
-      videoEditorService.updateComposition(projectId, settings);
-    }
+    persistEditorTimeline(get());
   },
 
   loadProject: async (projectId) => {
     try {
-      const [clips, audioTracks, composition, keyframes] = await Promise.all([
-        videoEditorService.getTimelineClips(projectId),
-        videoEditorService.getAudioTracks(projectId),
-        videoEditorService.getComposition(projectId),
-        videoEditorService.getKeyframes(projectId),
-      ]);
+      const { clips, audioTracks, composition, keyframes } = await videoEditorService.getEditorTimeline(projectId);
 
       set((state) => ({
         project: { ...state.project, id: projectId },
@@ -856,6 +975,13 @@ export const useVideoEditorStore = create<VideoEditorState>((set, get) => ({
   },
 
   loadMediaLibrary: async (projectId) => {
+    if (isDevAuthBypassEnabled()) {
+      set((state) => ({
+        mediaLibrary: { ...state.mediaLibrary, items: [], isLoading: false },
+      }));
+      return;
+    }
+
     set((state) => ({
       mediaLibrary: { ...state.mediaLibrary, isLoading: true },
     }));
@@ -921,6 +1047,7 @@ export const useVideoEditorStore = create<VideoEditorState>((set, get) => ({
     set((current) => ({
       clips: previous.clips,
       audioTracks: previous.audioTracks,
+      keyframes: previous.keyframes,
       playback: previous.playback,
       timeline: previous.timeline,
       composition: previous.composition,
@@ -933,6 +1060,7 @@ export const useVideoEditorStore = create<VideoEditorState>((set, get) => ({
         ),
       },
     }));
+    persistEditorTimeline(get());
   },
   redo: () => {
     const state = get();
@@ -943,6 +1071,7 @@ export const useVideoEditorStore = create<VideoEditorState>((set, get) => ({
     set((current) => ({
       clips: next.clips,
       audioTracks: next.audioTracks,
+      keyframes: next.keyframes,
       playback: next.playback,
       timeline: next.timeline,
       composition: next.composition,
@@ -954,6 +1083,7 @@ export const useVideoEditorStore = create<VideoEditorState>((set, get) => ({
         future: current.history.future.slice(1),
       },
     }));
+    persistEditorTimeline(get());
   },
   copySelectedClips: () => {
     const state = get();
@@ -981,10 +1111,7 @@ export const useVideoEditorStore = create<VideoEditorState>((set, get) => ({
       clips: [...current.clips, ...duplicates],
       selectedClipIds: duplicates.map((clip) => clip.id),
     }));
-    const projectId = state.project.id;
-    if (projectId) {
-      duplicates.forEach((clip) => videoEditorService.saveTimelineClip(projectId, clip));
-    }
+    persistEditorTimeline(get());
   },
 
   reset: () => set(() => ({ ...initialState })),

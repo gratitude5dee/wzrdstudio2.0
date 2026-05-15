@@ -3,6 +3,7 @@ import { useVideoEditorStore } from '@/store/videoEditorStore';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from "sonner";
 import { useParams } from "react-router-dom";
+import { isDevAuthBypassEnabled } from '@/lib/devAuthBypass';
 
 const bypassAuthForTests = import.meta.env.DEV && import.meta.env.VITE_BYPASS_AUTH_FOR_TESTS === 'true';
 
@@ -41,6 +42,18 @@ export function VideoEditorProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const loadProjectData = async () => {
       const urlProjectId = params.projectId;
+
+      if (isDevAuthBypassEnabled()) {
+        if (urlProjectId && urlProjectId !== project.id) {
+          setProjectId(urlProjectId);
+          setProjectName('Local Editor Smoke');
+        }
+        if (!urlProjectId && !project.id) {
+          clearMediaState();
+        }
+        setIsLoading(false);
+        return;
+      }
 
       if (urlProjectId && urlProjectId !== project.id) {
         setProjectId(urlProjectId);
@@ -99,7 +112,7 @@ export function VideoEditorProvider({ children }: { children: ReactNode }) {
       // Reset the store when the provider is unmounted
       reset();
     };
-  }, []);
+  }, [reset]);
 
   // Create context value with proper shape
   const contextValue = {

@@ -5,12 +5,9 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { musicPolishAssets } from '@/lib/musicPolishAssets';
 import type { MusicPolishAsset } from '@/lib/musicPolishAssets';
+import type { ClipEffect } from '@/store/videoEditorStore';
 
-interface Effect {
-  id: string;
-  name: string;
-  type: 'filter' | 'adjustment' | 'overlay';
-  params: Record<string, number>;
+export interface Effect extends ClipEffect {
   preview: MusicPolishAsset;
   icon?: string;
 }

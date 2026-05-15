@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAuth } from '@/providers/AuthProvider';
+import { isDevAuthBypassEnabled } from '@/lib/devAuthBypass';
 
 export type BillingMode = 'disabled' | 'test_only' | 'live';
 
@@ -83,6 +84,12 @@ export function useBilling() {
   const [catalog, setCatalog] = useState<BillingCatalogResponse | null>(null);
 
   const fetchCatalog = useCallback(async () => {
+    if (isDevAuthBypassEnabled()) {
+      setCatalog(null);
+      setIsLoading(false);
+      return null;
+    }
+
     if (!user) {
       setCatalog(null);
       setIsLoading(false);

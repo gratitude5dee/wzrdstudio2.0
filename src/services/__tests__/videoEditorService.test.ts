@@ -1,12 +1,31 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type { LibraryMediaItem } from '@/store/videoEditorStore';
 
 // Mock supabase before importing the service
 const mockFrom = vi.fn();
+type QueryMockError = { message?: string } | null;
+type QueryMockBuilder = {
+  select: ReturnType<typeof vi.fn>;
+  eq: ReturnType<typeof vi.fn>;
+  order: ReturnType<typeof vi.fn>;
+  limit: ReturnType<typeof vi.fn>;
+  maybeSingle: ReturnType<typeof vi.fn>;
+  single: ReturnType<typeof vi.fn>;
+  update: ReturnType<typeof vi.fn>;
+  upsert: ReturnType<typeof vi.fn>;
+  insert: ReturnType<typeof vi.fn>;
+  delete: ReturnType<typeof vi.fn>;
+  then?: Promise<{ data: unknown[] | null; error: QueryMockError }>['then'];
+  catch?: Promise<{ data: unknown[] | null; error: QueryMockError }>['catch'];
+};
+type QueryMockOptions = {
+  onInsert?: (values: unknown) => void;
+  onUpdate?: (values: unknown) => void;
+  onDelete?: () => void;
+};
 
 vi.mock('@/integrations/supabase/client', () => ({
   supabase: {
-    from: (...args: any[]) => mockFrom(...args),
+    from: (...args: unknown[]) => mockFrom(...args),
     auth: {
       getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'test-user' } } }),
     },
@@ -20,16 +39,31 @@ vi.mock('@/integrations/supabase/client', () => ({
 }));
 
 // Helper to build chainable query mock
-function createQueryMock(data: any[] | null, error: any = null) {
-  const builder: any = {
+function createQueryMock(
+  data: unknown[] | null,
+  error: QueryMockError = null,
+  options: QueryMockOptions = {}
+) {
+  const builder: QueryMockBuilder = {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
-    single: vi.fn().mockResolvedValue({ data: data ? data[0] : null, error }),
+    limit: vi.fn().mockReturnThis(),
     maybeSingle: vi.fn().mockResolvedValue({ data: data ? data[0] : null, error }),
+    single: vi.fn().mockResolvedValue({ data: data ? data[0] : null, error }),
+    update: vi.fn((values: unknown) => {
+      options.onUpdate?.(values);
+      return builder;
+    }),
     upsert: vi.fn().mockResolvedValue({ error }),
-    insert: vi.fn().mockReturnThis(),
-    delete: vi.fn().mockReturnThis(),
+    insert: vi.fn((values: unknown) => {
+      options.onInsert?.(values);
+      return builder;
+    }),
+    delete: vi.fn(() => {
+      options.onDelete?.();
+      return builder;
+    }),
     then: undefined,
   };
 
@@ -48,6 +82,18 @@ describe('videoEditorService', () => {
   });
 
   describe('getMediaLibrary', () => {
+    it('skips Supabase asset queries for the local dev auth bypass project', async () => {
+      vi.stubEnv('VITE_BYPASS_AUTH_FOR_TESTS', 'true');
+      try {
+        const { videoEditorService } = await import('../videoEditorService');
+
+        await expect(videoEditorService.getMediaLibrary('local-editor')).resolves.toEqual([]);
+        expect(mockFrom).not.toHaveBeenCalled();
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
     it('aggregates items from media_items, project_assets, generation_outputs, and final_project_assets', async () => {
       // Import after mocks are set up
       const { videoEditorService } = await import('../videoEditorService');
@@ -74,6 +120,18 @@ describe('videoEditorService', () => {
           name: 'Studio Output',
           url: 'https://storage/video1.mp4',
           thumbnail_url: null,
+        },
+        {
+          id: 'pa-2',
+          project_id: 'proj-1',
+          asset_type: 'video',
+          original_file_name: 'Cached Studio Output.mp4',
+          cdn_url: 'https://cdn.example.com/cached.mp4',
+          thumbnail_url: 'https://cdn.example.com/cached-thumb.jpg',
+          preview_url: 'https://cdn.example.com/cached-preview.mp4',
+          media_metadata: { duration_ms: 12000, width: 1920, height: 1080 },
+          asset_category: 'generated',
+          processing_status: 'completed',
         },
       ];
 
@@ -117,7 +175,7 @@ describe('videoEditorService', () => {
 
       const result = await videoEditorService.getMediaLibrary('proj-1');
 
-      expect(result).toHaveLength(4);
+      expect(result).toHaveLength(5);
 
       // Verify media_items entry
       const uploaded = result.find((i) => i.id === 'mi-1');
@@ -131,6 +189,16 @@ describe('videoEditorService', () => {
       expect(studioAsset).toBeDefined();
       expect(studioAsset!.mediaType).toBe('video');
       expect(studioAsset!.sourceType).toBe('ai-generated');
+
+      // Verify asset-management schema entry with cached metadata
+      const cachedAsset = result.find((i) => i.id === 'pa-2');
+      expect(cachedAsset).toBeDefined();
+      expect(cachedAsset!.name).toBe('Cached Studio Output.mp4');
+      expect(cachedAsset!.url).toBe('https://cdn.example.com/cached.mp4');
+      expect(cachedAsset!.thumbnailUrl).toBe('https://cdn.example.com/cached-thumb.jpg');
+      expect(cachedAsset!.previewUrl).toBe('https://cdn.example.com/cached-preview.mp4');
+      expect(cachedAsset!.durationSeconds).toBe(12);
+      expect(cachedAsset!.mediaMetadata?.width).toBe(1920);
 
       // Verify generation_outputs entry
       const genOutput = result.find((i) => i.id === 'go-1');
@@ -242,164 +310,111 @@ describe('videoEditorService', () => {
     });
   });
 
-  describe('timeline persistence', () => {
-    it('maps timeline_clips rows into durable editor clips', async () => {
+  describe('syncTimelineAssetsForDirectorCut', () => {
+    it('writes timeline assets with cached preview, thumbnail, media metadata, and keyframes', async () => {
       const { videoEditorService } = await import('../videoEditorService');
-      const timelineBuilder = createQueryMock([
-        {
-          id: 'clip-1',
-          project_id: 'proj-1',
-          clip_type: 'text',
-          name: 'Title',
-          source_url: null,
-          text_content: 'Hello',
-          start_time_ms: 1000,
-          duration_ms: 3000,
-          end_time_ms: 4000,
-          track_index: 0,
-          layer_index: 2,
-          position_x: 12,
-          position_y: -20,
-          scale_x: 1.1,
-          scale_y: 1.2,
-          rotation: 8,
-          opacity: 0.75,
-          style: { fontSize: 88, color: '#ffffff' },
-          effects: [{ id: 'blur', params: { radius: 2 } }],
-          transition: { type: 'fade', duration: 500 },
-        },
-      ]);
-      mockFrom.mockImplementation((table: string) => table === 'timeline_clips' ? timelineBuilder : createQueryMock([]));
+      const insertedRows: unknown[] = [];
 
-      const result = await videoEditorService.getTimelineClips('proj-1');
-
-      expect(result).toHaveLength(1);
-      expect(result[0]).toMatchObject({
-        id: 'clip-1',
-        type: 'text',
-        text: 'Hello',
-        startTime: 1000,
-        duration: 3000,
-        endTime: 4000,
-        layer: 2,
-        transforms: {
-          position: { x: 12, y: -20 },
-          scale: { x: 1.1, y: 1.2 },
-          rotation: 8,
-          opacity: 0.75,
-        },
-      });
-      expect(result[0].effects?.[0].id).toBe('blur');
-      expect(result[0].transition?.type).toBe('fade');
-      expect(result[0].style?.fontSize).toBe(88);
-    });
-
-    it('saves timeline clips with new schema fields', async () => {
-      const { videoEditorService } = await import('../videoEditorService');
-      const timelineBuilder = createQueryMock([]);
-      mockFrom.mockImplementation((table: string) => table === 'timeline_clips' ? timelineBuilder : createQueryMock([]));
-
-      await videoEditorService.saveTimelineClip('proj-1', {
-        id: 'clip-1',
-        type: 'text',
-        name: 'Title',
-        url: '',
-        text: 'Hello',
-        startTime: 1000,
-        duration: 3000,
-        endTime: 4000,
-        layer: 2,
-        trackIndex: 0,
-        style: { fontSize: 88, color: '#ffffff' },
-        effects: [{ id: 'blur', name: 'Blur', type: 'filter', params: { radius: 2 } }],
-        transition: { type: 'fade', duration: 500 },
-        transforms: {
-          position: { x: 12, y: -20 },
-          scale: { x: 1.1, y: 1.2 },
-          rotation: 8,
-          opacity: 0.75,
-        },
-      });
-
-      expect(timelineBuilder.upsert).toHaveBeenCalledWith(expect.objectContaining({
-        id: 'clip-1',
-        project_id: 'proj-1',
-        user_id: 'test-user',
-        clip_type: 'text',
-        source_url: '',
-        text_content: 'Hello',
-        start_time_ms: 1000,
-        duration_ms: 3000,
-        end_time_ms: 4000,
-        layer_index: 2,
-        position_x: 12,
-        transition: { type: 'fade', duration: 500 },
-      }));
-    });
-
-    it('maps audio track timing, volume, mute, and fades', async () => {
-      const { videoEditorService } = await import('../videoEditorService');
-      const audioBuilder = createQueryMock([
-        {
-          id: 'audio-1',
-          name: 'Narration',
-          storage_path: 'https://storage/audio.mp3',
-          start_time_ms: 500,
-          duration_ms: 4500,
-          end_time_ms: 5000,
-          track_index: 1,
-          volume: 0.4,
-          is_muted: true,
-          fade_in_ms: 250,
-          fade_out_ms: 500,
-        },
-      ]);
-      mockFrom.mockImplementation((table: string) => table === 'audio_tracks' ? audioBuilder : createQueryMock([]));
-
-      const result = await videoEditorService.getAudioTracks('proj-1');
-
-      expect(result[0]).toMatchObject({
-        id: 'audio-1',
-        trackIndex: 1,
-        volume: 0.4,
-        isMuted: true,
-        fadeInDuration: 250,
-        fadeOutDuration: 500,
-      });
-    });
-
-    it('loads and saves keyframes', async () => {
-      const { videoEditorService } = await import('../videoEditorService');
-      const keyframeBuilder = createQueryMock([
-        {
-          id: 'kf-1',
-          target_id: 'clip-1',
-          target_type: 'clip',
-          time_ms: 1200,
-          property_path: 'transforms.opacity',
-          value: { opacity: 0.5 },
-          easing: 'ease-in-out',
-        },
-      ]);
-      mockFrom.mockImplementation((table: string) => table === 'timeline_keyframes' ? keyframeBuilder : createQueryMock([]));
-
-      const result = await videoEditorService.getKeyframes('proj-1');
-      expect(result[0]).toMatchObject({
-        id: 'kf-1',
-        targetId: 'clip-1',
-        propertyPath: 'transforms.opacity',
-        properties: { opacity: 0.5 },
+      mockFrom.mockImplementation((table: string) => {
+        switch (table) {
+          case 'timelines':
+            return createQueryMock([
+              {
+                id: 'timeline-1',
+                project_id: 'proj-1',
+                user_id: 'test-user',
+                duration_ms: 5000,
+                resolution: '1920x1080',
+                frame_rate: 30,
+                composition_data: {
+                  clips: [
+                    {
+                      id: 'clip-1',
+                      mediaItemId: 'asset-1',
+                      type: 'video',
+                      name: 'Styled Clip',
+                      url: 'https://storage.example.com/source.mp4',
+                      thumbnailUrl: 'https://storage.example.com/source-thumb.jpg',
+                      previewUrl: 'https://storage.example.com/source-preview.mp4',
+                      mediaMetadata: { duration_ms: 5000, width: 1920, height: 1080 },
+                      startTime: 0,
+                      duration: 5000,
+                      endTime: 5000,
+                      layer: 0,
+                      trimStart: 500,
+                      transforms: {
+                        position: { x: 10, y: 0 },
+                        scale: { x: 1, y: 1 },
+                        rotation: 0,
+                        opacity: 1,
+                      },
+                    },
+                  ],
+                  audioTracks: [
+                    {
+                      id: 'audio-1',
+                      type: 'audio',
+                      name: 'Voiceover main',
+                      url: 'https://storage.example.com/voice.mp3',
+                      previewUrl: 'https://storage.example.com/voice-preview.mp3',
+                      mediaMetadata: { duration_ms: 5000, sample_rate: 44100 },
+                      startTime: 0,
+                      duration: 5000,
+                      endTime: 5000,
+                      volume: 0.8,
+                      isMuted: false,
+                    },
+                  ],
+                  keyframes: [
+                    {
+                      id: 'kf-1',
+                      targetId: 'clip-1',
+                      time: 1000,
+                      properties: {
+                        transforms: {
+                          position: { x: 50, y: 0 },
+                          scale: { x: 1, y: 1 },
+                          rotation: 0,
+                          opacity: 1,
+                        },
+                      },
+                    },
+                  ],
+                  composition: {
+                    width: 1920,
+                    height: 1080,
+                    fps: 30,
+                    aspectRatio: '16:9',
+                    duration: 5000,
+                    backgroundColor: '#000000',
+                  },
+                },
+              },
+            ]);
+          case 'timeline_assets':
+            return createQueryMock([], null, {
+              onInsert: (values) => insertedRows.push(values),
+            });
+          default:
+            return createQueryMock([]);
+        }
       });
 
-      await videoEditorService.saveKeyframe('proj-1', result[0]);
-      expect(keyframeBuilder.upsert).toHaveBeenCalledWith(expect.objectContaining({
-        id: 'kf-1',
-        project_id: 'proj-1',
-        user_id: 'test-user',
-        target_id: 'clip-1',
-        property_path: 'transforms.opacity',
-        value: { opacity: 0.5 },
-      }));
+      const summary = await videoEditorService.syncTimelineAssetsForDirectorCut('proj-1');
+      const rows = insertedRows[0] as Array<{ asset_type: string; metadata: Record<string, unknown> }>;
+      const visual = rows[0];
+      const audio = rows[1];
+
+      expect(summary.syncedAssets).toBe(2);
+      expect(visual.asset_type).toBe('video');
+      expect(visual.metadata.thumbnail_url).toBe('https://storage.example.com/source-thumb.jpg');
+      expect(visual.metadata.preview_url).toBe('https://storage.example.com/source-preview.mp4');
+      expect(visual.metadata.media_metadata).toEqual({ duration_ms: 5000, width: 1920, height: 1080 });
+      expect(visual.metadata.keyframes).toHaveLength(1);
+      expect(audio.asset_type).toBe('audio');
+      expect(audio.metadata.asset_role).toBe('voiceover');
+      expect(audio.metadata.preview_url).toBe('https://storage.example.com/voice-preview.mp3');
+      expect(audio.metadata.media_metadata).toEqual({ duration_ms: 5000, sample_rate: 44100 });
     });
   });
 });

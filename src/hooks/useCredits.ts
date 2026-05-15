@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAuth } from '@/providers/AuthProvider';
 import { routeToBillingTopUp } from '@/lib/billing-errors';
+import { isDevAuthBypassEnabled } from '@/lib/devAuthBypass';
 import type { Json } from '@/integrations/supabase/types';
 
 export interface CreditTransaction {
@@ -118,6 +119,14 @@ export const useCredits = () => {
   const { user } = useAuth();
 
   const fetchCredits = async () => {
+    if (isDevAuthBypassEnabled()) {
+      setAvailableCredits(0);
+      setWallet(null);
+      setPlan(null);
+      setIsLoading(false);
+      return;
+    }
+
     if (!user) {
       setAvailableCredits(null);
       setWallet(null);
@@ -157,6 +166,11 @@ export const useCredits = () => {
   };
 
   const fetchTransactions = async () => {
+    if (isDevAuthBypassEnabled()) {
+      setTransactions([]);
+      return;
+    }
+
     if (!user) {
       setTransactions([]);
       return;

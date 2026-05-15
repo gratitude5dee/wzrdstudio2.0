@@ -12,13 +12,33 @@ import { EffectsTab } from './tabs/EffectsTab';
 import { ElementsTab } from './tabs/ElementsTab';
 import { toast } from 'sonner';
 import { musicPolishAssets, musicStyleRange } from '@/lib/musicPolishAssets';
+import type { ClipEffect } from '@/store/videoEditorStore';
+
+interface EditorDragAsset {
+  src?: string;
+  type: string;
+  [key: string]: unknown;
+}
+
+interface TimelineAddItem {
+  type: string;
+  name?: string;
+  [key: string]: unknown;
+}
+
+interface EditorTransition {
+  name?: string;
+  type: string;
+  duration: number;
+  direction?: string;
+}
 
 interface EditorMediaPanelProps {
   activeTab: EditorTab;
-  onAssetDrag?: (asset: unknown) => void;
-  onAddToTimeline?: (item: unknown) => void;
-  onApplyTransition?: (transition: unknown) => void;
-  onApplyEffect?: (effect: unknown) => void;
+  onAssetDrag?: (asset: EditorDragAsset) => void;
+  onAddToTimeline?: (item: TimelineAddItem) => void;
+  onApplyTransition?: (transition: EditorTransition) => void;
+  onApplyEffect?: (effect: ClipEffect) => void;
   projectId?: string;
 }
 
@@ -47,7 +67,7 @@ export const EditorMediaPanel: React.FC<EditorMediaPanelProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
 
   // Handler for adding items to timeline
-  const handleAddToTimeline = useCallback((item: unknown) => {
+  const handleAddToTimeline = useCallback((item: TimelineAddItem) => {
     if (onAddToTimeline) {
       onAddToTimeline(item);
     } else {
@@ -56,7 +76,7 @@ export const EditorMediaPanel: React.FC<EditorMediaPanelProps> = ({
   }, [onAddToTimeline]);
 
   // Handler for applying transitions
-  const handleApplyTransition = useCallback((transition: unknown) => {
+  const handleApplyTransition = useCallback((transition: EditorTransition) => {
     if (onApplyTransition) {
       onApplyTransition(transition);
     } else {
@@ -65,7 +85,7 @@ export const EditorMediaPanel: React.FC<EditorMediaPanelProps> = ({
   }, [onApplyTransition]);
 
   // Handler for applying effects
-  const handleApplyEffect = useCallback((effect: unknown) => {
+  const handleApplyEffect = useCallback((effect: ClipEffect) => {
     if (onApplyEffect) {
       onApplyEffect(effect);
     } else {

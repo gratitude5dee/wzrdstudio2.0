@@ -7,6 +7,7 @@ import {
 import type { ExportAsset, ExportSettings } from '../_shared/export-helpers.ts';
 import {
   buildDirectorCutTimeline,
+  buildDirectorCutSummary,
   missingShotDetailsToFailures,
 } from '../_shared/director-cut-timeline.ts';
 import type {
@@ -17,6 +18,11 @@ import type {
   ShotFailureInfo,
 } from '../_shared/director-cut-timeline.ts';
 import { safeLog } from '../_shared/safe-logger.ts';
+import { buildEditorTimelineAssetRows, isRecord } from './timeline-assets.ts';
+import {
+  buildDirectorCutRemotionManifest,
+  resolveDirectorCutRenderBackend,
+} from './remotion-manifest.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
@@ -72,6 +78,59 @@ const mapTimelineAssetsToExportAssets = (assets: TimelineAssetRow[]): ExportAsse
       };
     });
 
+
+
+const getEditorTimelineRows = async (
+  supabaseAdmin: SupabaseAdminClient,
+  userId: string,
+  projectId: string
+) => {
+  const { data: timeline, error } = await supabaseAdmin
+    .from('timelines')
+    .select('composition_data, duration_ms, resolution, frame_rate, updated_at')
+    .eq('project_id', projectId)
+    .eq('user_id', userId)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !timeline) {
+    if (error) {
+      safeLog('warn', 'director-cut.editor_timeline.lookup_failed', { error: error.message, projectId });
+    }
+    return null;
+  }
+
+  const document = isRecord(timeline.composition_data) ? timeline.composition_data : {};
+  const editorTimeline = buildEditorTimelineAssetRows(document, projectId, userId);
+  return editorTimeline ? { ...editorTimeline, document } : null;
+};
+
+const buildEditorReadinessSummary = (summary: {
+  totalShots: number;
+  syncedAssets: number;
+  readyVideos: number;
+  fallbackImages: number;
+  missingShots: number;
+}): DirectorCutSummary => {
+  const missingShotDetails = Array.from({ length: summary.missingShots }, (_, index) => ({
+    shotId: `editor-missing-${index}`,
+    sceneId: null,
+    sceneNumber: null,
+    shotNumber: null,
+    orderIndex: summary.readyVideos + summary.fallbackImages + index,
+    reason: 'Editor timeline clip is missing a public image or video URL',
+  }));
+
+  return buildDirectorCutSummary({
+    totalShots: summary.totalShots,
+    syncedAssets: summary.syncedAssets,
+    readyVideos: summary.readyVideos,
+    fallbackImages: summary.fallbackImages,
+    missingShotDetails,
+    audioAssets: Math.max(0, summary.syncedAssets - summary.readyVideos - summary.fallbackImages),
+  });
+};
 
 const assertProjectAccess = async (supabaseAdmin: SupabaseAdminClient, userId: string, projectId: string) => {
   const { data: project, error: projectError } = await supabaseAdmin
@@ -166,6 +225,16 @@ const getDirectorCutReadiness = async (
   audioAssets = 0
 ) => {
   await assertProjectAccess(supabaseAdmin, userId, projectId);
+  const editorTimeline = await getEditorTimelineRows(supabaseAdmin, userId, projectId);
+  if (editorTimeline) {
+    const editorSummary = buildEditorReadinessSummary(editorTimeline.summary);
+    return {
+      ...editorSummary,
+      syncedAssets: syncedAssets || editorSummary.syncedAssets,
+      audioAssets: audioAssets || editorSummary.audioAssets,
+    };
+  }
+
   const { scenes, shots } = await loadOrderedScenesAndShots(supabaseAdmin, projectId);
   const projectVisualAssets = await loadGeneratedProjectVisualAssets(supabaseAdmin, userId, projectId);
   const { summary } = buildDirectorCutTimeline({
@@ -178,8 +247,8 @@ const getDirectorCutReadiness = async (
 
   return {
     ...summary,
-    syncedAssets,
-    audioAssets,
+    syncedAssets: syncedAssets || summary.syncedAssets,
+    audioAssets: audioAssets || summary.audioAssets,
   };
 };
 
@@ -199,6 +268,23 @@ const preflightFailureResponse = (summary: DirectorCutSummary) =>
 
 const syncTimelineAssets = async (supabaseAdmin: SupabaseAdminClient, userId: string, projectId: string) => {
   await assertProjectAccess(supabaseAdmin, userId, projectId);
+
+  const editorTimeline = await getEditorTimelineRows(supabaseAdmin, userId, projectId);
+  if (editorTimeline) {
+    await supabaseAdmin.from('timeline_assets').delete().eq('project_id', projectId);
+
+    if (editorTimeline.rows.length > 0) {
+      const { error: insertError } = await supabaseAdmin
+        .from('timeline_assets')
+        .insert(editorTimeline.rows);
+
+      if (insertError) {
+        throw new Error(`Failed to write editor timeline assets: ${insertError.message}`);
+      }
+    }
+
+    return buildEditorReadinessSummary(editorTimeline.summary);
+  }
 
   const { scenes, shots } = await loadOrderedScenesAndShots(supabaseAdmin, projectId);
   const projectVisualAssets = await loadGeneratedProjectVisualAssets(supabaseAdmin, userId, projectId);
@@ -512,6 +598,68 @@ serve(async (req) => {
           blockingReason:
             "Synced timeline assets are stale. Sync timeline assets before retrying Director's Cut.",
         });
+      }
+
+      const renderBackend = resolveDirectorCutRenderBackend(settings ?? {});
+      if (renderBackend === 'remotion_worker') {
+        const editorTimeline = await getEditorTimelineRows(supabaseAdmin, user.id, projectId);
+        if (!editorTimeline?.document) {
+          throw new Error('Remotion worker export requires a saved editor timeline.');
+        }
+
+        const remotionManifest = buildDirectorCutRemotionManifest(editorTimeline.document, settings ?? {});
+        const remotionPayload = {
+          stage: 'queued_for_remotion_worker',
+          renderer: 'remotion',
+          outputBucket: EXPORT_BUCKET,
+          exportMode: readinessSummary.exportMode,
+          isCompleteCut: readinessSummary.isCompleteCut,
+          skippedShotCount: readinessSummary.skippedShotCount,
+          missingShots: readinessSummary.missingShots,
+          missingShotDetails: readinessSummary.missingShotDetails,
+          partialSuccess: readinessSummary.skippedShotCount > 0,
+          failedShotCount: readinessSummary.missingShotDetails.length,
+          shotFailures: missingShotDetailsToFailures(readinessSummary.missingShotDetails),
+          remotionManifest,
+        };
+
+        const { data: job, error: jobError } = await supabaseAdmin
+          .from('export_jobs')
+          .insert({
+            project_id: projectId,
+            user_id: user.id,
+            status: 'processing',
+            progress: 5,
+            settings: settings ?? {},
+            started_at: new Date().toISOString(),
+            provider: 'remotion_worker',
+            provider_status: 'queued',
+            fallback_used: false,
+            provider_payload: remotionPayload,
+          })
+          .select()
+          .single();
+
+        if (jobError || !job) {
+          throw new Error(`Failed to create export job: ${jobError?.message}`);
+        }
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            status: 'processing',
+            jobId: job.id,
+            progress: 5,
+            provider: 'remotion_worker',
+            providerStatus: 'queued',
+            fallbackUsed: false,
+            exportMode: readinessSummary.exportMode,
+            isCompleteCut: readinessSummary.isCompleteCut,
+            skippedShotCount: readinessSummary.skippedShotCount,
+            providerPayload: remotionPayload,
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
 
       const skippedShotFailures = missingShotDetailsToFailures(readinessSummary.missingShotDetails);

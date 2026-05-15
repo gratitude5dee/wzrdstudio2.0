@@ -58,12 +58,17 @@ export function MediaItem({ item, viewMode }: MediaItemProps) {
         type: 'audio',
         name: item.name,
         url: item.url,
+        thumbnailUrl: item.thumbnailUrl,
+        previewUrl: item.previewUrl,
+        mediaMetadata: item.mediaMetadata,
         startTime,
         duration: durationMs,
         endTime: startTime + durationMs,
         volume: 1,
         isMuted: false,
-        trackIndex: 0,
+        trackIndex: audioTracks.length
+          ? Math.max(...audioTracks.map((track) => track.trackIndex ?? 0)) + 1
+          : 0,
         fadeInDuration: 0,
         fadeOutDuration: 0,
       } as const;
@@ -83,6 +88,9 @@ export function MediaItem({ item, viewMode }: MediaItemProps) {
       type: item.mediaType === 'image' ? 'image' : 'video',
       name: item.name,
       url: item.url,
+      thumbnailUrl: item.thumbnailUrl,
+      previewUrl: item.previewUrl,
+      mediaMetadata: item.mediaMetadata,
       startTime,
       duration: durationMs,
       endTime: startTime + durationMs,

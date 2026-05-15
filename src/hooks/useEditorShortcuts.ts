@@ -15,9 +15,10 @@ export function useEditorShortcuts(handlers: EditorShortcutHandlers = {}) {
   const seek = useVideoEditorStore((state) => state.seek);
   const playback = useVideoEditorStore((state) => state.playback);
   const selectedClipIds = useVideoEditorStore((state) => state.selectedClipIds);
-  const removeClip = useVideoEditorStore((state) => state.removeClip);
-  const removeAudioTrack = useVideoEditorStore((state) => state.removeAudioTrack);
   const selectedAudioTrackIds = useVideoEditorStore((state) => state.selectedAudioTrackIds);
+  const splitClipAtTime = useVideoEditorStore((state) => state.splitClipAtTime);
+  const deleteSelectedItems = useVideoEditorStore((state) => state.deleteSelectedItems);
+  const duplicateSelectedItems = useVideoEditorStore((state) => state.duplicateSelectedItems);
   const setTimelineZoom = useVideoEditorStore((state) => state.setTimelineZoom);
   const timeline = useVideoEditorStore((state) => state.timeline);
   const undo = useVideoEditorStore((state) => state.undo);
@@ -59,8 +60,13 @@ export function useEditorShortcuts(handlers: EditorShortcutHandlers = {}) {
         case 'Backspace':
           if (selectedClipIds.length === 0 && selectedAudioTrackIds.length === 0) return;
           event.preventDefault();
-          selectedClipIds.forEach((id) => removeClip(id));
-          selectedAudioTrackIds.forEach((id) => removeAudioTrack(id));
+          deleteSelectedItems();
+          return;
+        case 's':
+          if (meta) break;
+          if (selectedClipIds.length === 0) return;
+          event.preventDefault();
+          splitClipAtTime(selectedClipIds[0], playback.currentTime);
           return;
         case 'ArrowLeft':
           event.preventDefault();
@@ -112,6 +118,12 @@ export function useEditorShortcuts(handlers: EditorShortcutHandlers = {}) {
         return;
       }
 
+      if (meta && key.toLowerCase() === 'd') {
+        event.preventDefault();
+        duplicateSelectedItems();
+        return;
+      }
+
       if (meta && key.toLowerCase() === 'e') {
         event.preventDefault();
         handlers.onExport?.();
@@ -128,20 +140,21 @@ export function useEditorShortcuts(handlers: EditorShortcutHandlers = {}) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
     copySelectedClips,
+    deleteSelectedItems,
+    duplicateSelectedItems,
     nudgeSelectedClips,
     pasteClipboard,
     pause,
     play,
     playback.currentTime,
     redo,
-    removeAudioTrack,
-    removeClip,
     selectedAudioTrackIds,
     selectedClipIds,
     seek,
     setInPoint,
     setOutPoint,
     setTimelineZoom,
+    splitClipAtTime,
     handlers,
     timeline.gridSize,
     timeline.zoom,

@@ -12,7 +12,13 @@
     "preview": "vite preview",
     "test:e2e": "VITE_USE_MOCK_ASSETS=true VITE_BYPASS_AUTH_FOR_TESTS=true playwright test tests/e2e tests/performance.spec.ts",
     "remotion:preview": "remotion preview",
-    "remotion:render": "remotion render"
+    "remotion:render": "remotion render",
+    "remotion:render:editor": "node scripts/render-editor-composition.mjs",
+    "director-cut:remotion-worker": "node scripts/director-cut-remotion-worker.mjs",
+    "director-cut:check-env": "node scripts/check-director-cut-env.mjs",
+    "director-cut:inspect-live": "node scripts/inspect-director-cut-live.mjs",
+    "director-cut:seed-live-fixture": "node scripts/seed-director-cut-live-fixture.mjs",
+    "director-cut:run-live-export": "node scripts/run-director-cut-live-export.mjs"
   },
   "dependencies": {
     "@chenglou/pretext": "^0.0.4",

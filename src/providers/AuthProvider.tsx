@@ -6,6 +6,7 @@ import type { User, Session } from '@supabase/supabase-js';
 import { useActiveAccount } from 'thirdweb/react';
 import type { Account } from 'thirdweb/wallets';
 import { appRoutes, resolvePostLoginPath } from '@/lib/routes';
+import { isDevAuthBypassEnabled } from '@/lib/devAuthBypass';
 
 interface AuthContextType {
   user: User | null;
@@ -31,8 +32,7 @@ const AuthContext = createContext<AuthContextType>({
 
 // SECURITY: Auth bypass is ONLY available in development builds.
 // import.meta.env.DEV is false in production bundles, so this code is dead-code-eliminated.
-const bypassAuthForTests = import.meta.env.DEV &&
-  import.meta.env.VITE_BYPASS_AUTH_FOR_TESTS === 'true';
+const bypassAuthForTests = isDevAuthBypassEnabled();
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -91,8 +91,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       let signature: string;
       try {
         signature = await thirdwebAccount.signMessage({ message });
-      } catch (signError: any) {
-        if (signError.message?.includes('rejected') || signError.message?.includes('denied')) {
+      } catch (signError: unknown) {
+        const message = signError instanceof Error ? signError.message : '';
+        if (message.includes('rejected') || message.includes('denied')) {
           setWalletAuthError('Signature request was rejected');
           return false;
         }
@@ -133,9 +134,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
 
       return true;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Wallet authentication error:', err);
-      setWalletAuthError(err.message || 'Authentication failed');
+      setWalletAuthError(err instanceof Error ? err.message : 'Authentication failed');
       return false;
     } finally {
       setIsWalletAuthenticating(false);

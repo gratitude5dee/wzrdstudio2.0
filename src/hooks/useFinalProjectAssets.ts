@@ -7,9 +7,27 @@ import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useVideoEditorStore } from '@/store/videoEditorStore';
-import type { Database, Json } from '@/integrations/supabase/types';
+import { isDevAuthBypassEnabled } from '@/lib/devAuthBypass';
 
-type FinalProjectAssetRow = Database['public']['Tables']['final_project_assets']['Row'];
+type QueryError = { message?: string };
+type QueryResult<T = unknown> = { data: T | null; error: QueryError | null };
+interface SupabaseQueryBuilder<T = unknown> extends PromiseLike<QueryResult<T>> {
+  select: (columns?: string) => SupabaseQueryBuilder<T>;
+  eq: (column: string, value: unknown) => SupabaseQueryBuilder<T>;
+  order: (column: string, options?: { ascending?: boolean }) => SupabaseQueryBuilder<T>;
+  insert: (values: unknown) => SupabaseQueryBuilder<T>;
+  update: (values: unknown) => SupabaseQueryBuilder<T>;
+  delete: () => SupabaseQueryBuilder<T>;
+  single: () => Promise<QueryResult<T>>;
+}
+type UntypedSupabaseClient = {
+  from: <T = unknown>(table: string) => SupabaseQueryBuilder<T>;
+};
+
+const db = supabase as unknown as UntypedSupabaseClient;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === 'object' && !Array.isArray(value);
 
 export interface FinalProjectAsset {
   id: string;
@@ -32,59 +50,6 @@ export interface SaveTimelineToFinalOptions {
   audioTypes?: ('voiceover' | 'sfx' | 'music')[];
 }
 
-function asRecord(value: Json | Record<string, unknown> | null | undefined): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-}
-
-function metadataString(metadata: Record<string, unknown>, key: string, fallback = ''): string {
-  const value = metadata[key];
-  return typeof value === 'string' ? value : fallback;
-}
-
-function metadataNumber(metadata: Record<string, unknown>, key: string, fallback = 0): number {
-  const value = metadata[key];
-  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-}
-
-function metadataOptionalNumber(metadata: Record<string, unknown>, key: string): number | undefined {
-  const value = metadata[key];
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
-}
-
-function mapFinalProjectAsset(row: FinalProjectAssetRow): FinalProjectAsset {
-  const metadata = asRecord(row.metadata);
-  const url = row.file_url ?? metadataString(metadata, 'url');
-  const assetType = row.asset_type === 'image' || row.asset_type === 'video' || row.asset_type === 'audio'
-    ? row.asset_type
-    : 'video';
-  const assetSubtype = metadataString(metadata, 'asset_subtype');
-
-  return {
-    id: row.id,
-    project_id: row.project_id,
-    asset_type: assetType,
-    asset_subtype: assetSubtype ? assetSubtype as FinalProjectAsset['asset_subtype'] : undefined,
-    name: metadataString(metadata, 'name', `${assetType} asset`),
-    url,
-    thumbnail_url: metadataString(metadata, 'thumbnail_url') || undefined,
-    duration_ms: row.duration_ms ?? metadataOptionalNumber(metadata, 'duration_ms'),
-    order_index: metadataNumber(metadata, 'order_index', 0),
-    shot_card_id: metadataString(metadata, 'shot_card_id') || undefined,
-    metadata,
-    created_at: row.created_at,
-  };
-}
-
-async function getCurrentUserId() {
-  const { data, error } = await supabase.auth.getUser();
-  if (error || !data.user) {
-    throw new Error('Not authenticated');
-  }
-  return data.user.id;
-}
-
 export function useFinalProjectAssets(projectId: string | undefined) {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -94,16 +59,51 @@ export function useFinalProjectAssets(projectId: string | undefined) {
 
   const clips = useVideoEditorStore((state) => state.clips);
   const audioTracks = useVideoEditorStore((state) => state.audioTracks);
+  const keyframes = useVideoEditorStore((state) => state.keyframes);
+
+  const normalizeAsset = useCallback((record: unknown): FinalProjectAsset => {
+    const row = isRecord(record) ? record : {};
+    const metadata = isRecord(row.metadata) ? row.metadata : {};
+    const assetType =
+      row.asset_type === 'video' || row.asset_type === 'audio' || row.asset_type === 'image'
+        ? row.asset_type
+        : 'image';
+    return {
+      id: typeof row.id === 'string' ? row.id : '',
+      project_id: typeof row.project_id === 'string' ? row.project_id : '',
+      asset_type: assetType,
+      asset_subtype:
+        metadata.asset_subtype === 'voiceover' ||
+        metadata.asset_subtype === 'sfx' ||
+        metadata.asset_subtype === 'music' ||
+        metadata.asset_subtype === 'visual'
+          ? metadata.asset_subtype
+          : undefined,
+      name: typeof metadata.name === 'string' ? metadata.name : `Final ${assetType}`,
+      url: typeof row.file_url === 'string' ? row.file_url : '',
+      thumbnail_url: typeof metadata.thumbnail_url === 'string' ? metadata.thumbnail_url : undefined,
+      duration_ms: typeof row.duration_ms === 'number' ? row.duration_ms : undefined,
+      order_index: typeof metadata.order_index === 'number' ? metadata.order_index : 0,
+      shot_card_id: typeof metadata.shot_card_id === 'string' ? metadata.shot_card_id : undefined,
+      metadata,
+      created_at: typeof row.created_at === 'string' ? row.created_at : '',
+    };
+  }, []);
 
   /**
    * Load final project assets from Supabase
    */
   const loadAssets = useCallback(async () => {
     if (!projectId) return;
+    if (isDevAuthBypassEnabled()) {
+      setAssets([]);
+      setIsLoading(false);
+      return;
+    }
 
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('final_project_assets')
         .select('*')
         .eq('project_id', projectId)
@@ -111,16 +111,15 @@ export function useFinalProjectAssets(projectId: string | undefined) {
 
       if (error) throw error;
 
-      setAssets(((data || []) as FinalProjectAssetRow[])
-        .map(mapFinalProjectAsset)
-        .sort((a, b) => a.order_index - b.order_index));
+      const rows = Array.isArray(data) ? data : [];
+      setAssets(rows.map(normalizeAsset).sort((a, b) => a.order_index - b.order_index));
     } catch (error) {
       console.error('Error loading final project assets:', error);
       toast.error('Failed to load final project assets');
     } finally {
       setIsLoading(false);
     }
-  }, [projectId]);
+  }, [normalizeAsset, projectId]);
 
   /**
    * Save a single asset to the final project assets collection
@@ -133,33 +132,46 @@ export function useFinalProjectAssets(projectId: string | undefined) {
 
     setIsSaving(true);
     try {
-      const userId = await getCurrentUserId();
-      const { data, error } = await supabase
+      if (isDevAuthBypassEnabled()) {
+        const localAsset: FinalProjectAsset = {
+          id: `local-final-${Date.now()}`,
+          project_id: projectId,
+          created_at: new Date().toISOString(),
+          ...asset,
+        };
+        setAssets((prev) => [...prev, localAsset]);
+        toast.success(`${asset.name} added to local final assets`);
+        return localAsset;
+      }
+
+      const userId = (await supabase.auth.getUser()).data.user?.id;
+      if (!userId) throw new Error('You must be signed in to save final assets.');
+
+      const { data, error } = await db
         .from('final_project_assets')
         .insert({
           project_id: projectId,
-          user_id: userId,
           asset_type: asset.asset_type,
           file_url: asset.url,
           duration_ms: asset.duration_ms,
           metadata: {
             ...(asset.metadata ?? {}),
-            name: asset.name,
             asset_subtype: asset.asset_subtype,
-            order_index: asset.order_index,
+            name: asset.name,
             thumbnail_url: asset.thumbnail_url,
+            order_index: asset.order_index,
             shot_card_id: asset.shot_card_id,
-            url: asset.url,
-          } as Json,
+          },
+          user_id: userId,
         })
         .select()
         .single();
 
       if (error) throw error;
 
-      setAssets(prev => [...prev, mapFinalProjectAsset(data as FinalProjectAssetRow)]);
+      setAssets(prev => [...prev, normalizeAsset(data)]);
       toast.success(`${asset.name} added to final assets`);
-      return mapFinalProjectAsset(data as FinalProjectAssetRow);
+      return data as FinalProjectAsset;
     } catch (error) {
       console.error('Error saving final project asset:', error);
       toast.error('Failed to save asset to final collection');
@@ -167,7 +179,7 @@ export function useFinalProjectAssets(projectId: string | undefined) {
     } finally {
       setIsSaving(false);
     }
-  }, [projectId]);
+  }, [normalizeAsset, projectId]);
 
   /**
    * Save all timeline clips and audio tracks to final project assets
@@ -200,12 +212,19 @@ export function useFinalProjectAssets(projectId: string | undefined) {
             asset_subtype: 'visual',
             name: clip.name || `Shot ${index + 1}`,
             url: clip.url,
+            thumbnail_url: clip.thumbnailUrl ?? (clip.type === 'image' ? clip.url : undefined),
             duration_ms: clip.duration,
             order_index: index,
             metadata: {
               startTime: clip.startTime,
               endTime: clip.endTime,
+              thumbnail_url: clip.thumbnailUrl ?? (clip.type === 'image' ? clip.url : undefined),
+              preview_url: clip.previewUrl,
+              media_metadata: clip.mediaMetadata,
               transforms: clip.transforms,
+              transition: clip.transition,
+              effects: clip.effects ?? [],
+              keyframes: keyframes.filter((keyframe) => keyframe.targetId === clip.id),
               layer: clip.layer,
             },
           });
@@ -231,11 +250,15 @@ export function useFinalProjectAssets(projectId: string | undefined) {
               asset_subtype: subtype,
               name: track.name || `Audio ${audioIndex + 1}`,
               url: track.url,
+              thumbnail_url: track.thumbnailUrl ?? undefined,
               duration_ms: track.duration,
               order_index: audioIndex++,
               metadata: {
                 startTime: track.startTime,
                 endTime: track.endTime,
+                thumbnail_url: track.thumbnailUrl,
+                preview_url: track.previewUrl,
+                media_metadata: track.mediaMetadata,
                 volume: track.volume,
                 isMuted: track.isMuted,
                 fadeInDuration: track.fadeInDuration,
@@ -251,41 +274,53 @@ export function useFinalProjectAssets(projectId: string | undefined) {
         return false;
       }
 
-      const userId = await getCurrentUserId();
+      if (isDevAuthBypassEnabled()) {
+        const now = new Date().toISOString();
+        setAssets(
+          assetsToSave.map((asset, index) => ({
+            id: `local-final-${index}-${Date.now()}`,
+            project_id: projectId,
+            created_at: now,
+            ...asset,
+          }))
+        );
+        toast.success(`${assetsToSave.length} assets saved locally`);
+        return true;
+      }
 
       // Clear existing assets first (optional - could be a merge instead)
-      await supabase
+      await db
         .from('final_project_assets')
         .delete()
-        .eq('project_id', projectId)
-        .eq('user_id', userId);
+        .eq('project_id', projectId);
+
+      const userId = (await supabase.auth.getUser()).data.user?.id;
+      if (!userId) throw new Error('You must be signed in to save final assets.');
 
       // Insert all new assets
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('final_project_assets')
         .insert(assetsToSave.map(asset => ({
           project_id: projectId,
-          user_id: userId,
           asset_type: asset.asset_type,
           file_url: asset.url,
           duration_ms: asset.duration_ms,
           metadata: {
             ...(asset.metadata ?? {}),
-            name: asset.name,
             asset_subtype: asset.asset_subtype,
-            order_index: asset.order_index,
+            name: asset.name,
             thumbnail_url: asset.thumbnail_url,
+            order_index: asset.order_index,
             shot_card_id: asset.shot_card_id,
-            url: asset.url,
-          } as Json,
+          },
+          user_id: userId,
         })))
         .select();
 
       if (error) throw error;
 
-      setAssets(((data || []) as FinalProjectAssetRow[])
-        .map(mapFinalProjectAsset)
-        .sort((a, b) => a.order_index - b.order_index));
+      const rows = Array.isArray(data) ? data : [];
+      setAssets(rows.map(normalizeAsset));
       toast.success(`${assetsToSave.length} assets saved to final collection`);
       return true;
     } catch (error) {
@@ -295,7 +330,7 @@ export function useFinalProjectAssets(projectId: string | undefined) {
     } finally {
       setIsSaving(false);
     }
-  }, [projectId, clips, audioTracks]);
+  }, [normalizeAsset, projectId, clips, audioTracks, keyframes]);
 
   /**
    * Reorder assets in the final collection
@@ -304,48 +339,35 @@ export function useFinalProjectAssets(projectId: string | undefined) {
     if (!projectId) return false;
 
     try {
-      const assetMap = new Map(assets.map(asset => [asset.id, asset]));
+      const assetMap = new Map(assets.map(a => [a.id, a]));
+      if (isDevAuthBypassEnabled()) {
+        setAssets(
+          newOrder
+            .map((id, index) => {
+              const asset = assetMap.get(id);
+              return asset ? { ...asset, order_index: index } : null;
+            })
+            .filter((asset): asset is FinalProjectAsset => asset !== null)
+        );
+        return true;
+      }
 
-      await Promise.all(newOrder.map(async (id, index) => {
+      await Promise.all(newOrder.map((id, index) => {
         const asset = assetMap.get(id);
-        if (!asset) return;
-
-        const { error } = await supabase
+        if (!asset) return Promise.resolve();
+        return db
           .from('final_project_assets')
-          .update({
-            metadata: {
-              ...(asset.metadata ?? {}),
-              name: asset.name,
-              asset_subtype: asset.asset_subtype,
-              thumbnail_url: asset.thumbnail_url,
-              shot_card_id: asset.shot_card_id,
-              url: asset.url,
-              order_index: index,
-            } as Json,
-          })
-          .eq('id', id)
-          .eq('project_id', projectId);
-
-        if (error) throw error;
+          .update({ metadata: { ...(asset.metadata ?? {}), order_index: index } })
+          .eq('id', id);
       }));
 
       // Update local state
       setAssets(prev => {
         const assetMap = new Map(prev.map(a => [a.id, a]));
-        return newOrder
-          .map((id, index) => {
-            const asset = assetMap.get(id);
-            if (!asset) return null;
-            return {
-              ...asset,
-              order_index: index,
-              metadata: {
-                ...(asset.metadata ?? {}),
-                order_index: index,
-              },
-            };
-          })
-          .filter((asset): asset is NonNullable<typeof asset> => Boolean(asset)) as FinalProjectAsset[];
+        return newOrder.map((id, index) => ({
+          ...assetMap.get(id)!,
+          order_index: index,
+        }));
       });
 
       return true;
@@ -354,14 +376,20 @@ export function useFinalProjectAssets(projectId: string | undefined) {
       toast.error('Failed to reorder assets');
       return false;
     }
-  }, [projectId, assets]);
+  }, [assets, projectId]);
 
   /**
    * Remove an asset from the final collection
    */
   const removeAsset = useCallback(async (assetId: string) => {
     try {
-      const { error } = await supabase
+      if (isDevAuthBypassEnabled()) {
+        setAssets(prev => prev.filter(a => a.id !== assetId));
+        toast.success('Asset removed from local final collection');
+        return true;
+      }
+
+      const { error } = await db
         .from('final_project_assets')
         .delete()
         .eq('id', assetId);
@@ -381,7 +409,7 @@ export function useFinalProjectAssets(projectId: string | undefined) {
   /**
    * Trigger the FFMPEG stitching process to create the final video
    */
-  const createFinalAsset = useCallback(async (settings: Record<string, unknown> = {}) => {
+  const createFinalAsset = useCallback(async () => {
     if (!projectId) {
       toast.error('No project selected');
       return null;
@@ -396,6 +424,11 @@ export function useFinalProjectAssets(projectId: string | undefined) {
     setExportProgress(0);
 
     try {
+      if (isDevAuthBypassEnabled()) {
+        toast.info('Final asset export requires a saved Supabase project.');
+        return null;
+      }
+
       toast.info('Starting final asset creation...');
 
       // Call the Supabase Edge Function to stitch assets
@@ -411,7 +444,6 @@ export function useFinalProjectAssets(projectId: string | undefined) {
             order_index: a.order_index,
             metadata: a.metadata,
           })),
-          settings,
         },
       });
 
