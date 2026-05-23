@@ -333,6 +333,7 @@ export default function WorldStudioEditorPage() {
   async function saveNow() {
     if (!projectId || !state) return;
     if (!validateSnapshotForAction("save")) return;
+    if (!data) return;
     setSaving(true);
     setMessage(null);
     try {
