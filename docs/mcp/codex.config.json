@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "wzrd-studio": {
-      "command": "npx",
-      "args": ["-y", "mcp-remote", "https://ixkkrousepsiorwlaycp.supabase.co/functions/v1/mcp-server"],
-      "env": {}
-    }
-  }
-}

@@ -1,57 +1,45 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react-swc";
-import path from "path";
-import { componentTagger } from "lovable-tagger";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
+import { defineConfig } from "vitest/config";
 
-// https://vitejs.dev/config/
-// @ts-nocheck
-export default defineConfig(({ mode }) => ({
-  server: {
-    host: "::",
-    port: 8080,
-    headers: {
-      // Required for ffmpeg.wasm (SharedArrayBuffer)
-      "Cross-Origin-Opener-Policy": "same-origin",
-      "Cross-Origin-Embedder-Policy": "require-corp",
-    },
-  },
-  preview: {
-    headers: {
-      "Cross-Origin-Opener-Policy": "same-origin",
-      "Cross-Origin-Embedder-Policy": "require-corp",
-    },
-  },
-  plugins: [
-    react(),
-    mode === 'development' && componentTagger(),
-  ].filter(Boolean),
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const reactRoot = path.resolve(__dirname, "node_modules/react");
+const reactDomRoot = path.resolve(__dirname, "node_modules/react-dom");
+
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
   resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
-      "react-dnd": path.resolve(__dirname, "./src/lib/react-dnd.tsx"),
-    },
-    dedupe: [
-      "react",
-      "react-dom",
-      "react/jsx-runtime",
-      "framer-motion",
+    dedupe: ["react", "react-dom"],
+    alias: [
+      { find: "@", replacement: path.resolve(__dirname, "./src") },
+      { find: /^react$/, replacement: path.join(reactRoot, "index.js") },
+      { find: /^react\/jsx-runtime$/, replacement: path.join(reactRoot, "jsx-runtime.js") },
+      { find: /^react\/jsx-dev-runtime$/, replacement: path.join(reactRoot, "jsx-dev-runtime.js") },
+      { find: /^react-dom$/, replacement: path.join(reactDomRoot, "index.js") },
+      { find: /^react-dom\/client$/, replacement: path.join(reactDomRoot, "client.js") },
     ],
   },
   optimizeDeps: {
-    exclude: ['@sparkjsdev/spark', '@ffmpeg/ffmpeg', '@ffmpeg/util'],
-  },
-  test: {
-    globals: true,
-    environment: "jsdom",
-    setupFiles: "./vitest.setup.ts",
-    css: false,
-    exclude: [
-      "**/node_modules/**",
-      "**/dist/**",
-      "tests/e2e/**",
-      "tests/performance.spec.ts",
-      "playwright.config.test.ts",
-      "supabase/functions/**/*.test.ts",
+    include: [
+      "react",
+      "react-dom",
+      "react-dom/client",
+      "react/jsx-dev-runtime",
+      "react/jsx-runtime",
     ],
   },
-}));
+
+  server: {
+    host: "127.0.0.1",
+    port: 5173,
+    headers: {
+      "Cross-Origin-Opener-Policy": "same-origin",
+      "Cross-Origin-Embedder-Policy": "credentialless",
+    },
+  },
+  test: {
+    exclude: ["tests-e2e/**", "node_modules/**", "dist/**"],
+  },
+});

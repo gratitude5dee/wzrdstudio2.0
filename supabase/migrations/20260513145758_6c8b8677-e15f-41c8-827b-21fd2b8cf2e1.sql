@@ -1,1 +1,0 @@
-ALTER TABLE public.shots ADD COLUMN IF NOT EXISTS upscaled_image_url TEXT;
