@@ -1,0 +1,39 @@
+{
+  "featureId": "skill-md-documentation",
+  "reviewedAt": "2026-03-14T17:05:00.000Z",
+  "commitId": "416d221",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "SKILL.md is a comprehensive, well-structured 569-line documentation file covering the unified generation interface. All model IDs, names, credits, supported parameters, and workflow types were cross-verified against studio-model-constants.ts and match exactly (10 image generation, 10 image editing, 17 video generation, 20 video advanced/utility, 5 audio, 4 text, 2 storyline models). Input/output TypeScript interfaces in SKILL.md accurately reflect unifiedGenerationService.ts. Credit costs match credits.ts and studio-model-constants.ts. Usage examples correctly use the actual convenience method signatures (generateImage, generateVideo, generateAudio, generateText, generate, invokeEdgeFunction). Model aliases documented are a representative subset with a pointer to falModelNormalization.ts for the full map. Constraint verification was thorough: lovable files confirmed present, KanvasPage unmodified (empty git diff), Supabase env vars unchanged, no secrets found in client code. This is a documentation-only commit with no code changes, so no bugs or edge cases apply.",
+    "issues": [
+      {
+        "file": "SKILL.md",
+        "line": 1,
+        "severity": "non_blocking",
+        "description": "The model alias table only lists 8 of 20+ aliases defined in falModelNormalization.ts. While the doc says 'See falModelNormalization.ts for the full alias map', a more complete list would reduce the need for developers to look up the source file. Minor documentation completeness gap."
+      },
+      {
+        "file": "SKILL.md",
+        "line": 30,
+        "severity": "non_blocking",
+        "description": "The architecture diagram references 'fal-stream' but the unifiedGenerationService also defines a 'falai-execute' route type that is never used in determineRoute(). The SKILL.md omits this dead route, which is arguably correct, but could note the existence of the legacy falai-execute endpoint for completeness."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The backend-worker skill procedure includes step 7 'Manual verification: Use agent-browser to navigate to the page that calls the edge function' which doesn't apply to documentation-only features. Worker's skillFeedback.suggestedChanges correctly notes this gap: 'Backend worker skill could note that documentation-only features don't need manual browser verification or new tests'. This is a valid skill improvement.",
+      "evidence": "Handoff skillFeedback.suggestedChanges[0] and .factory/skills/backend-worker/SKILL.md step 7"
+    },
+    {
+      "area": "knowledge",
+      "observation": "The SKILL.md itself is valuable shared knowledge about the unified generation interface. It could be referenced from .factory/library/architecture.md which currently doesn't mention the unified generation service or SKILL.md.",
+      "evidence": ".factory/library/architecture.md doesn't reference SKILL.md or the unified generation service layer"
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "SKILL.md is accurate, comprehensive, and well-organized. All 70+ models documented with correct IDs, credits, parameters, and workflow types matching the source code. Input/output schemas faithfully represent the TypeScript interfaces. Usage examples are correct and cover all required categories (image, video, audio, text, plus edge functions and progress tracking). All constraint verifications passed (lovable files, KanvasPage, env vars, no secrets). Two minor non-blocking observations: incomplete alias table and omitted dead route. Pass."
+}

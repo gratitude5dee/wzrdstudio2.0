@@ -1,0 +1,40 @@
+{
+  "featureId": "directors-cut-optimization",
+  "reviewedAt": "2026-03-14T13:30:00.000Z",
+  "commitId": "589bab51f7bc88616359fec9c45378015aa5cc62",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Solid implementation covering all 5 requirements: (1) full pipeline trigger via useDirectorCut hook (sync→create→poll), (2) stage-based progress tracking with StageIndicator UI component, (3) final video stored in Supabase Storage and playable via <video> element, (4) partial failure handling with per-shot try/catch in processAssets and amber warning banner in UI, (5) credit cost displayed on the Director's Cut button using DIRECTORS_CUT_CREDITS constant. Tests are well-structured with 3 new tests covering stage extraction, partial success, and no-assets guard. Edge function has proper auth, CORS, error handling, and Fal-first with fallback architecture.",
+    "issues": [
+      {
+        "file": "supabase/functions/director-cut/index.ts",
+        "line": 0,
+        "severity": "non_blocking",
+        "description": "The 'downloading_assets' stage is defined in DirectorCutStage and shown in the StageIndicator pipeline, but it is only set in the fallback path (runWithFallback). The primary Fal path jumps from 'provider_processing' directly to 'uploading_final_video', skipping 'downloading_assets'. This causes the stage indicator to skip a step visually when using the primary Fal path. Consider either removing 'downloading_assets' from the primary pipeline display or setting it before normalizeProviderOutput in the Fal path."
+      },
+      {
+        "file": "supabase/functions/_shared/export-helpers.ts",
+        "line": 144,
+        "severity": "non_blocking",
+        "description": "Audio asset download failures (lines 144-155) throw errors that abort the entire export, unlike visual assets which are handled gracefully with shotFailures. If an audio file URL is invalid, the whole export fails rather than continuing without that audio track. This is inconsistent with the partial failure approach for visual assets."
+      },
+      {
+        "file": "src/pages/DirectorCutPage.tsx",
+        "line": 123,
+        "severity": "non_blocking",
+        "description": "No concurrent job guard: if a user rapidly double-clicks 'Start Director's Cut', the isStarting/isWorking flag may not yet be set before a second invocation fires. This could create duplicate export_jobs. A debounce or ref-based guard would prevent this edge case."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "The 'downloading_assets' pipeline stage only applies to the internal_ffmpeg fallback path, not the primary Fal path. This distinction is not documented anywhere. Future workers modifying the stage indicator or adding stages may not realize the stage set depends on which provider path is active.",
+      "evidence": "supabase/functions/director-cut/index.ts — runWithFallback sets stage='downloading_assets', but runDirectorCutJob never does. src/hooks/useDirectorCut.ts defines 'downloading_assets' in DirectorCutStage. src/pages/DirectorCutPage.tsx includes it in PIPELINE_STAGES."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Feature passes review. The implementation comprehensively covers all 5 requirements: full pipeline trigger, stage-based progress tracking with visual indicators, Supabase Storage upload with video preview, graceful partial failure handling for visual shots, and credit cost display. Three non-blocking issues identified: (1) 'downloading_assets' stage is skipped in the primary Fal path causing a visual gap in the stage indicator, (2) audio download failures abort the export unlike the graceful handling for visual assets, (3) no double-click guard on the start button. Tests are thorough with 3 new test cases. Worker followed skill procedure correctly."
+}

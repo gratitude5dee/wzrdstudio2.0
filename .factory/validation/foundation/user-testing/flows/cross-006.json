@@ -1,0 +1,106 @@
+{
+  "groupId": "cross-006",
+  "testedAt": "2026-03-13T00:00:00.000Z",
+  "isolation": {
+    "appUrl": "http://localhost:8080/kanvas?studio=worldview",
+    "browserSession": "89c6c08d4568__cross006",
+    "authBypass": true,
+    "worldlabsApiKey": "NOT_CONFIGURED"
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-CROSS-006",
+      "title": "Multi-scene state isolation",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Navigate to /kanvas?studio=worldview",
+          "expected": "Worldview tab active with empty state",
+          "observed": "Worldview tab active, New Scene button visible"
+        },
+        {
+          "action": "Click 'New Scene' to create Scene 1",
+          "expected": "Scene 1 chip appears, 'Create a 3D World' CTA shown",
+          "observed": "Scene 1 chip created and active, 'Create a 3D World' CTA displayed"
+        },
+        {
+          "action": "Click 'Create a 3D World' CTA in Scene 1",
+          "expected": "Creator panel opens with text prompt, model selector, Generate World button",
+          "observed": "Creator panel opened with text/image toggle, textarea, model selector (Marble 0.1-plus selected), Generate World button (disabled)"
+        },
+        {
+          "action": "Enter prompt 'test world for scene isolation' and click 'Generate World'",
+          "expected": "API call fails with error toast/inline error (no WORLDLABS_API_KEY)",
+          "observed": "Error state displayed: 'World generation failed' with 'Failed to send a request to the Edge Function' and Retry button"
+        },
+        {
+          "action": "Screenshot Scene 1 error state",
+          "expected": "Inline error with retry button visible",
+          "observed": "Screenshot captured showing 'World generation failed' error with Retry button"
+        },
+        {
+          "action": "Click 'New Scene' to create Scene 2",
+          "expected": "Scene 2 created with clean 'Create a 3D World' CTA (no error leakage from Scene 1)",
+          "observed": "Scene 2 chip created and active, clean 'Create a 3D World' CTA displayed — NO error from Scene 1"
+        },
+        {
+          "action": "Screenshot Scene 2 clean state",
+          "expected": "Clean CTA without error state",
+          "observed": "Screenshot captured showing Scene 2 with 'Create a 3D World' CTA, no error state"
+        },
+        {
+          "action": "Switch back to Scene 1 by clicking its chip",
+          "expected": "Scene 1's error state is preserved (not cleared)",
+          "observed": "Scene 1 active, 'World generation failed' error and Retry button still displayed"
+        },
+        {
+          "action": "Screenshot Scene 1 error state preserved",
+          "expected": "Error state still visible after switching away and back",
+          "observed": "Screenshot captured confirming error state preservation"
+        },
+        {
+          "action": "Click 'Retry' to open creator panel in Scene 1",
+          "expected": "Creator panel opens in Scene 1",
+          "observed": "Creator panel opened with text/image toggle, textarea, model selector, Generate World button"
+        },
+        {
+          "action": "Switch to Scene 2",
+          "expected": "Scene 2 shows CTA button, NOT the creator panel from Scene 1",
+          "observed": "Scene 2 shows 'Create a 3D World' CTA — creator panel did NOT leak from Scene 1"
+        },
+        {
+          "action": "Screenshot Scene 2 without creator panel",
+          "expected": "Clean CTA state, no creator panel",
+          "observed": "Screenshot captured confirming Scene 2 has CTA, not creator panel"
+        },
+        {
+          "action": "Switch back to Scene 1",
+          "expected": "Scene 1's creator panel is still open",
+          "observed": "Scene 1 shows creator panel with text/image toggle, textarea, model selector — preserved"
+        },
+        {
+          "action": "Screenshot Scene 1 creator panel preserved",
+          "expected": "Creator panel still open after round-trip",
+          "observed": "Screenshot captured confirming creator panel still open in Scene 1"
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "foundation/cross-006/VAL-CROSS-006-scene1-error-state.png",
+          "foundation/cross-006/VAL-CROSS-006-scene2-clean-cta.png",
+          "foundation/cross-006/VAL-CROSS-006-scene1-error-preserved.png",
+          "foundation/cross-006/VAL-CROSS-006-scene1-creator-open.png",
+          "foundation/cross-006/VAL-CROSS-006-scene2-no-creator.png",
+          "foundation/cross-006/VAL-CROSS-006-scene1-creator-preserved.png"
+        ],
+        "consoleErrors": "none",
+        "network": "POST to worldlabs-proxy Edge Function -> failed (expected, no API key)"
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 1 assertion (VAL-CROSS-006): PASSED. All 4 isolation checks verified: (1) Error state does not leak from Scene A to Scene B, (2) Error state is preserved in Scene A after switching away and back, (3) showCreator panel does not leak from Scene A to Scene B, (4) showCreator panel is preserved in Scene A after switching away and back."
+}

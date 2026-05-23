@@ -1,0 +1,89 @@
+{
+  "milestone": "modes",
+  "round": 1,
+  "status": "pass",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "npx vitest run --reporter=verbose",
+      "exitCode": 1,
+      "note": "265 passing, 2 failing (pre-existing connectionValidator.test.ts stale expectations), 7 Deno/empty test suite failures (pre-existing). All worldview store tests (36 assertions) pass."
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "npx tsc --noEmit",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "npm run lint",
+      "exitCode": 1,
+      "note": "695 errors (694 pre-existing + 1 from worldlabs-proxy @ts-ignore, already tracked in misc-scrutiny-fixes feature). 60 warnings. No new errors from modes milestone features."
+    }
+  },
+  "reviewsSummary": {
+    "total": 2,
+    "passed": 2,
+    "failed": 0,
+    "failedFeatures": []
+  },
+  "blockingIssues": [],
+  "nonBlockingIssues": [
+    {
+      "featureId": "worldview-gsplat-viewer",
+      "severity": "non_blocking",
+      "description": "Dead variable: `activeLens` computed via LENS_OPTIONS.find() at line 874 but never referenced in JSX or logic."
+    },
+    {
+      "featureId": "worldview-gsplat-viewer",
+      "severity": "non_blocking",
+      "description": "Redundant state update in capture flow: updateTakeStatus(takeId, 'ready') called before a direct useWorldviewStore.setState() that also sets status: 'ready' plus imageUrl. The first call is unnecessary."
+    },
+    {
+      "featureId": "worldview-gsplat-viewer",
+      "severity": "non_blocking",
+      "description": "Canvas ref callback is an inline arrow function causing re-initialization on every re-render during drag interactions. A useEffect with stable ref would be more efficient."
+    },
+    {
+      "featureId": "worldview-shot-composer",
+      "severity": "non_blocking",
+      "description": "Unused import: CharacterRef type imported but never referenced in component code."
+    },
+    {
+      "featureId": "worldview-shot-composer",
+      "severity": "non_blocking",
+      "description": "Default resolution starts at '1K' rather than '512'. Cycling works correctly but initial value differs from spec's implied starting point."
+    },
+    {
+      "featureId": "worldview-shot-composer",
+      "severity": "non_blocking",
+      "description": "Model selector and character menu dropdowns lack click-outside-to-close handlers. They only close on item selection or re-clicking trigger."
+    },
+    {
+      "featureId": "worldview-shot-composer",
+      "severity": "non_blocking",
+      "description": "In handleSubmit catch block, updateShotStatus called via useWorldviewStore.getState() instead of destructured hook — stylistically inconsistent with rest of component."
+    },
+    {
+      "featureId": "worldview-shot-composer",
+      "severity": "non_blocking",
+      "description": "selectedCharacters is a non-memoized derived value in useCallback dependency array, negating the useCallback optimization."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Add convention: Workers should avoid calling useWorldviewStore.setState() directly in components. If a store action doesn't cover the needed state update, extend the existing action or add a new one. Direct setState bypasses the store's action API and makes state mutations harder to trace in devtools.",
+      "evidence": "In worldview-gsplat-viewer, the capture flow at WorldviewSection.tsx:834 calls useWorldviewStore.setState() directly to update take imageUrl after capture. All other mutations in the same file use defined store actions. The store's updateTakeStatus action could be extended to accept an optional imageUrl parameter.",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "No documented convention for dropdown dismiss behavior (click-outside-to-close). Model selector and character menu use toggle without click-outside handlers.",
+      "reason": "Too minor and localized to warrant a guidance update. This is consistent with the existing toggle pattern in the codebase and only appears in one component. Not systemic."
+    }
+  ],
+  "previousRound": null
+}

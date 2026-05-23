@@ -1,0 +1,23 @@
+{
+  "milestone": "landing-polish",
+  "round": 2,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 30,
+    "passed": 30,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-LAND-001", "VAL-LAND-002", "VAL-LAND-003", "VAL-LAND-004", "VAL-LAND-005", "VAL-LAND-006",
+    "VAL-LAND-007", "VAL-LAND-008", "VAL-LAND-009", "VAL-LAND-010", "VAL-LAND-011", "VAL-LAND-012",
+    "VAL-LAND-013", "VAL-LAND-014", "VAL-LAND-015",
+    "VAL-COLOR-001", "VAL-COLOR-002", "VAL-COLOR-003", "VAL-COLOR-004", "VAL-COLOR-005",
+    "VAL-COLOR-006", "VAL-COLOR-007", "VAL-COLOR-008", "VAL-COLOR-009", "VAL-COLOR-010",
+    "VAL-CROSS-001", "VAL-CROSS-005", "VAL-CROSS-006", "VAL-CROSS-012", "VAL-CROSS-013"
+  ],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "previousRound": ".factory/validation/landing-polish/user-testing/synthesis-round1.json"
+}

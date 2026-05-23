@@ -1,0 +1,56 @@
+{
+  "featureId": "prompt-to-workflow-improvements",
+  "reviewedAt": "2026-03-14T15:10:00.000Z",
+  "commitId": "ed86af4",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The implementation delivers all three sub-features (contextual autocomplete, settings menu, improved generation quality) with good code structure, proper TypeScript typing, thorough tests (12 new), and solid error handling with fallback workflows. However, the generate-workflow edge function is missing authenticateRequest(), allowing unauthenticated users to invoke the Groq API. This is a security gap that must be fixed before passing. Additionally, WorkflowGeneratorTab.tsx uses green hex colors (#2EA866, #9FE8B3) for decorative accents instead of the documented orange/amber convention, though this matches the existing (pre-cleanup) studio palette.",
+    "issues": [
+      {
+        "file": "supabase/functions/generate-workflow/index.ts",
+        "line": 1,
+        "severity": "blocking",
+        "description": "Missing authenticateRequest() call. The edge function imports only corsHeaders/handleCors/errorResponse from _shared/response.ts but does NOT import or call authenticateRequest from _shared/auth.ts. Every other edge function that performs server-side API calls (fal-poll, ai-synthesis, generate-text-generic, etc.) uses authenticateRequest(req.headers) to validate the JWT. Without it, any unauthenticated request can trigger the Groq API, consuming API credits without authorization. Must add: import { authenticateRequest, AuthError } from '../_shared/auth.ts' and call await authenticateRequest(req.headers) at the start of the request handler."
+      },
+      {
+        "file": "src/components/studio/WorkflowGeneratorTab.tsx",
+        "line": 107,
+        "severity": "non_blocking",
+        "description": "Uses green hex colors (#2EA866, #9FE8B3, #141c17, #132218) for the wand icon container, selected node badge (line 140), and loading indicator (line 245). AGENTS.md requires orange/amber accents. While the surrounding studio components (StudioRightPanel, StudioSidebar, nodes, etc.) also use these same green values — and a separate 'color-hex-cleanup' feature is planned — new code should follow the documented convention. The WorkflowSettingsMenu and WorkflowPromptAutocomplete components correctly use orange-500 for selection highlights."
+      },
+      {
+        "file": "supabase/functions/generate-workflow/index.ts",
+        "line": 170,
+        "severity": "non_blocking",
+        "description": "Console.log outputs the raw user prompt: 'Generating workflow for prompt: ${prompt}'. While this is server-side and acceptable for debugging, consider redacting or truncating user input in production logs for privacy hygiene."
+      },
+      {
+        "file": "src/components/studio/WorkflowGeneratorTab.tsx",
+        "line": 85,
+        "severity": "non_blocking",
+        "description": "The handlePromptBlur uses setTimeout(() => setShowAutocomplete(false), 200) which is a brittle pattern. If suggestion click handlers take longer than 200ms to fire (e.g., on slow devices), the autocomplete closes before the selection registers. This is a common React pattern but worth noting."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "The generate-workflow edge function was created without authenticateRequest() despite AGENTS.md and architecture.md both documenting this as a required pattern for edge functions. The convention is documented but the worker missed it. Consider adding a checklist-style reminder in the edge function section of AGENTS.md, e.g., 'EVERY edge function MUST call authenticateRequest unless explicitly public.'",
+      "evidence": "supabase/functions/generate-workflow/index.ts — no authenticateRequest import or call. Compare to all other edge functions (create-project, upload, fal-poll, ai-synthesis, generate-text-generic, etc.) which all use it."
+    },
+    {
+      "area": "conventions",
+      "observation": "Worker used green hex colors in WorkflowGeneratorTab.tsx matching the existing studio component palette, rather than following the orange/amber convention in AGENTS.md. This suggests the color convention documentation may not be prominent enough, or workers default to copying existing patterns when they see widespread usage of the 'old' colors.",
+      "evidence": "WorkflowGeneratorTab.tsx lines 107, 140, 245 use #2EA866/#9FE8B3. Meanwhile WorkflowSettingsMenu.tsx and WorkflowPromptAutocomplete.tsx correctly use orange-500 for active/selected states."
+    },
+    {
+      "area": "skills",
+      "observation": "The frontend-worker skill procedure says to do manual verification with agent-browser. The worker did perform interactive checks (verified autocomplete dropdown, settings menu, and Escape key behavior). The worker followed the skill procedure.",
+      "evidence": "Handoff verification.interactiveChecks has 4 entries. skillFeedback.followedProcedure is true."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Feature delivers all three requirements (autocomplete, settings menu, generation quality) with solid implementation and 12 new tests. FAIL due to missing authenticateRequest() in generate-workflow edge function — a security gap allowing unauthenticated API access. Additionally, WorkflowGeneratorTab uses green hex colors (#2EA866, #9FE8B3) instead of the documented orange/amber convention, though this matches the existing studio palette and is non-blocking. The WorkflowSettingsMenu and WorkflowPromptAutocomplete components are well-implemented with proper outside-click/Escape dismissal, keyboard navigation, and context-aware suggestions."
+}

@@ -1,0 +1,132 @@
+{
+  "groupId": "breakdown",
+  "testedAt": "2026-03-14T13:19:30.000Z",
+  "isolation": {
+    "appUrl": "http://localhost:8080",
+    "authBypass": true,
+    "browserSession": "5e9570cd7db5__breakdown"
+  },
+  "toolsUsed": ["agent-browser", "code-inspection"],
+  "assertions": [
+    {
+      "id": "VAL-SETUP-013",
+      "title": "Breakdown Staggered Reveal Animations",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Inspect BreakdownTab.tsx source code for Framer Motion imports",
+          "expected": "Framer Motion motion and AnimatePresence imported",
+          "observed": "Line 11: import { motion, AnimatePresence } from 'framer-motion'"
+        },
+        {
+          "action": "Verify staggered animation variants defined",
+          "expected": "cardVariants with hidden/visible/exit states and stagger delay based on index",
+          "observed": "cardVariants at line ~163: hidden={opacity:0, y:20}, visible uses custom index with delay=index*0.1s, duration=0.4s, cubic-bezier easing [0.25,0.1,0.25,1.0], exit={opacity:0, y:-10}"
+        },
+        {
+          "action": "Verify SceneCard uses motion.div with stagger variants",
+          "expected": "motion.div with custom={index}, variants={cardVariants}, initial='hidden', animate='visible'",
+          "observed": "SceneCard component at line ~182 renders <motion.div layout custom={index} variants={cardVariants} initial='hidden' animate='visible' exit='exit'>"
+        },
+        {
+          "action": "Verify AnimatePresence wraps scene card list",
+          "expected": "AnimatePresence wrapping the scene cards map",
+          "observed": "AnimatePresence mode='popLayout' wraps fetchedScenes.map() rendering SceneCard components"
+        },
+        {
+          "action": "Verify Add button also has staggered delay",
+          "expected": "Button animates after all cards",
+          "observed": "Add New Scene button uses motion.div with delay: fetchedScenes.length * 0.1 + 0.3, creating smooth sequential appearance after all cards"
+        },
+        {
+          "action": "Navigate to Breakdown tab in browser and verify rendering",
+          "expected": "Breakdown tab renders without errors",
+          "observed": "Breakdown tab displays correctly with empty state message, no console errors"
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "project-setup/breakdown/VAL-SETUP-013-breakdown-tab-empty.png"
+        ],
+        "consoleErrors": "none",
+        "codeInspection": {
+          "file": "src/components/project-setup/BreakdownTab.tsx",
+          "framerMotionImport": "import { motion, AnimatePresence } from 'framer-motion'",
+          "cardVariants": "hidden={opacity:0,y:20}, visible=(index)=>{opacity:1,y:0,transition:{duration:0.4,delay:index*0.1,ease:[0.25,0.1,0.25,1.0]}}, exit={opacity:0,y:-10}",
+          "sceneCardMotionDiv": "<motion.div layout custom={index} variants={cardVariants} initial='hidden' animate='visible' exit='exit'>",
+          "animatePresenceWrapper": "<AnimatePresence mode='popLayout'>"
+        }
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-SETUP-014",
+      "title": "Breakdown Backend Uses Structured JSON Prompts",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Inspect generate-storylines/prompts.ts for structured JSON prompt construction",
+          "expected": "Prompts built using structured JSON objects with explicit field mapping, not string concatenation",
+          "observed": "getStorylineUserPrompt() builds projectContextJson and sceneRequirements as structured JS objects, serialized with JSON.stringify(generationRequest, null, 2)"
+        },
+        {
+          "action": "Verify scene generation requirements include explicit fields for scene count",
+          "expected": "sceneCount field with min/max values",
+          "observed": "sceneRequirements.sceneCount = { min: 5, max: 10 }"
+        },
+        {
+          "action": "Verify shot types are explicitly defined",
+          "expected": "Array of shot types",
+          "observed": "sceneRequirements.shotTypes = ['wide', 'medium', 'close_up', 'extreme_close_up', 'pov', 'over_shoulder', 'aerial']"
+        },
+        {
+          "action": "Verify locations field is required per scene",
+          "expected": "location in required fields per scene",
+          "observed": "sceneRequirements.requiredFieldsPerScene includes 'location' along with 'scene_number', 'title', 'description', 'lighting', 'weather', 'emotional_tone', 'color_palette'"
+        },
+        {
+          "action": "Verify characters per scene implicit via shot fields",
+          "expected": "Shot fields include character/narrative description",
+          "observed": "requiredFieldsPerShot = ['shot_type', 'description', 'visual_prompt', 'camera_movement', 'duration_seconds', 'composition_notes']; description field captures character involvement per shot"
+        },
+        {
+          "action": "Verify gemini-schemas.ts enforces structured JSON output schema",
+          "expected": "JSON schema with scene_breakdown array including shot_ideas",
+          "observed": "STORYLINE_RESPONSE_SCHEMA defines scene_breakdown array with required fields [scene_number, title, description, location, shot_ideas], shot_ideas has minItems:3, maxItems:6 with required [shot_type, description, visual_prompt, camera_movement, duration_seconds]"
+        },
+        {
+          "action": "Verify format-specific briefs use structured JSON objects",
+          "expected": "Format briefs (commercial, music_video, infotainment, short_film) as structured objects",
+          "observed": "Switch statement builds formatBrief as typed objects for each format: commercial has product/brandName/targetAudience/mainMessage/callToAction/tone/adDuration/platform/brandGuidelines; music_video has artistName/trackTitle/genre/bpm/performanceRatio; infotainment has topic/targetAudience/keyFacts/educationalGoals/hostStyle/visualStyle; short_film has genre/tone/duration/visualStyle"
+        },
+        {
+          "action": "Verify index.ts passes structured prompts to generation endpoint",
+          "expected": "Generation call uses structured prompt from prompts.ts",
+          "observed": "index.ts calls getStorylineUserPrompt(project, generate_alternative, existingStorylines) and passes result to gemini-storyline-generation endpoint with responseSchema from gemini-schemas.ts"
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "N/A (code inspection assertion)",
+        "codeInspection": {
+          "promptsFile": "supabase/functions/generate-storylines/prompts.ts",
+          "structuredPromptMethod": "getStorylineUserPrompt() - builds projectContextJson + sceneRequirements as JS objects, serialized via JSON.stringify",
+          "sceneRequirements": {
+            "sceneCount": "{ min: 5, max: 10 }",
+            "requiredFieldsPerScene": ["scene_number", "title", "description", "location", "lighting", "weather", "emotional_tone", "color_palette"],
+            "shotsPerScene": "{ min: 3, max: 6 }",
+            "requiredFieldsPerShot": ["shot_type", "description", "visual_prompt", "camera_movement", "duration_seconds", "composition_notes"],
+            "shotTypes": ["wide", "medium", "close_up", "extreme_close_up", "pov", "over_shoulder", "aerial"],
+            "cameraMovements": ["static", "pan", "tilt", "tracking", "dolly", "crane", "handheld", "steadicam"]
+          },
+          "schemaFile": "supabase/functions/generate-storylines/gemini-schemas.ts",
+          "indexFile": "supabase/functions/generate-storylines/index.ts"
+        }
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 2 assertions: 2 passed. VAL-SETUP-013 confirmed via code inspection that BreakdownTab.tsx implements Framer Motion staggered fade-up animations with cardVariants (hidden→visible with index*0.1s delay) wrapped in AnimatePresence. VAL-SETUP-014 confirmed via code inspection that generate-storylines edge function uses structured JSON prompts with explicit fields for sceneCount, shotTypes, locations, requiredFieldsPerScene/Shot, and format-specific briefs — all serialized via JSON.stringify, not string concatenation."
+}

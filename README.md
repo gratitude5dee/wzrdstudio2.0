@@ -1,103 +1,170 @@
-# FanAgent
+<p align="center"> <img src="/public/wzrdtechlogo.png" alt="WZRD Studio" width="280" /> </p> <h1 align="center">WZRD — AI Creative Studio</h1> <p align="center"> <strong>End-to-end video production: concept → storyline → studio → editor</strong> </p> <p align="center"> <a href="#whats-built">What's Built</a> • <a href="#architecture">Architecture</a> • <a href="#tech-stack">Tech Stack</a> • <a href="#environment-setup">Setup</a> • <a href="#development">Development</a> </p> <p align="center"> <img src="https://img.shields.io/badge/frontend-React%2018%20+%20Vite-blue" alt="Frontend" /> <img src="https://img.shields.io/badge/3D-Three.js-orange" alt="Three.js" /> <img src="https://img.shields.io/badge/video-Remotion-purple" alt="Remotion" /> <img src="https://img.shields.io/badge/backend-Supabase-green" alt="Supabase" /> <img src="https://img.shields.io/badge/AI%20models-66%2B-red" alt="AI Models" /> </p>
 
-React + Supabase scaffold for turning an uploaded audio reference into scheduled TikTok posts.
+Overview
+WZRD is an AI-powered creative studio platform for end-to-end video and content production. The platform combines a cinematic WebGL landing experience, a multi-step project setup wizard, a node-based studio editor with 66+ AI models, and a Remotion-powered video editor — all backed by Supabase (Postgres, Auth, Edge Functions, Storage).
 
-## FanAgent v2
+Built with React + Vite, Three.js, Remotion, React Flow, and Tailwind CSS, WZRD delivers a cohesive creative workflow from concept to final cut with a unified orange/amber accent theme throughout.
 
-FanAgent v2 turns one trimmed audio clip into a reusable library of finalized lyric videos before anything is scheduled. The create flow is now:
+Table of Contents
+* What's Built
+* Key Features
+* Architecture
+* Tech Stack
+* Environment Setup
+* Development
+* Contributing
 
-1. Connect or reconnect TikTok. Generation can continue while publishing is blocked.
-2. Upload audio, trim one 15/30/45/60/75/90 second clip, and review the lyric template.
-3. Generate a video library with stock, library, Seedance, GMI Seedance, sports-edit, or streamer-clip sources.
-4. Review finalized videos at `/library` or `/library/:audioClipId`, including provenance, duration, reuse flags, regenerate, and segment replacement.
-5. Schedule ready library items from `/calendar` with drag/drop or bulk cadence/window tools, including optional jitter to avoid robotic posting times.
-6. Let `fanpage-publish-due` publish due posts through TikTok Direct Post.
+<a id="whats-built"></a>
+What's Built — Foundation, Generation Pipeline & Editor
+This mission delivered the core creative production pipeline end-to-end:
 
-Publishing failures are isolated from generation. Posts stay `pending` with actionable `publish_status` values such as `blocked_account_not_connected`, `blocked_missing_privacy`, `blocked_creator_restriction`, `blocked_missing_video`, or `retry_scheduled`; the library item remains intact.
+**Cinematic Landing Experience**
+* WebGL intro animation built with Three.js / React Three Fiber with particle fields, caustic overlays, and ember effects
+* Video background hero section with card-based feature showcase
+* Global orange/amber accent theme applied across all surfaces
 
-## Stack
+**Project Setup Wizard (5-Step Flow)**
+1. **Concept** — Genre selection, tone, dynamic concept form with AI-assisted generation
+2. **Storyline** — AI-generated storylines with document upload support (PDF, DOCX, MD, TXT via `document-parse` edge function)
+3. **Settings & Cast** — Format selection, character management with voice cloning integration (ElevenLabs `elevenlabs-voices` / `elevenlabs-tts`)
+4. **Breakdown** — Scene breakdown with editable scene cards, location/clothing/sound sections
+5. **Timeline** — Shot timeline with BPM detection for music videos (`web-audio-beat-detector`)
 
-- Vite, React, TypeScript
-- Tailwind CSS v4 and shadcn/ui components
-- Supabase Postgres, Storage, Edge Functions, and Cron
-- FullCalendar for schedule review and drag-to-reschedule
+**Studio — Node Editor**
+* React Flow-based node editor with 66+ AI model integrations (Fal.ai, Gemini, Luma, ElevenLabs, WorldLabs)
+* Node types: image generation, video generation, audio/SFX, text-to-speech, image editing, 3D, compute (FFmpeg), upload, output
+* Edge validation with visual error feedback (glowing/compute edge variants)
+* Prompt-to-workflow generation with autocomplete (`generate-workflow` edge function)
+* Model marketplace (Flora) for browsing and selecting AI models
 
-## Local Development
+**Video Editor**
+* Remotion-based preview and composition rendering
+* Multi-track timeline with clips, transitions, waveform rendering
+* Media library with drag-and-drop asset management
+* Properties panel, effects, text overlays, and final export
+* Unified generation service layer (`unifiedGenerationService.ts`) across all generation endpoints
 
+Key Features
+* **Cinematic WebGL Intro** — Three.js-powered intro animation with particle systems and post-processing effects
+* **Document Upload** — PDF/DOCX/MD/TXT parsing for storyline input via Supabase Edge Functions
+* **BPM Detection** — Automatic tempo detection for music video shot timing using Web Audio API
+* **Voice Cloning** — ElevenLabs integration for character voice-over generation
+* **66+ AI Models** — Image, video, audio, 3D, and text generation models accessible from the studio node editor
+* **Edge Validation** — Real-time connection validation with visual feedback in the node editor
+* **Prompt-to-Workflow** — Natural language workflow generation with autocomplete suggestions
+* **Remotion Video Editor** — Frame-accurate preview, multi-track timeline, transitions, and export
+* **Unified Generation Service** — Single service layer routing to Fal.ai, Gemini, ElevenLabs, and Luma backends
+* **Orange/Amber Theme** — Consistent accent color system across all UI surfaces
+
+<a id="architecture"></a>
+Architecture
+┌─────────────────────────────────────────────────────────────────────┐
+│                         WZRD PLATFORM                               │
+│                                                                     │
+│  ┌──────────────┐   ┌──────────────────┐   ┌────────────────────┐  │
+│  │  React + Vite │   │  Supabase Edge   │   │  AI Providers      │  │
+│  │  (Frontend)   │◄─►│  Functions       │◄─►│  Fal.ai / Gemini / │  │
+│  │  Three.js /   │   │  (Deno)          │   │  ElevenLabs / Luma │  │
+│  │  Remotion /   │   │                  │   │  WorldLabs         │  │
+│  │  React Flow   │   │                  │   │                    │  │
+│  └──────┬───────┘   └────────┬─────────┘   └────────────────────┘  │
+│         │                    │                                      │
+│  ┌──────▼────────────────────▼───────────────────────────────────┐  │
+│  │                    SUPABASE CORE                               │  │
+│  │                                                                │  │
+│  │  ┌─────────────┐  ┌────────────┐  ┌────────────┐  ┌────────┐ │  │
+│  │  │  Postgres    │  │  Auth +    │  │  Realtime   │  │Storage │ │  │
+│  │  │             │  │  RLS       │  │             │  │(Assets)│ │  │
+│  │  └─────────────┘  └────────────┘  └────────────┘  └────────┘ │  │
+│  └────────────────────────────────────────────────────────────────┘  │
+│                                                                     │
+│  ┌────────────────────────────────────────────────────────────────┐  │
+│  │              GENERATION PIPELINE                               │  │
+│  │                                                                │  │
+│  │  ┌──────────┐  ┌───────────┐  ┌───────────┐  ┌────────────┐  │  │
+│  │  │ Unified  │  │ Job Queue │  │ Document  │  │ Asset      │  │  │
+│  │  │ Gen Svc  │  │ + Worker  │  │ Parser    │  │ Processor  │  │  │
+│  │  └──────────┘  └───────────┘  └───────────┘  └────────────┘  │  │
+│  └────────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────┘
+
+<a id="tech-stack"></a>
+Stack Summary
+Layer	Technology	Role
+Frontend	React 18 + Vite + TypeScript	SPA with Tailwind CSS, Radix UI, Framer Motion
+3D / WebGL	Three.js, React Three Fiber, Drei	Cinematic intro animation, particle effects
+Node Editor	React Flow (@xyflow/react)	Studio canvas with custom nodes, edges, and validation
+Video Editor	Remotion	Frame-accurate preview, multi-track timeline, export
+State	Zustand + React Query	Client state and server-cache management
+API	Supabase Edge Functions (Deno)	Generation routing, document parsing, auth, billing
+Database	Supabase Postgres	Projects, storylines, shots, studio graphs, credits
+Auth	Supabase Auth	JWT-based with Row-Level Security
+Storage	Supabase Storage	Asset uploads, generated media, style references
+AI Providers	Fal.ai, Google Gemini, ElevenLabs, Luma, WorldLabs	Image/video/audio/3D generation and voice cloning
+<a id="edge-functions"></a>
+Edge Functions (Supabase)
+The backend is composed of ~40 Supabase Edge Functions covering generation, parsing, and platform services:
+
+**Generation**
+`falai-execute` · `falai-image-generation` · `falai-video-generation` · `gemini-image-generation` · `gemini-video-generation` · `gemini-text-generation` · `gemini-storyline-generation` · `gemini-image-analysis` · `elevenlabs-tts` · `elevenlabs-sfx` · `elevenlabs-music` · `elevenlabs-voices` · `worldlabs-proxy` · `luma-webhook` · `generate-shot-image` · `generate-shot-audio` · `generate-video-from-image` · `generate-visual-prompt` · `generate-character-image` · `generate-thumbnail` · `generate-concept-examples` · `generate-workflow` · `generate-storylines` · `compute-execute`
+
+**Project & Document**
+`create-project` · `finalize-project-setup` · `document-parse` · `asset-upload` · `asset-processor` · `director-cut` · `gen-shots`
+
+**Platform**
+`auth-middleware` · `store-api-keys` · `get-api-keys` · `billing-checkout` · `billing-portal` · `billing-webhook` · `billing-catalog` · `admin-add-credits` · `job-queue` · `job-worker` · `studio-save-state` · `studio-load-state`
+
+
+<a id="environment-setup"></a>
+Environment Setup
+Prerequisites
+* Node.js 20+ (or Bun)
+* A Supabase project (for auth, database, storage, and edge functions)
+
+Local Development
 ```bash
+# Install dependencies (includes Three.js, web-audio-beat-detector, Remotion, React Flow, etc.)
 npm install
+
+# Create .env file with your Supabase credentials
+cp .env.example .env   # or create manually:
+```
+
+Environment Variables (`.env`):
+```
+VITE_SUPABASE_URL=https://<project-ref>.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJ...
+```
+
+Start the dev server:
+```bash
 npm run dev
 ```
 
-Open the local app at `http://127.0.0.1:5173/`.
-
-Console messages from `chrome-extension://...`, Lovable Add-ons, Firestore/Firebase, RudderStack, Facebook Pixel, or LinkedIn pixels are emitted by the browser/preview shell or blocked analytics scripts, not by FanAgent. Verify app errors against scripts served from `127.0.0.1:5173`.
-
-The frontend reads the checked-in Supabase project URL and publishable key from `src/integrations/supabase/client.ts`. Keep private credentials out of React and set them as Supabase Edge Function secrets.
-
-## Supabase Secrets
-
-Set these in the Supabase dashboard or with `supabase secrets set`:
-
+<a id="development"></a>
+Development
 ```bash
-FAL_KEY=...
-PEXELS_API_KEY=...
-PIXABAY_API_KEY=...
-GMI_API_KEY=...
-GMI_ORG_ID=...
-GMI_SEEDANCE_MODEL_ID=...
-ELEVENLABS_API_KEY=...
-LOVABLE_API_KEY=...
-CRON_SECRET=...
-TIKTOK_CLIENT_KEY=...
-TIKTOK_CLIENT_SECRET=...
-TIKTOK_REDIRECT_URI=...
-TOKEN_ENCRYPTION_KEY=...
-YOUTUBE_API_KEY=...
-SPORTS_EDITS_ALLOWED_CHANNELS=UC...,@owned-sports-channel
-TWITCH_CLIENT_ID=...
-TWITCH_CLIENT_SECRET=...
-STREAMER_CLIP_ALLOWED_CHANNELS=creator_login,another_creator
-SUPABASE_SERVICE_ROLE_KEY=...
-SITE_URL=...
+# Run unit tests
+npm run test
+
+# Lint
+npm run lint
+
+# Type-check
+npx tsc --noEmit
+
+# Run E2E tests (Playwright)
+npm run test:e2e
+
+# Remotion preview
+npm run remotion:preview
 ```
 
-Stock generation can run with either `PEXELS_API_KEY` or `PIXABAY_API_KEY`; both improves coverage. `FAL_KEY` is required for Seedance segments and ffmpeg-based audio/video composition. `GMI_*`, `ELEVENLABS_API_KEY`, and `LOVABLE_API_KEY` are optional feature enrichments surfaced by the dashboard preflight panel.
+Contributing
+1. Fork the repository.
+2. Create a feature branch: `git checkout -b feat/your-feature`.
+3. Commit with conventional commits: `feat:`, `fix:`, `docs:`, `refactor:`.
+4. Ensure `npm run lint`, `npx tsc --noEmit`, and `npm run test` pass.
+5. Open a Pull Request against `master`.
 
-Sports and streamer adapters are disabled until their official API credentials and allowlists are set. `sports_edit` uses YouTube Data API metadata from allowed owned or licensed channels, but rendering requires owner-provided MP4 asset URLs; public YouTube watch URLs are provenance only. `streamer_clip` uses Twitch Helix clips for explicitly allowed creators and stores creator attribution in source provenance.
-
-## Edge Functions
-
-- `create-generation-batch`: registers uploaded audio, batch, and generation item rows before provider calls.
-- `audio-clip-register` and `audio-clip-transcribe`: create the user-facing audio clip and transcription state.
-- `source-candidate-search` and `source-candidate-replace`: search/cache adapter candidates and replace one segment.
-- `library-finalize`, `library-schedule`, and `library-bulk-schedule`: materialize finalized library items and calendar posts.
-- `fanpage-generate-due`: claims due queue rows, handles stock/fal/GMI generation, stores durable final MP4s in Supabase Storage, and finalizes `video_library_items`.
-- `publish-tiktok-due`: publishes due posts through TikTok Direct Post and polls in-flight publish IDs.
-- `tiktok-oauth-callback`: starts and completes TikTok OAuth.
-- `update-post-schedule`: edits scheduled time, caption, hashtags, privacy, and interaction settings.
-
-Deploy functions with the Supabase CLI after linking the project:
-
-```bash
-npx supabase functions deploy create-generation-batch
-npx supabase functions deploy audio-clip-register
-npx supabase functions deploy audio-clip-transcribe
-npx supabase functions deploy fanpage-campaign
-npx supabase functions deploy fanpage-generate-due
-npx supabase functions deploy pick-stock-clip
-npx supabase functions deploy source-candidate-search
-npx supabase functions deploy source-candidate-replace
-npx supabase functions deploy generate-seedance-clip
-npx supabase functions deploy stitch-segments
-npx supabase functions deploy render-karaoke
-npx supabase functions deploy library-finalize
-npx supabase functions deploy library-schedule
-npx supabase functions deploy library-bulk-schedule
-npx supabase functions deploy publish-tiktok-due
-npx supabase functions deploy fanpage-publish-due
-npx supabase functions deploy tiktok-oauth-callback
-npx supabase functions deploy update-post-schedule
-```
-
-The latest migration includes commented Supabase Cron examples for invoking `fanpage-generate-due` and `fanpage-publish-due` every five minutes with an `x-cron-secret` stored in Vault.
+<p align="center"> <strong>WZRD Studio</strong> — AI-powered creative production, concept to final cut.<br/> Built with React, Three.js, Remotion, React Flow & Supabase. </p>

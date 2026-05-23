@@ -1,0 +1,50 @@
+{
+  "featureId": "breakdown-improvements",
+  "reviewedAt": "2026-03-14T13:15:00.000Z",
+  "commitId": "4496e84",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The implementation meets all four expected behaviors: staggered fade-up animations for scene cards using Framer Motion with AnimatePresence, new scene animation on addition, structured JSON prompts for all generation functions, and fully populated metadata fields in prompts. The generate-storylines/prompts.ts was refactored from string concatenation to structured JSON objects with explicit sceneRequirements, formatBrief, and visualPromptGuidelines. The _shared/prompts.ts provides structured JSON input for all downstream generation calls (visual, dialogue, sound effects, shot ideas, character visuals, shot types). Three non-blocking code quality issues were identified.",
+    "issues": [
+      {
+        "file": "src/components/project-setup/BreakdownTab.tsx",
+        "line": 9,
+        "severity": "non_blocking",
+        "description": "Unused import: `supabase` is imported from '@/integrations/supabase/client' but never referenced in the component body. Only `supabaseService` (line 10) is used. Dead import should be removed."
+      },
+      {
+        "file": "src/components/project-setup/BreakdownTab.tsx",
+        "line": 19,
+        "severity": "non_blocking",
+        "description": "Unused props: `projectData` and `updateProjectData` are destructured from props (lines 15-16, 19) but never used in the component body. The component gets its data from `useProjectContext()` (line 25) instead. These props create a misleading interface contract."
+      },
+      {
+        "file": "src/components/project-setup/BreakdownTab.tsx",
+        "line": 183,
+        "severity": "non_blocking",
+        "description": "React anti-pattern: `SceneCard` is defined as a component inside the `BreakdownTab` render function. This creates a new component reference on every parent re-render, causing React to unmount and remount all scene cards (losing animation state). This defeats AnimatePresence exit animations (the `exit` variant on line 168 will never fire) and causes all cards to re-animate on any state change (e.g., adding or editing a scene). The component should be extracted outside BreakdownTab with handlers passed via props or using React context."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "Worker claimed followedProcedure: true with no deviations, but did not perform step 7 of the fullstack-worker skill (end-to-end manual verification with agent-browser). The transcript shows only CLI validators (npm test, tsc, lint) were run — no dev server was started and no browser navigation occurred. For animation-focused changes, visual verification would be particularly valuable to confirm the staggered reveal works as expected.",
+      "evidence": "Transcript skeleton shows tool calls for Edit, Execute (test/tsc/lint), Read, Grep, TodoWrite, git commands only — no agent-browser Skill invocation or curl/localhost checks. Handoff verification.commandsRun contains only npm run test, npx tsc --noEmit, npm run lint. No interactiveChecks field in handoff."
+    },
+    {
+      "area": "conventions",
+      "observation": "The SceneCard-inside-component anti-pattern (defining React components inside other components' render functions) is not documented as something to avoid in AGENTS.md. This pattern silently breaks Framer Motion AnimatePresence exit animations and causes unnecessary remounts. Could benefit from a convention note.",
+      "evidence": "src/components/project-setup/BreakdownTab.tsx:183 — SceneCard defined as arrow function component inside BreakdownTab body."
+    },
+    {
+      "area": "conventions",
+      "observation": "Blue accent (bg-blue-600) is used for primary action buttons throughout the project-setup module, but AGENTS.md says primary accent should be orange/amber. The worker followed the existing pattern in the codebase (SceneEditDialog.tsx:108, SettingsTab.tsx:226, NavigationFooter.tsx:142 all use bg-blue-600), so this is a pre-existing inconsistency between AGENTS.md and actual code, not a worker error.",
+      "evidence": "BreakdownTab.tsx:320 uses bg-blue-600 for 'Add New Scene Manually' button. Same class appears in SceneEditDialog.tsx:108, SettingsTab.tsx:226, NavigationFooter.tsx:142."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "PASS. The breakdown-improvements feature delivers all four expected behaviors: (1) staggered fade-up animations via Framer Motion cardVariants with 0.1s per-card delay and AnimatePresence wrapper, (2) new cards animate on addition, (3) all generation prompts in generate-storylines/prompts.ts and _shared/prompts.ts now use structured JSON with explicit fields for scene count, shot types, locations, characters per scene, and technical requirements, (4) prompt schemas include all metadata fields. Three non-blocking code quality issues found: unused supabase import, unused component props (projectData/updateProjectData), and SceneCard defined inside the render function (React anti-pattern that can break exit animations). No regressions — TypeScript, tests, and lint all pass at pre-existing baselines."
+}

@@ -1,0 +1,51 @@
+{
+  "featureId": "storyline-improvements",
+  "reviewedAt": "2026-03-14T12:35:00.000Z",
+  "commitId": "4a76e3c6230b991df91e7e0ce0109c4513c8df37",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Solid implementation that fully covers the feature requirements. StreamingTextAnimate provides progressive word-level blur-in animation with a blinking cursor during streaming, correctly tracking revealed words to avoid re-animation flicker. StorylineDocumentUpload implements drag-and-drop file upload with PDF/DOCX/MD/TXT support via the existing documentService and optional URL import via the document-parse edge function. Both components are well-integrated into the new StorylineTab with proper loading/error states, realtime subscriptions for streaming updates, and 13 new passing tests. All four expected behaviors are satisfied.",
+    "issues": [
+      {
+        "file": "src/components/project-setup/StorylineTab.tsx",
+        "line": 152,
+        "severity": "non_blocking",
+        "description": "Debug console.log('New scene received:', payload) left in production code within the realtime scene subscription handler. Should be removed or replaced with a conditional debug utility."
+      },
+      {
+        "file": "src/components/project-setup/StorylineTab.tsx",
+        "line": 171,
+        "severity": "non_blocking",
+        "description": "Debug console.log('New character received:', payload) left in production code within the realtime character subscription handler. Should be removed."
+      },
+      {
+        "file": "src/components/project-setup/StorylineTab.tsx",
+        "line": 39,
+        "severity": "non_blocking",
+        "description": "streamingScenes and streamingCharacters use `any[]` typing (lines 39-40). These could use proper Scene/Character types from the project's type definitions for better type safety."
+      },
+      {
+        "file": "src/components/project-setup/StorylineTab.tsx",
+        "line": 207,
+        "severity": "non_blocking",
+        "description": "Multiple catch clauses use `error: any` (lines 207, 237, 318). TypeScript best practice is to use `unknown` and narrow the type, though this pattern appears in other project-setup components as well."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "StorylineTab uses blue color classes (blue-950, blue-900, blue-400, blue-500) for buttons and loaders, while AGENTS.md specifies the primary accent should be orange/amber. However, blue is widely used across existing project-setup components (SettingsTab, DynamicConceptForm, NavigationFooter, FormatSelector, BreakdownTab), indicating this is a pre-existing pattern not specific to this worker's code. AGENTS.md may need to clarify whether blue is acceptable for secondary/informational UI elements vs primary CTAs.",
+      "evidence": "StorylineTab.tsx lines 373, 395, 439, 555 use blue-*. Compare SettingsTab.tsx lines 226, 244, 263 and DynamicConceptForm.tsx lines 805-806 which also use blue-* extensively."
+    },
+    {
+      "area": "conventions",
+      "observation": "Debug console.log statements left in realtime subscription handlers. AGENTS.md doesn't mention a convention for logging/debug output. A convention on when console.log is acceptable vs when to use a debug utility or remove entirely would prevent this pattern from recurring.",
+      "evidence": "StorylineTab.tsx lines 152, 171 — console.log('New scene received:', payload) and console.log('New character received:', payload)"
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Feature passes review. All four expected behaviors are implemented: (1) StreamingTextAnimate provides typewriter/blur-in animation for streaming storylines with progressive word reveal, (2) StorylineDocumentUpload offers drag-and-drop file upload on the Storyline tab with PDF/DOCX/MD/TXT support, (3) uploaded document text is set as storyline input via updateProjectData({ concept }), and (4) loading/error states are properly handled with spinners and toast notifications. The implementation reuses the existing documentService and document-parse edge function correctly. 13 new tests all pass. Four non-blocking issues noted: two leftover console.log debug statements and minor TypeScript typing concerns (any[] and error: any). No blocking issues found."
+}

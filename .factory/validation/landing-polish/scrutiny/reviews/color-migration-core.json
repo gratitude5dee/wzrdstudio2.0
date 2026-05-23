@@ -1,0 +1,49 @@
+{
+  "featureId": "color-migration-core",
+  "reviewedAt": "2026-03-14T10:15:00.000Z",
+  "commitId": "8c50720",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "All 24 target files were modified to replace green/emerald accent colors with orange/amber equivalents. The migration covers pages (DirectorCutPage, SettingsBillingPage, MogDocs, Credits), project-setup components (FormatSelector, DynamicConceptForm, NavigationFooter, StyleReferenceUploader), home components (ProjectCard, ProjectListView, StatCard, InlineEditableTitle, DeleteProjectSheet, ShareProjectDialog), editor (FinalExportPanel), timeline (SoundSection), storyboard (ShotsRow), share (ShareModal), collaboration (CollaborationPanel), settings (ApiKeysForm), worldview (WorldviewSection), and project (ShareDialog). CSS custom properties --accent-emerald, --cyber-neon-green, --quantum-green were migrated to HSL hue 25 (orange) in index.css and light-premium.css. Green was correctly preserved for: bg-green-500 online indicators in ProfileButton/ProfilePopup/CollaboratorsPanel, and text-green-500/400 success checkmarks in StorylineProgress. Remaining green references (47 total) are all in preserved exemptions or Part 2 scope (studio/landing/canvas components). Typecheck passes, 265/267 tests pass (2 pre-existing failures), lint has only pre-existing errors.",
+    "issues": [
+      {
+        "file": "src/index.css",
+        "line": 166,
+        "severity": "non_blocking",
+        "description": "CSS variable --cyber-neon-green still uses the name 'green' but its value (25 95% 53%) is now orange. Same for --quantum-green (line 237) and --accent-emerald (line 303). The variable names are misleading. Consider renaming in a follow-up or Part 2 to avoid confusion for future developers."
+      },
+      {
+        "file": "src/styles/themes/light-premium.css",
+        "line": 36,
+        "severity": "non_blocking",
+        "description": "Similarly, --accent-emerald in light-premium.css retains the 'emerald' name but contains an orange value (25 95% 53%). Consistent with index.css approach but could cause confusion."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "AGENTS.md already documents the orange/amber color scheme convention ('Primary accent: orange/amber') and the green preservation rules. The color migration conventions are well-documented and the worker followed them correctly.",
+      "evidence": "AGENTS.md 'Color Scheme' section matches the implementation. Worker preserved green for online indicators and success checkmarks exactly as specified."
+    },
+    {
+      "area": "conventions",
+      "observation": "CSS custom property names (--cyber-neon-green, --quantum-green, --accent-emerald) now contain misleading color references since values were changed to orange but names kept. AGENTS.md doesn't mention this naming debt or that the CSS variable names don't match their actual colors.",
+      "evidence": "src/index.css lines 166, 237, 303 and src/styles/themes/light-premium.css line 36 — all use green/emerald names with orange HSL values (25 95% 53%)"
+    },
+    {
+      "area": "conventions",
+      "observation": "The git repository root is at the user's home directory (~) rather than the project directory, causing all files in commits to appear as new additions with 'Downloads/mogstudio-repo/' prefix paths. This makes diffs harder to review and inflates insertion counts. This is documented in the handoff's discoveredIssues but not in AGENTS.md or .factory/library/.",
+      "evidence": "git show 8c50720 --stat shows all 24 files as new additions (9231 insertions, 0 deletions) with 'Downloads/mogstudio-repo/' prefix"
+    },
+    {
+      "area": "skills",
+      "observation": "Worker correctly noted in skillFeedback that the frontend-worker's 'write tests first' step is not meaningful for pure CSS class replacements. The skill could benefit from an explicit exemption for visual-only / CSS-class-only changes.",
+      "evidence": "Handoff skillFeedback.suggestedChanges: 'The frontend-worker skill suggests writing tests first, but for pure CSS class replacements (no logic changes), this step should be explicitly skipped as there's nothing meaningful to test.'"
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "PASS. The color-migration-core feature is fully and correctly implemented. All 24 listed files had green/emerald accent colors replaced with orange/amber equivalents. Green was correctly preserved for online status indicators and success checkmarks. CSS custom properties were migrated to orange HSL values. Only non-blocking issue: CSS variable names still reference green/emerald colors despite containing orange values, which creates naming debt but doesn't affect functionality."
+}

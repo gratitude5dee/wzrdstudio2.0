@@ -1,0 +1,62 @@
+{
+  "groupId": "cross005",
+  "testedAt": "2026-03-14T00:00:00.000Z",
+  "isolation": {
+    "appUrl": "http://localhost:8080",
+    "browserSession": "e152cc9e8935__cross005",
+    "authBypassed": true
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-CROSS-005",
+      "title": "Color Consistency Across All Pages",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Code-level check: inspect CSS --primary in index.css",
+          "expected": "--primary is orange/amber hue (not teal/green 168)",
+          "observed": "--primary: 25 95% 53% (HSL hue 25 = orange) in both :root and .dark selectors"
+        },
+        {
+          "action": "Navigate to http://localhost:8080/ (Landing page)",
+          "expected": "Orange accent colors on CTA buttons, badges, icons",
+          "observed": "Demo button is orange, Log Out button has orange border, Agent-Native badge uses orange, feature card icons are orange/red. No green accents visible."
+        },
+        {
+          "action": "Navigate to http://localhost:8080/home (Dashboard)",
+          "expected": "Create Project button is orange (not teal/green), + icon is orange",
+          "observed": "Create Project button is orange, + icon is orange, sidebar active state (All Projects) is orange, Grid button is orange, New Pro button is orange, stat card accents are orange. No teal/green accents."
+        },
+        {
+          "action": "Browser JS eval: getComputedStyle(document.documentElement).getPropertyValue('--primary')",
+          "expected": "Orange hue (around 25), not teal (168)",
+          "observed": "Returned '25 95% 53%' — confirmed orange"
+        },
+        {
+          "action": "Navigate to http://localhost:8080/project-setup (Project Setup wizard)",
+          "expected": "Orange accents on step indicators, buttons, selection states",
+          "observed": "Step 1 Concept tab has orange background, progress bar is orange, Custom card has orange selection border, Develop concept with AI card has orange tint, Upgrade button is orange. No green accents."
+        },
+        {
+          "action": "Check browser console for errors",
+          "expected": "No errors",
+          "observed": "No errors found"
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "landing-polish/color-consistency/VAL-CROSS-005-landing-page.png",
+          "landing-polish/color-consistency/VAL-CROSS-005-home-page.png",
+          "landing-polish/color-consistency/VAL-CROSS-005-project-setup.png"
+        ],
+        "consoleErrors": "none",
+        "codeCheck": "CSS --primary in index.css is '25 95% 53%' (orange) in both :root and .dark. Previously was '168 76% 42%' (teal). Computed style in browser confirms '25 95% 53%'."
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 1 assertion (VAL-CROSS-005): PASS. CSS --primary has been successfully migrated from teal (168 76% 42%) to orange (25 95% 53%). All three tested pages (Landing, Home, Project Setup) show consistent orange/amber accent colors. The Create Project button and + icon on the Home page are now orange, matching the Landing page. No green accents found outside exemptions. No console errors."
+}

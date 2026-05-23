@@ -1,0 +1,13 @@
+{
+  "agents": {
+    "wzrd-studio": {
+      "kind": "mcp",
+      "transport": "http",
+      "endpoint": "https://ixkkrousepsiorwlaycp.supabase.co/functions/v1/mcp-server",
+      "headers": {
+        "Accept": "application/json, text/event-stream"
+      },
+      "skills": "../../agent-skills/index.json"
+    }
+  }
+}
