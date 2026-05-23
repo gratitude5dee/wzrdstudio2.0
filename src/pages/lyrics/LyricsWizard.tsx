@@ -17,6 +17,13 @@ export default function LyricsWizard() {
     [nav],
   );
 
+  const handleOpenInEditor = useCallback(
+    (template: LyricTemplate) => {
+      nav(appRoutes.editorFromTemplate(template.id));
+    },
+    [nav],
+  );
+
   const handleClose = useCallback(() => {
     nav(appRoutes.lyricsHome);
   }, [nav]);
@@ -47,6 +54,7 @@ export default function LyricsWizard() {
         templateId={templateId}
         onTemplateIdChange={handleTemplateIdChange}
         onSaved={handleSaved}
+        onOpenInEditor={handleOpenInEditor}
         onClose={handleClose}
       />
     </main>

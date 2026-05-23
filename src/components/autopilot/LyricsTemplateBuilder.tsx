@@ -14,6 +14,7 @@ export interface LyricsTemplateBuilderProps {
   templateId: string | null;
   onTemplateIdChange: (id: string | null) => void;
   onSaved: (template: LyricTemplate) => void;
+  onOpenInEditor?: (template: LyricTemplate) => void;
   onClose: () => void;
 }
 
@@ -85,6 +86,7 @@ export default function LyricsTemplateBuilder({
   templateId,
   onTemplateIdChange,
   onSaved,
+  onOpenInEditor,
   onClose,
 }: LyricsTemplateBuilderProps) {
   const [state, dispatch] = useReducer(reducer, {
@@ -98,9 +100,11 @@ export default function LyricsTemplateBuilder({
   const [step, setStep] = useState<WizardStep>(1);
 
   const engine = useAudioEngine();
-  const { url: trimmedAudioUrl, error: trimmedError, retry: retryTrimmed } = useTrimmedAudioUrl(
-    state.template,
-  );
+  const {
+    url: trimmedAudioUrl,
+    error: trimmedError,
+    retry: retryTrimmed,
+  } = useTrimmedAudioUrl(state.template);
 
   // Drive the engine: trimmed audio takes precedence; otherwise raw upload preview.
   // IMPORTANT: do NOT include `engine` in deps — its identity changes every
@@ -163,20 +167,17 @@ export default function LyricsTemplateBuilder({
     if (trimmedError) dispatch({ type: "error", error: trimmedError });
   }, [trimmedError]);
 
-  const onAudioConfirmed = useCallback(
-    async (out: { template: LyricTemplate }) => {
-      dispatch({ type: "set_template", template: out.template });
-      dispatch({ type: "set_preview", url: null });
-      setStep(2);
-      try {
-        const { template } = await lyricsApi.transcribe(out.template.id, false);
-        dispatch({ type: "set_template", template });
-      } catch (error) {
-        dispatch({ type: "error", error: error instanceof Error ? error.message : String(error) });
-      }
-    },
-    [],
-  );
+  const onAudioConfirmed = useCallback(async (out: { template: LyricTemplate }) => {
+    dispatch({ type: "set_template", template: out.template });
+    dispatch({ type: "set_preview", url: null });
+    setStep(2);
+    try {
+      const { template } = await lyricsApi.transcribe(out.template.id, false);
+      dispatch({ type: "set_template", template });
+    } catch (error) {
+      dispatch({ type: "error", error: error instanceof Error ? error.message : String(error) });
+    }
+  }, []);
 
   const onPreviewUrl = useCallback((url: string | null) => {
     dispatch({ type: "set_preview", url });
@@ -352,6 +353,11 @@ export default function LyricsTemplateBuilder({
           <span>{clipDuration}s clip</span>
           <span>{wordCount} words</span>
         </div>
+        {state.template?.status === "saved" && onOpenInEditor ? (
+          <button type="button" className="lyr-btn" onClick={() => onOpenInEditor(state.template!)}>
+            Open in Editor
+          </button>
+        ) : null}
         <button type="button" className="lyr-btn primary" disabled={!canSave} onClick={save}>
           {state.saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />} SAVE TEMPLATE
         </button>

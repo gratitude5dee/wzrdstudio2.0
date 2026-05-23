@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ChevronLeft, Play, Pause, Sparkles, Wand2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { createEditorProjectFromLyricTemplate } from "@/lib/editor/api";
 import { invokeEdgeFunction } from "@/lib/fanagent/invokeFunction";
 import { lyricsApi } from "@/lib/lyrics/api";
 import { useTrimmedAudioUrl } from "@/lib/lyrics/useTrimmedAudioUrl";
@@ -180,6 +181,25 @@ export default function RemixEditor() {
     }
   }
 
+  async function openInEditor() {
+    if (!template || !templateId) return;
+    setLaunching(true);
+    setLaunchMessage(null);
+    try {
+      const result = await createEditorProjectFromLyricTemplate({
+        templateId,
+        accountId: accountId || undefined,
+        title: template.title,
+        openExisting: true,
+      });
+      nav(appRoutes.editorProject(result.project.id));
+    } catch (e) {
+      setLaunchMessage(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLaunching(false);
+    }
+  }
+
   if (loading) {
     return (
       <main className="page lyrics-remix">
@@ -235,9 +255,14 @@ export default function RemixEditor() {
         <h1>
           <Sparkles size={18} /> {template.title}
         </h1>
-        <Link to={appRoutes.lyricsJobs(template.id)} className="button ghost">
-          Jobs
-        </Link>
+        <div className="row" style={{ display: "flex", gap: "0.5rem" }}>
+          <button type="button" className="button ghost" onClick={() => void openInEditor()}>
+            Open in Editor
+          </button>
+          <Link to={appRoutes.lyricsJobs(template.id)} className="button ghost">
+            Jobs
+          </Link>
+        </div>
       </header>
 
       <div className="lyrics-remix__grid">
@@ -405,3 +430,5 @@ export default function RemixEditor() {
     </main>
   );
 }
+
+

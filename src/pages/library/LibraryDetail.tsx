@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, Navigate, useParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Home, Library, PlugZap, RefreshCcw } from "lucide-react";
 import BulkScheduleDialog from "@/components/calendar/BulkScheduleDialog";
 import LibraryGrid from "@/components/library/LibraryGrid";
 import SegmentReplaceDialog from "@/components/library/SegmentReplaceDialog";
 import SingleScheduleDialog from "@/components/library/SingleScheduleDialog";
+import { createEditorProjectFromLibraryItem } from "@/lib/editor/api";
 import {
   getLibraryDetail,
   markLibraryItemUnfit,
@@ -13,6 +14,7 @@ import {
 } from "@/lib/library/api";
 import { displayError } from "@/lib/errors";
 import type { LibraryItem } from "@/lib/library/types";
+import { appRoutes } from "@/lib/routes";
 
 function titleFor(data: LibraryDetailData | null): string {
   if (!data) return "Library";
@@ -21,6 +23,7 @@ function titleFor(data: LibraryDetailData | null): string {
 
 export default function LibraryDetail() {
   const { audioClipId } = useParams();
+  const navigate = useNavigate();
   const [data, setData] = useState<LibraryDetailData | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [replaceTarget, setReplaceTarget] = useState<{
@@ -115,6 +118,27 @@ export default function LibraryDetail() {
     setBulkScheduleTargetIds(libraryItemIds);
   }
 
+  async function openSelectedInEditor() {
+    if (!data || selectedIds.size === 0) return;
+    const selectedItem = data.items.find((item) => selectedIds.has(item.id));
+    if (!selectedItem) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const result = await createEditorProjectFromLibraryItem({
+        libraryItemId: selectedItem.id,
+        accountId: selectedItem.account_id,
+        title: selectedItem.default_caption ?? `Library clip ${selectedItem.library_index + 1}`,
+        openExisting: true,
+      });
+      navigate(appRoutes.editorProject(result.project.id));
+    } catch (error) {
+      setMessage(displayError(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <main className="app-shell library-shell">
       <header className="topbar">
@@ -136,6 +160,14 @@ export default function LibraryDetail() {
           <Link className="button ghost" to="/settings/accounts">
             <PlugZap size={14} /> Accounts
           </Link>
+          <button
+            className="button ghost"
+            type="button"
+            disabled={busy || !data || selectedIds.size === 0}
+            onClick={() => void openSelectedInEditor()}
+          >
+            Open selected in Editor
+          </button>
           <button className="button ghost" type="button" disabled={busy} onClick={refresh}>
             <RefreshCcw className={busy ? "spin" : undefined} size={14} /> Refresh
           </button>

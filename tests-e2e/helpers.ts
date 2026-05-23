@@ -213,3 +213,142 @@ export async function openAutopilot(page: Page): Promise<void> {
   await expect(page.getByRole("heading", { name: "Fanpage Autopilot" })).toBeVisible();
   await expect(page.getByText("Database queue schema")).toBeVisible();
 }
+
+
+export type SeededEditorProject = {
+  accountId: string;
+  projectId: string;
+  revisionId: string;
+  mediaAssetId: string;
+  editorAssetId: string;
+};
+
+function editorFixtureSnapshot(projectId: string, title = "E2E editor seed"): Record<string, unknown> {
+  return {
+    schemaVersion: 1,
+    project: {
+      id: projectId,
+      title,
+      aspectRatio: "9:16",
+      width: 1080,
+      height: 1920,
+      fps: 30,
+      durationMs: 15000,
+      background: "#000000",
+    },
+    tracks: [
+      { id: "audio-track", name: "Audio", kind: "audio", order: 0, locked: false, muted: false, hidden: false },
+      { id: "video-track", name: "Video", kind: "video", order: 1, locked: false, muted: false, hidden: false },
+      { id: "lyrics-track", name: "Lyrics", kind: "lyrics", order: 2, locked: false, muted: false, hidden: false },
+      { id: "markers-track", name: "Markers", kind: "markers", order: 3, locked: false, muted: false, hidden: false },
+    ],
+    clips: [],
+    assets: [],
+    markers: [],
+    renderSettings: {
+      format: "mp4",
+      codec: "h264",
+      audioCodec: "aac",
+      width: 1080,
+      height: 1920,
+      fps: 30,
+      includeCaptions: true,
+      quality: "standard",
+    },
+  };
+}
+
+export async function seedEditorProjectWithAsset(client = adminClient()): Promise<SeededEditorProject> {
+  const accountId = await seedPrimaryAccount(client);
+  const projectId = randomUUID();
+  const snapshot = editorFixtureSnapshot(projectId);
+
+  const mediaAsset = await client
+    .from("media_assets")
+    .insert({
+      account_id: accountId,
+      kind: "video",
+      source: "e2e_fixture",
+      storage_bucket: "editor-fixtures",
+      storage_path: `e2e/${randomUUID()}.mp4`,
+      public_url: "https://example.com/e2e-editor-video.mp4",
+      mime_type: "video/mp4",
+      file_name: "e2e-editor-video.mp4",
+      byte_size: 1024,
+      duration_seconds: 5,
+      width: 1080,
+      height: 1920,
+    })
+    .select("id")
+    .single();
+  if (mediaAsset.error) throw mediaAsset.error;
+
+  const project = await client
+    .from("video_editor_projects")
+    .insert({
+      id: projectId,
+      account_id: accountId,
+      title: "E2E editor seed",
+      source_type: "blank",
+      aspect_ratio: "9:16",
+      width: 1080,
+      height: 1920,
+      duration_ms: 15000,
+      status: "draft",
+    })
+    .select("id")
+    .single();
+  if (project.error) throw project.error;
+
+  const revision = await client
+    .from("video_editor_revisions")
+    .insert({
+      project_id: projectId,
+      revision_number: 1,
+      snapshot,
+      autosave: false,
+      comment: "E2E initial revision",
+    })
+    .select("id")
+    .single();
+  if (revision.error) throw revision.error;
+
+  const editorAsset = await client
+    .from("video_editor_assets")
+    .insert({
+      project_id: projectId,
+      media_asset_id: (mediaAsset.data as DbRow).id,
+      kind: "video",
+      name: "E2E seeded video",
+      duration_ms: 5000,
+      width: 1080,
+      height: 1920,
+      public_url: "https://example.com/e2e-editor-video.mp4",
+      thumbnail_url: "https://example.com/e2e-editor-thumb.jpg",
+      provenance: { source: "e2e_fixture" },
+      metadata: {},
+    })
+    .select("id")
+    .single();
+  if (editorAsset.error) throw editorAsset.error;
+
+  const updated = await client
+    .from("video_editor_projects")
+    .update({ current_revision_id: (revision.data as DbRow).id })
+    .eq("id", projectId);
+  if (updated.error) throw updated.error;
+
+  return {
+    accountId,
+    projectId,
+    revisionId: String((revision.data as DbRow).id),
+    mediaAssetId: String((mediaAsset.data as DbRow).id),
+    editorAssetId: String((editorAsset.data as DbRow).id),
+  };
+}
+
+export async function cleanupEditorProject(seed: Pick<SeededEditorProject, "accountId" | "projectId" | "mediaAssetId">, client = adminClient()): Promise<void> {
+  await client.from("video_editor_projects").delete().eq("id", seed.projectId);
+  await client.from("media_assets").delete().eq("id", seed.mediaAssetId);
+  await cleanupAccount(seed.accountId, client);
+}

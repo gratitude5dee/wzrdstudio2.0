@@ -10,4 +10,12 @@ export const appRoutes = {
   lyricsRemix: (id: string) =>
     `/?mode=autopilot&view=campaign&lyricTemplateId=${encodeURIComponent(id)}`,
   lyricsJobs: (id: string) => `/lyrics/${id}/jobs`,
+  editorNew: "/editor/new",
+  editorProject: (id: string) => `/editor/${id}`,
+  editorRenderJob: (projectId: string, renderJobId: string) =>
+    `/editor/${projectId}/render/${renderJobId}`,
+  editorFromTemplate: (templateId: string) =>
+    `/editor/new?templateId=${encodeURIComponent(templateId)}`,
+  editorFromLibraryItem: (libraryItemId: string) =>
+    `/editor/new?libraryItemId=${encodeURIComponent(libraryItemId)}`,
 };

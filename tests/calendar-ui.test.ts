@@ -117,6 +117,14 @@ describe("calendar post UI helpers", () => {
     expect(studioPanel).not.toContain("useNavigate");
   });
 
+  it("links scheduled library posts back into the WorldStudio editor", () => {
+    const source = readFileSync("src/components/studio/StudioPostReview.tsx", "utf8");
+
+    expect(source).toContain('import { appRoutes } from "@/lib/routes"');
+    expect(source).toContain("appRoutes.editorFromLibraryItem(libraryPreview.id)");
+    expect(source).toContain("Open in Editor");
+  });
+
   it("formats publish statuses for the post review sheet", () => {
     expect(publishStatusLabel("blocked_missing_privacy")).toBe("blocked missing privacy");
     expect(publishStatusLabel("regenerated")).toBe("regenerated");

@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { ExternalLink, PlugZap, Send } from "lucide-react";
 import { SUPABASE_URL } from "@/integrations/supabase/client";
 import { buildTikTokConnectUrl } from "@/lib/fanagent/accounts";
+import { appRoutes } from "@/lib/routes";
 import {
   creatorPrivacyOptions,
   isCreatorCommentDisabled,
@@ -186,9 +187,14 @@ export default function StudioPostReview({
           <strong>{provenanceSummary(libraryPreview)}</strong>
         </div>
         {libraryPreview ? (
-          <Link className="button ghost" to={`/library/${libraryPreview.audio_clip_id}`}>
-            <ExternalLink size={14} /> View library item
-          </Link>
+          <>
+            <Link className="button ghost" to={`/library/${libraryPreview.audio_clip_id}`}>
+              <ExternalLink size={14} /> View library item
+            </Link>
+            <Link className="button ghost" to={appRoutes.editorFromLibraryItem(libraryPreview.id)}>
+              <ExternalLink size={14} /> Open in Editor
+            </Link>
+          </>
         ) : null}
         <div className="action-row">
           {readOnlyPost ? null : (

@@ -86,6 +86,19 @@ describe("FanAgent lyric template handoff", () => {
     expect(source).toContain("if (!input.template.trimmed_audio_asset_id)");
   });
 
+  it("exposes Open in Editor CTAs from lyrics template list and wizard", () => {
+    const home = readFileSync("src/pages/lyrics/LyricsHome.tsx", "utf8");
+    const wizard = readFileSync("src/pages/lyrics/LyricsWizard.tsx", "utf8");
+    const builder = readFileSync("src/components/autopilot/LyricsTemplateBuilder.tsx", "utf8");
+
+    expect(home).toContain("Open in Editor");
+    expect(home).toContain("appRoutes.editorFromTemplate(t.id)");
+    expect(wizard).toContain("handleOpenInEditor");
+    expect(wizard).toContain("appRoutes.editorFromTemplate(template.id)");
+    expect(builder).toContain("onOpenInEditor");
+    expect(builder).toContain("Open in Editor");
+  });
+
   it("keeps lyrics frontend calls compatible with envelope-shaped edge responses", () => {
     const source = readFileSync("src/lib/lyrics/api.ts", "utf8");
     const invokeHelper = readFileSync("src/lib/fanagent/invokeFunction.ts", "utf8");

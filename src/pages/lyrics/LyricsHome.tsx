@@ -66,11 +66,7 @@ export default function LyricsHome() {
         <h1>
           <FileMusic size={18} /> Lyrics templates
         </h1>
-        <button
-          type="button"
-          className="button primary"
-          onClick={() => nav(appRoutes.lyricsNew)}
-        >
+        <button type="button" className="button primary" onClick={() => nav(appRoutes.lyricsNew)}>
           <Plus size={14} /> New template
         </button>
       </header>
@@ -81,11 +77,7 @@ export default function LyricsHome() {
       ) : visible.length === 0 ? (
         <div className="empty-state">
           <p>No templates yet.</p>
-          <button
-            type="button"
-            className="button primary"
-            onClick={() => nav(appRoutes.lyricsNew)}
-          >
+          <button type="button" className="button primary" onClick={() => nav(appRoutes.lyricsNew)}>
             <Plus size={14} /> Create your first template
           </button>
         </div>
@@ -113,21 +105,26 @@ export default function LyricsHome() {
                   <span>{t.lyric_blocks?.length ?? 0} blocks</span>
                 </div>
                 <div className="lyr-card__actions">
-                  <button
-                    type="button"
-                    className="lyr-btn primary"
-                    onClick={() => openTemplate(t)}
-                  >
+                  <button type="button" className="lyr-btn primary" onClick={() => openTemplate(t)}>
                     {t.status === "saved" ? "Open remix" : "Continue"}
                   </button>
                   {t.status === "saved" ? (
-                    <button
-                      type="button"
-                      className="lyr-btn"
-                      onClick={() => nav(appRoutes.lyricsJobs(t.id))}
-                    >
-                      Jobs
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        className="lyr-btn"
+                        onClick={() => nav(appRoutes.editorFromTemplate(t.id))}
+                      >
+                        Open in Editor
+                      </button>
+                      <button
+                        type="button"
+                        className="lyr-btn"
+                        onClick={() => nav(appRoutes.lyricsJobs(t.id))}
+                      >
+                        Jobs
+                      </button>
+                    </>
                   ) : null}
                 </div>
               </div>

@@ -13,6 +13,8 @@ const LyricsHome = lazy(() => import("./pages/lyrics/LyricsHome"));
 const LyricsWizard = lazy(() => import("./pages/lyrics/LyricsWizard"));
 const RemixEditor = lazy(() => import("./pages/lyrics/RemixEditor"));
 const RemixJobs = lazy(() => import("./pages/lyrics/RemixJobs"));
+const EditorCreateRedirectPage = lazy(() => import("./pages/editor/EditorCreateRedirectPage"));
+const WorldStudioEditorPage = lazy(() => import("./pages/editor/WorldStudioEditorPage"));
 
 const wrap = (node: React.ReactNode) => (
   <AppShell>
@@ -24,7 +26,14 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<AppShell><App /></AppShell>} />
+        <Route
+          path="/"
+          element={
+            <AppShell>
+              <App />
+            </AppShell>
+          }
+        />
         <Route path="/library" element={wrap(<LibraryLanding />)} />
         <Route path="/clips" element={wrap(<ClipsPage />)} />
         <Route path="/library/:audioClipId" element={wrap(<LibraryDetail />)} />
@@ -34,6 +43,12 @@ createRoot(document.getElementById("root")!).render(
         <Route path="/lyrics/:templateId" element={wrap(<LyricsWizard />)} />
         <Route path="/lyrics/:templateId/remix" element={wrap(<RemixEditor />)} />
         <Route path="/lyrics/:templateId/jobs" element={wrap(<RemixJobs />)} />
+        <Route path="/editor/new" element={wrap(<EditorCreateRedirectPage />)} />
+        <Route
+          path="/editor/:projectId/render/:renderJobId"
+          element={wrap(<WorldStudioEditorPage />)}
+        />
+        <Route path="/editor/:projectId" element={wrap(<WorldStudioEditorPage />)} />
         <Route path="/calendar" element={<Navigate to="/?mode=studio&view=calendar" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

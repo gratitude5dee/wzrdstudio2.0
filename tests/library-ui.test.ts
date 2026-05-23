@@ -219,6 +219,16 @@ describe("library UI helpers", () => {
     expect(source).not.toContain("targetDurationSec: activeTarget.item.duration_sec");
   });
 
+  it("exposes a Library detail bulk action to open the selected item in WorldStudio editor", () => {
+    const source = readFileSync("src/pages/library/LibraryDetail.tsx", "utf8");
+
+    expect(source).toContain("createEditorProjectFromLibraryItem");
+    expect(source).toContain("function openSelectedInEditor");
+    expect(source).toContain("selectedIds.size");
+    expect(source).toContain("Open selected in Editor");
+    expect(source).toContain("appRoutes.editorProject(result.project.id)");
+  });
+
   it("keeps library scheduling scoped to ready rows with final assets", () => {
     expect(canScheduleLibraryItem(items[0])).toBe(true);
     expect(canScheduleLibraryItem(items[1])).toBe(false);

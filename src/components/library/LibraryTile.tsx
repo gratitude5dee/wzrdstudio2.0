@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   CalendarClock,
   Ban,
@@ -10,7 +11,9 @@ import {
   Square,
   Video,
 } from "lucide-react";
+import { createEditorProjectFromLibraryItem } from "@/lib/editor/api";
 import type { LibraryItem, LibrarySegment } from "@/lib/library/types";
+import { appRoutes } from "@/lib/routes";
 import {
   canScheduleLibraryItem,
   libraryAttributionLines,
@@ -44,7 +47,9 @@ export default function LibraryTile({
   onReplaceSegment: (item: LibraryItem, segmentIndex: number) => void;
   onSchedule: (item: LibraryItem) => void;
 }) {
+  const nav = useNavigate();
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const [editorState, setEditorState] = useState<"idle" | "opening" | "failed">("idle");
   const mediaUrl = item.media?.public_url ?? null;
   const previewUrl = item.thumbnail_url ?? mediaUrl;
   const downloadUrl = libraryDownloadUrl(item);
@@ -64,6 +69,21 @@ export default function LibraryTile({
       setCopyState("copied");
     } catch {
       setCopyState("failed");
+    }
+  }
+
+  async function openInEditor() {
+    setEditorState("opening");
+    try {
+      const result = await createEditorProjectFromLibraryItem({
+        libraryItemId: item.id,
+        accountId: item.account_id,
+        title: item.default_caption ?? `Library clip ${item.library_index + 1}`,
+        openExisting: true,
+      });
+      nav(appRoutes.editorProject(result.project.id));
+    } catch {
+      setEditorState("failed");
     }
   }
 
@@ -168,6 +188,14 @@ export default function LibraryTile({
           <button
             type="button"
             className="button ghost"
+            disabled={editorState === "opening"}
+            onClick={() => void openInEditor()}
+          >
+            <Video size={14} /> {editorState === "opening" ? "Opening…" : editorState === "failed" ? "Editor failed" : "Open in Editor"}
+          </button>
+          <button
+            type="button"
+            className="button ghost"
             disabled={item.status === "posted" || item.status === "blocked"}
             onClick={() => onMarkUnfit(item)}
           >
@@ -200,3 +228,5 @@ export default function LibraryTile({
     </article>
   );
 }
+
+
