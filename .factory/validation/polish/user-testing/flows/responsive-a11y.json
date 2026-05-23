@@ -1,0 +1,125 @@
+{
+  "groupId": "responsive-a11y",
+  "testedAt": "2026-03-13T12:00:00.000Z",
+  "isolation": {
+    "appUrl": "http://localhost:8080/kanvas?studio=worldview",
+    "browserSession": "9ba565352e75__responsive-a11y",
+    "authBypass": "VITE_BYPASS_AUTH_FOR_TESTS=true"
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-POLISH-005",
+      "title": "Responsive at 768px viewport",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Navigate to /kanvas?studio=worldview at default viewport",
+          "expected": "Worldview section loads correctly",
+          "observed": "Worldview section loaded successfully with scene strip and content"
+        },
+        {
+          "action": "Create scene and seed store with world + 4 takes",
+          "expected": "World card and takes grid visible",
+          "observed": "World card displayed with 600x400 placeholder, 4 takes in 3-column grid"
+        },
+        {
+          "action": "Set viewport to 768px width",
+          "expected": "Layout renders correctly, no horizontal overflow",
+          "observed": "With 1 scene: layout renders correctly, no overflow. Sidebar icons hidden. Takes grid remains 3 columns. No horizontal overflow."
+        },
+        {
+          "action": "Add 6 more scenes (total 7) to test scene strip scroll at 768px",
+          "expected": "Scene strip scrolls horizontally, no page-level horizontal overflow",
+          "observed": "Scene strip has overflow-x:auto and scrolls horizontally (scrollWidth 1026 > clientWidth 997). However, page-level horizontal overflow occurs (bodyScrollWidth 1045 > bodyClientWidth 768). Root cause: .flex-1 main content container lacks min-w-0, so it expands to content width."
+        },
+        {
+          "action": "Check horizontal overflow with DOM inspection at 768px",
+          "expected": "No horizontal overflow",
+          "observed": "With multiple scenes: bodyScrollWidth=1045 vs bodyClientWidth=768 — horizontal overflow present. The .flex-1 element (main content) is 1021px wide because it lacks min-width:0."
+        },
+        {
+          "action": "Set viewport to 639px (below 640px) to test 2-column takes grid",
+          "expected": "Takes grid switches to 2 columns",
+          "observed": "Takes grid correctly switches to 2 columns (grid-cols-2 sm:grid-cols-3 — sm breakpoint at 640px). Grid template columns: 504.656px 504.656px."
+        },
+        {
+          "action": "Check horizontal overflow at 639px",
+          "expected": "No horizontal overflow",
+          "observed": "Horizontal overflow present: bodyScrollWidth=1053 vs bodyClientWidth=639. Same root cause — .flex-1 container lacks min-w-0."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "polish/responsive-a11y/VAL-POLISH-005-768px-width.png",
+          "polish/responsive-a11y/VAL-POLISH-005-768px-scene-strip-scroll.png",
+          "polish/responsive-a11y/VAL-POLISH-005-640px-takes-grid.png",
+          "polish/responsive-a11y/VAL-POLISH-005-639px-takes-grid.png"
+        ],
+        "consoleErrors": "none",
+        "network": "N/A — no network requests for this assertion"
+      },
+      "issues": "Horizontal overflow occurs at narrow viewports (768px and below) when content is wider than viewport. The .flex-1 main content container in KanvasPage layout lacks min-w-0 (Tailwind min-w-0), causing it to expand beyond its flex parent. Scene strip overflow-x-auto works for its own content but cannot contain the parent overflow. Takes grid correctly uses grid-cols-2 below sm:640px breakpoint. Fix: add min-w-0 class to the .flex-1 element in the main content layout."
+    },
+    {
+      "id": "VAL-POLISH-006",
+      "title": "Accessibility attributes",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Inspect all buttons in worldview section for aria-label/title attributes",
+          "expected": "All interactive elements have proper aria-label or title",
+          "observed": "All 20 interactive elements within the worldview section have proper accessibility attributes. Scene chips: aria-label='Scene N' + aria-selected. Remove buttons: aria-label='Remove Scene N'. New Scene: aria-label='New Scene'. Take refresh buttons: aria-label='Refresh take'. Prompt input: aria-label='Prompt'."
+        },
+        {
+          "action": "Check scene chips for aria-selected attribute",
+          "expected": "Scene chips have aria-selected",
+          "observed": "All scene chips (role='button') have aria-selected attribute. Active scene has aria-selected='true', others have aria-selected='false'."
+        },
+        {
+          "action": "Enter world-viewer mode and inspect HUD elements",
+          "expected": "All HUD buttons have aria-label or title",
+          "observed": "All world-viewer buttons have aria-labels: 'Select lens', 'Zoom out', 'Zoom in', 'Help', 'Close viewer', 'Reset camera', 'Toggle motion' (with aria-pressed), 'Capture Take'."
+        },
+        {
+          "action": "Check viewfinder frame for pointer-events-none",
+          "expected": "Viewfinder frame has pointer-events-none",
+          "observed": "Viewfinder frame element found with class 'pointer-events-none absolute inset-0 z-10 flex items-center justify-center' and computed pointerEvents='none'. Contains AF badge and camera info."
+        },
+        {
+          "action": "Identify any buttons without accessibility attributes",
+          "expected": "No worldview buttons missing a11y",
+          "observed": "5 buttons without aria-label/title/text found, but ALL are KanvasPage sidebar (<aside>) icon-only buttons (Image, Video, Lip Sync, Cinema Studio, Worldview icons), NOT worldview-specific elements. All worldview-specific interactive elements have proper accessibility attributes."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "polish/responsive-a11y/VAL-POLISH-006-world-viewer.png",
+          "polish/responsive-a11y/VAL-POLISH-006-viewer-a11y.png"
+        ],
+        "consoleErrors": "none",
+        "domInspection": {
+          "worldviewInteractiveElements": 20,
+          "withA11y": 20,
+          "withoutA11y": 0,
+          "sceneChipsWithAriaSelected": 7,
+          "viewfinderPointerEventsNone": true,
+          "toggleMotionHasAriaPressed": true,
+          "sidebarButtonsMissingA11y": 5,
+          "sidebarButtonsNote": "These are KanvasPage sidebar icon buttons, not worldview-specific"
+        }
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "Store seeding required correct type structure — initial attempt with flat 'prompt' string and 'camera.transform' instead of 'cameraTransform' failed silently. The addTake action requires sceneId on the take object itself, and addWorld requires prompt as {kind:'text',text:string}.",
+      "resolved": true,
+      "resolution": "Checked worldview.ts types and worldview-store.ts action signatures to use correct shapes",
+      "affectedAssertions": ["VAL-POLISH-005"]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 2 assertions: 1 passed (VAL-POLISH-006: all worldview interactive elements have proper a11y attributes, viewfinder has pointer-events-none), 1 failed (VAL-POLISH-005: horizontal overflow at narrow viewports due to .flex-1 container missing min-w-0). Takes grid correctly switches to 2-column layout below 640px."
+}

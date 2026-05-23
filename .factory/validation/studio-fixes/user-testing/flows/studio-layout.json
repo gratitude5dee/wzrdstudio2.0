@@ -1,0 +1,119 @@
+{
+  "groupId": "studio-layout",
+  "testedAt": "2026-03-14T12:00:00.000Z",
+  "isolation": {
+    "appUrl": "http://localhost:8080",
+    "authBypass": true,
+    "browserSession": "9b5338f298aa__studio-layout",
+    "route": "/projects/test-project/studio"
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-STUDIO-003",
+      "title": "Shortcuts Button Moved Left 25-30px",
+      "status": "pass",
+      "steps": [
+        { "action": "Navigate to /projects/test-project/studio", "expected": "Studio page loads with canvas", "observed": "Studio page loaded successfully with canvas, toolbar, and right panel" },
+        { "action": "Dismiss preset overlay", "expected": "Clean canvas visible", "observed": "Overlay dismissed, clean canvas visible" },
+        { "action": "Measure shortcuts button position via getBoundingClientRect()", "expected": "Button at left of canvas, not overlapping sidebar", "observed": "Shortcuts button at x=56, y=658. Left toolbar ends at x=47 (maxRight=47). Gap of 9px between toolbar and button. No overlap." },
+        { "action": "Check right panel overlap", "expected": "No overlap with right panel", "observed": "Right panel starts at x=892, shortcuts button right edge at x=195. No overlap." }
+      ],
+      "evidence": {
+        "screenshots": ["studio-fixes/studio-layout/VAL-STUDIO-003-shortcuts-position.png", "studio-fixes/studio-layout/studio-clean-canvas.png"],
+        "consoleErrors": "Expected errors only (test-project UUID invalid for Supabase)",
+        "network": "N/A - layout/position test"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-STUDIO-004",
+      "title": "Shortcuts Overlay Centered on Page",
+      "status": "fail",
+      "steps": [
+        { "action": "Click Shortcuts button to open overlay", "expected": "Keyboard Shortcuts overlay appears centered on viewport", "observed": "Keyboard Shortcuts overlay appeared but is NOT centered" },
+        { "action": "Measure overlay position via getBoundingClientRect()", "expected": "Overlay panel center aligns with viewport center (640, 360)", "observed": "Panel top-left at (640, 360), dimensions 600x576. Panel center at (940, 648) instead of viewport center (640, 360). Horizontal offset: +300px, Vertical offset: +288px." },
+        { "action": "Inspect CSS classes and computed styles", "expected": "CSS transform -translate-x-1/2 -translate-y-1/2 applied", "observed": "CSS classes present: 'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2'. CSS variables set: --tw-translate-x: -50%, --tw-translate-y: -50%. BUT computed transform: 'none', computed translate: 'none'. The centering transform is NOT being applied." },
+        { "action": "Visual verification via screenshot", "expected": "Overlay centered in viewport", "observed": "Overlay visually positioned in bottom-right quadrant with top-left corner at viewport center" }
+      ],
+      "evidence": {
+        "screenshots": ["studio-fixes/studio-layout/VAL-STUDIO-004-shortcuts-overlay.png", "studio-fixes/studio-layout/VAL-STUDIO-004-overlay-position-detail.png"],
+        "consoleErrors": "No overlay-specific console errors",
+        "network": "N/A - layout/position test"
+      },
+      "issues": "The shortcuts overlay panel has the correct Tailwind CSS classes for centering (fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2) and the CSS custom properties are set (--tw-translate-x: -50%, --tw-translate-y: -50%), but the computed transform is 'none'. The translate transform is not being applied, causing the panel's top-left corner to sit at the viewport center instead of the panel being centered. This appears to be a Tailwind CSS transform composition issue where the transform utility classes are not generating the actual CSS transform property."
+    },
+    {
+      "id": "VAL-STUDIO-005",
+      "title": "Queue Indicator Relocated to Top-Left",
+      "status": "pass",
+      "steps": [
+        { "action": "Locate QueueIndicator on studio page", "expected": "QueueIndicator in top-left of canvas area", "observed": "QueueIndicator button found at position (17, 75), clearly in top-left of canvas. Header ends at y=56, button is 19px below header." },
+        { "action": "Verify position is top-left quadrant", "expected": "isTopLeft: true", "observed": "isTopLeft: true. x=17 (far left), y=75 (just below header). Width=198, height=44." },
+        { "action": "Test functionality by clicking", "expected": "Queue expands/shows status", "observed": "Queue button clickable, shows '0 active' status. After workflow generation, updated to '1 queued'." },
+        { "action": "Take screenshot evidence", "expected": "Visual confirmation of top-left position", "observed": "Screenshot clearly shows Queue indicator in top-left corner" }
+      ],
+      "evidence": {
+        "screenshots": ["studio-fixes/studio-layout/VAL-STUDIO-005-queue-topleft.png", "studio-fixes/studio-layout/VAL-STUDIO-005-queue-expanded.png"],
+        "consoleErrors": "No queue-specific errors",
+        "network": "N/A - layout/position test"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-STUDIO-006",
+      "title": "Workflow Generator in Right Panel Tab",
+      "status": "pass",
+      "steps": [
+        { "action": "Identify right panel tabs", "expected": "Generate/Workflow tab present among panel tabs", "observed": "Right panel has three tabs: Gallery, Nodes, Generate. 'Generate' tab present at x=1102." },
+        { "action": "Click Generate tab", "expected": "Workflow Generator UI appears in panel", "observed": "Workflow Generator UI displayed with header 'Workflow Generator - Generate a connected graph using your current canvas context', preset prompts (Coffee shop marketing, Product description copy, Social media pack, Logo exploration, Video production plan), EXAMPLES section, text input, and submit button." },
+        { "action": "Check for old floating popover", "expected": "No floating popover or button for workflow generation outside right panel", "observed": "All generate/workflow-related buttons are within the right panel (x > 700). No floating popovers found (0 open popovers). Old popover removed." }
+      ],
+      "evidence": {
+        "screenshots": ["studio-fixes/studio-layout/VAL-STUDIO-006-generate-tab.png", "studio-fixes/studio-layout/VAL-STUDIO-007-generate-tab-full.png"],
+        "consoleErrors": "No specific errors",
+        "network": "N/A - UI structure test"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-STUDIO-007",
+      "title": "Workflow Generator Tab Generates and Inserts",
+      "status": "pass",
+      "steps": [
+        { "action": "Type prompt in workflow generator input", "expected": "Text appears in input field", "observed": "Typed 'Create a simple image generation workflow' in the text input. Submit button became enabled." },
+        { "action": "Click submit button to generate workflow", "expected": "Workflow generation triggered, nodes appear on canvas", "observed": "Generation triggered. Console log: '🎨 Adding generated workflow: {nodes: 1, edges: 0}'. A GENERATED IMAGE node appeared on canvas with generated prompt 'A serene landscape with a mountain range, misty valleys, and a sunny sky, realistic style, high-definition quality'." },
+        { "action": "Verify node is functional", "expected": "Node has correct UI and is queued", "observed": "Node shows QUEUED status badge. Queue indicator updated to '1 queued'. Node has image preview placeholder, prompt text, AUTO settings, and execution controls. Node execution attempted but failed with 'Not authenticated' (expected in test mode)." },
+        { "action": "Check console for unhandled errors", "expected": "No unhandled errors", "observed": "Expected errors only: Supabase UUID validation (test-project), authentication error for execution. No unhandled promise rejections." }
+      ],
+      "evidence": {
+        "screenshots": ["studio-fixes/studio-layout/VAL-STUDIO-007-prompt-filled.png", "studio-fixes/studio-layout/VAL-STUDIO-007-generate-result.png"],
+        "consoleErrors": "Expected: Supabase 400/404 (test-project UUID), execution auth error. No unhandled errors.",
+        "network": "POST to generate-workflow edge function -> success (nodes returned). POST to save_compute_graph -> 404 (expected, test project). Execution -> auth error (expected)."
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "Preset overlay appears on first load of studio page, requiring dismissal before testing canvas layout",
+      "resolved": true,
+      "resolution": "Clicked 'Dismiss' button to clear overlay",
+      "affectedAssertions": ["VAL-STUDIO-003"]
+    },
+    {
+      "description": "Shortcuts overlay close button (X) requires re-snapshot after opening to find the new button ref",
+      "resolved": true,
+      "resolution": "Re-snapshotted to get the X button ref, then clicked it",
+      "affectedAssertions": ["VAL-STUDIO-004"]
+    },
+    {
+      "description": "Using 'test-project' as project ID causes Supabase UUID validation errors in console, though studio UI still functions",
+      "resolved": true,
+      "resolution": "Errors are expected and non-blocking for UI validation",
+      "affectedAssertions": ["VAL-STUDIO-007"]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 5 assertions: 4 passed, 1 failed. VAL-STUDIO-003 (shortcuts button position), VAL-STUDIO-005 (queue top-left), VAL-STUDIO-006 (workflow generator tab), VAL-STUDIO-007 (workflow generation) all pass. VAL-STUDIO-004 FAILS: the shortcuts overlay has correct centering CSS classes (fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2) but the Tailwind translate transform is not being applied (computed transform: none), causing the panel to display offset to the bottom-right instead of centered."
+}

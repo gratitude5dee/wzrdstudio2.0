@@ -1,0 +1,115 @@
+{
+  "groupId": "flow-workflow-canvas",
+  "testedAt": "2026-03-13T12:00:00.000Z",
+  "isolation": {
+    "appUrl": "http://localhost:8080/kanvas?studio=worldview",
+    "browserSession": "9ba565352e75__flow-workflow-canvas",
+    "authBypass": "VITE_BYPASS_AUTH_FOR_TESTS=true"
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-CROSS-001",
+      "title": "Full worldview workflow",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Navigate to /kanvas?studio=worldview",
+          "expected": "Worldview tab active, scene strip with New Scene button",
+          "observed": "Worldview tab highlighted with amber, scene strip shows 'New Scene' button, empty state message 'Create a new scene to get started'"
+        },
+        {
+          "action": "Click 'New Scene' button",
+          "expected": "New scene chip appears with amber highlight, Create a 3D World CTA visible",
+          "observed": "Scene 1 chip created with amber highlight and glow. 'Create a 3D World' CTA card with Globe2 icon and dashed border displayed in canvas area. Bottom prompt bar with Sparkles icon visible."
+        },
+        {
+          "action": "Click 'Create a 3D World' CTA",
+          "expected": "World creator panel opens with text/image toggle, textarea, model selector, Generate World button",
+          "observed": "World creator panel opened with: Text/Image toggle (Text active), textarea placeholder 'Describe the 3D world you want to create...', Model dropdown set to 'Marble 0.1-plus', amber 'Generate World' button with Zap icon"
+        },
+        {
+          "action": "Enter prompt 'A beautiful mountain landscape with a lake and pine trees'",
+          "expected": "Prompt text appears in textarea, Generate World button becomes active (amber)",
+          "observed": "Prompt text entered, Generate World button turned amber/active"
+        },
+        {
+          "action": "Click 'Generate World'",
+          "expected": "Graceful error handling - error toast, inline error state, no crash",
+          "observed": "Inline error state displayed: 'World generation failed' heading, 'Failed to send a request to the Edge Function' description, amber 'Retry' button. Toast notification appeared at bottom: 'Failed to send a request to the Edge Function'. UI remained stable, no crash."
+        },
+        {
+          "action": "Verify no unhandled console errors",
+          "expected": "No unhandled promise rejections or console errors",
+          "observed": "Console errors check returned clean - no errors detected"
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "polish/flow-workflow-canvas/VAL-CROSS-001-step1-initial-load.png",
+          "polish/flow-workflow-canvas/VAL-CROSS-001-step1-worldview-tab-active.png",
+          "polish/flow-workflow-canvas/VAL-CROSS-001-step2-new-scene-created.png",
+          "polish/flow-workflow-canvas/VAL-CROSS-001-step3-world-creator-open.png",
+          "polish/flow-workflow-canvas/VAL-CROSS-001-step4-prompt-entered.png",
+          "polish/flow-workflow-canvas/VAL-CROSS-001-step5-generate-world-clicked.png"
+        ],
+        "consoleErrors": "none",
+        "network": "POST to worldlabs-proxy edge function failed as expected (no API key configured)"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-POLISH-003",
+      "title": "Add to Canvas functionality",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Seed store with 2 generated shots via browser console (addGeneratedShot with sceneId, status:completed, images array)",
+          "expected": "Generated shot cards appear in GENERATED SHOTS grid",
+          "observed": "Two generated shot cards displayed: 'Mountain' (orange, flux-dev badge) and 'Ocean' (blue, flux-pro-ultra badge) in 2-column grid"
+        },
+        {
+          "action": "Hover over first generated shot card",
+          "expected": "Plus/Add button appears on hover",
+          "observed": "Plus button (circular, dark background, top-right corner) appeared on hover with aria-label='Add to canvas' and title='Add to canvas'"
+        },
+        {
+          "action": "Click Plus/Add button",
+          "expected": "toast.success('Added to canvas!') appears, useCanvasStore.addObject() called with type 'image'",
+          "observed": "Success toast 'Added to canvas!' appeared at bottom-right with green checkmark. Canvas store verified: 1 object added with type 'image'."
+        },
+        {
+          "action": "Verify canvas store state",
+          "expected": "Canvas store has new object of type 'image'",
+          "observed": "canvasStore.getState().objects has 1 object with type:'image'"
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "polish/flow-workflow-canvas/VAL-POLISH-003-step1-generated-shots-visible.png",
+          "polish/flow-workflow-canvas/VAL-POLISH-003-step2-add-button-visible.png",
+          "polish/flow-workflow-canvas/VAL-POLISH-003-step3-success-toast.png"
+        ],
+        "consoleErrors": "none",
+        "network": "N/A (client-side store operation only)"
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "The Plus/Add button on generated shot cards is only visible on hover (CSS class 'hidden group-hover:flex'). Required using mouse move to specific coordinates before the button ref appeared in snapshots.",
+      "resolved": true,
+      "resolution": "Used agent-browser mouse move to hover over the card, then the button appeared in the interactive snapshot",
+      "affectedAssertions": ["VAL-POLISH-003"]
+    },
+    {
+      "description": "The addGeneratedShot store action requires a GeneratedShot object with sceneId, status, and images[] fields — different from the simplified signature suggested in the task prompt. Had to read the actual type definition to use correct structure.",
+      "resolved": true,
+      "resolution": "Checked source code for GeneratedShot type definition and used correct fields: { id, sceneId, takeId, prompt, model, status:'completed', images:[{id, url, width, height}], createdAt }",
+      "affectedAssertions": ["VAL-POLISH-003"]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 2 assertions: 2 passed. VAL-CROSS-001 confirmed full worldview workflow (navigate → create scene → open creator → enter prompt → generate world → graceful error handling) with smooth UI transitions and no console errors. VAL-POLISH-003 confirmed Add to Canvas functionality: hover reveals Plus button on generated shot cards, clicking calls useCanvasStore.addObject() with type 'image', and toast.success('Added to canvas!') appears."
+}

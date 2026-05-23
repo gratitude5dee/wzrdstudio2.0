@@ -1,0 +1,9 @@
+{
+  "name": "wzrd-studio",
+  "version": "1.0.0",
+  "entry": "src/main.tsx",
+  "build": "bun run build",
+  "test": "bunx vitest run",
+  "skills_index": "agent-skills/index.json",
+  "mcp_server": "https://ixkkrousepsiorwlaycp.supabase.co/functions/v1/mcp-server"
+}

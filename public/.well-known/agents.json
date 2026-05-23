@@ -1,0 +1,19 @@
+{
+  "$schema": "https://lovable.dev/schemas/well-known-agents.json",
+  "name": "WZRD Studio",
+  "description": "Agentic film/video generation studio. Build, score, generate.",
+  "homepage": "https://gmistudio.lovable.app",
+  "mcp": {
+    "url": "https://ixkkrousepsiorwlaycp.supabase.co/functions/v1/mcp-server",
+    "transport": "streamable-http",
+    "auth": "bearer"
+  },
+  "skills_index": "/agent-skills/index.json",
+  "supported_harnesses": ["claude-code", "codex", "openclaw", "hermes"],
+  "configs": {
+    "claude-code": "/.claude/CLAUDE.md",
+    "codex": "/.codex/codex.md",
+    "openclaw": "/.openclaw/manifest.json",
+    "hermes": "/.hermes/agent.yaml"
+  }
+}

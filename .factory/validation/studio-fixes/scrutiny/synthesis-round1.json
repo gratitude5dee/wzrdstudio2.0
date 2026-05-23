@@ -1,0 +1,140 @@
+{
+  "milestone": "studio-fixes",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "npm run test",
+      "exitCode": 1,
+      "note": "Exit code 1 from 10 failing test files (9 pre-existing + 1 new). 3 failing tests (2 pre-existing connectionValidator assertion failures + 1 new StudioRightPanel.test.tsx timeout). New failure: 'shows the Nodes creation palette and creates a node from the right rail' times out at 5000ms — this is an untracked test file created during studio-fixes milestone. 48 files passing, 406 tests passing. Baseline was 9 files failing / 2 tests failing, now 10 files / 3 tests. Delta: +1 new test failure."
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "npx tsc --noEmit",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "npm run lint",
+      "exitCode": 1,
+      "note": "Exit code 1 from 769 lint problems (704 errors, 65 warnings). Baseline from project-setup was 765 (705 errors, 60 warnings). Delta of +4 problems (+5 warnings, -1 error), all consistent with established codebase patterns (no-explicit-any, react-hooks/rules-of-hooks). No new categories of lint errors introduced."
+    }
+  },
+  "reviewsSummary": {
+    "total": 5,
+    "passed": 4,
+    "failed": 1,
+    "failedFeatures": ["prompt-to-workflow-improvements"]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "prompt-to-workflow-improvements",
+      "severity": "blocking",
+      "description": "Missing authenticateRequest() in generate-workflow edge function (supabase/functions/generate-workflow/index.ts). The function accepts unauthenticated requests to invoke the Groq API, creating a security/billing exposure. Must add: import authenticateRequest from '../_shared/auth.ts' and call await authenticateRequest(req.headers) at the start of the handler. Every other edge function in the codebase (fal-poll, ai-synthesis, generate-text-generic, etc.) uses this pattern."
+    }
+  ],
+  "nonBlockingIssues": [
+    {
+      "featureId": "prompt-to-workflow-improvements",
+      "severity": "non_blocking",
+      "description": "WorkflowGeneratorTab.tsx uses green hex colors (#2EA866, #9FE8B3) instead of orange/amber convention. Though matching existing studio palette, new code should follow AGENTS.md color convention."
+    },
+    {
+      "featureId": "prompt-to-workflow-improvements",
+      "severity": "non_blocking",
+      "description": "generate-workflow edge function logs raw user prompt. Consider redacting/truncating user input in production logs for privacy."
+    },
+    {
+      "featureId": "prompt-to-workflow-improvements",
+      "severity": "non_blocking",
+      "description": "handlePromptBlur uses setTimeout(200ms) to delay autocomplete close — brittle on slow devices."
+    },
+    {
+      "featureId": "ffmpeg-nodes-and-descriptions",
+      "severity": "non_blocking",
+      "description": "FFmpeg nodes inherit generic Video/Audio port definitions rather than node-specific typed ports. Extract Frame outputs video port instead of image, Merge Videos gets image+prompt inputs instead of video+video, etc. Architecture doesn't support per-node port customization through seed options."
+    },
+    {
+      "featureId": "studio-ui-layout-fixes",
+      "severity": "non_blocking",
+      "description": "Dead 'rightOffsetPx' prop remains in QueueIndicatorProps interface after removing its usage."
+    },
+    {
+      "featureId": "studio-ui-layout-fixes",
+      "severity": "non_blocking",
+      "description": "StudioWorkflowLauncher.tsx component file still exists but is no longer imported by production code (only its test file). Dead code."
+    },
+    {
+      "featureId": "edge-validation-visual-feedback",
+      "severity": "non_blocking",
+      "description": "clearRejection() doesn't remove 'connection-rejected-flash' CSS class from DOM node element. If clearRejection is called before timeout fires, red border persists indefinitely."
+    },
+    {
+      "featureId": "node-processing-audit",
+      "severity": "non_blocking",
+      "description": "Audio preview type is 'json' instead of 'audio', inconsistent with other node kinds (text→'text', image→'image', video→'video')."
+    },
+    {
+      "featureId": "node-processing-audit",
+      "severity": "non_blocking",
+      "description": "Combine node pass-through relay only takes first connected input, not combining multiple inputs."
+    },
+    {
+      "featureId": "node-processing-audit",
+      "severity": "non_blocking",
+      "description": "generateAudioNode reads params once at function start and doesn't re-read latest state from store during async generation."
+    },
+    {
+      "featureId": "studio-ui-layout-fixes",
+      "severity": "non_blocking",
+      "description": "StudioRightPanel.test.tsx is an untracked file with 1 timeout failure ('shows the Nodes creation palette and creates a node from the right rail'). This test was created during studio-fixes but never committed. Either fix the timeout and commit, or delete the file."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Add explicit checklist to Edge Functions section: 'EVERY edge function MUST call authenticateRequest(req.headers) unless explicitly designated as public. Import from ../_shared/auth.ts.' This prevents the recurring pattern of workers creating edge functions without authentication.",
+      "evidence": "generate-workflow edge function (prompt-to-workflow-improvements) was created without authenticateRequest() despite AGENTS.md documenting the pattern. This is the second occurrence — elevenlabs-voices had the same gap flagged in the project-setup scrutiny.",
+      "isSystemic": true
+    },
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Add convention note: 'When removing features or relocating UI components, clean up dead interface props and component files. If a component is no longer imported by production code, either delete it or mark it deprecated with a TODO comment.'",
+      "evidence": "studio-ui-layout-fixes left dead rightOffsetPx prop in QueueIndicator and orphaned StudioWorkflowLauncher.tsx file.",
+      "isSystemic": false
+    },
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Add convention: 'Studio node preview types must follow the kind naming pattern: text→type:\"text\", image→type:\"image\", video→type:\"video\", audio→type:\"audio\". Do not use type:\"json\" for node preview data.'",
+      "evidence": "node-processing-audit used type:'json' for Audio preview while all other node kinds use their semantic type string. This creates inconsistency and fragile downstream logic.",
+      "isSystemic": false
+    },
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Consider adding guidance to Coding Conventions: 'Prefer React refs and state over direct DOM manipulation (classList.add/remove, querySelector) in hooks and components. If direct DOM manipulation is necessary, ensure cleanup functions handle both React state and DOM state consistently.'",
+      "evidence": "edge-validation-visual-feedback hook mixes useState with direct DOM classList manipulation, leading to a bug where clearRejection doesn't clean up the CSS class.",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "Commit diff for ffmpeg-nodes-and-descriptions shows all 6 files as 'new file' with full contents rather than incremental changes. AGENTS.md doesn't address commit hygiene.",
+      "reason": "This is a git artifact of how the commit was created (possibly replacing files entirely) rather than a codebase convention issue. The files are tracked correctly in git, and the diff is still reviewable. Commit hygiene guidance belongs in git best practices, not in AGENTS.md which focuses on code conventions."
+    },
+    {
+      "observation": "nodeConfigs.ts port definitions are separate from palette items and the architecture lacks per-node port customization via seed options.",
+      "reason": "This is an architectural design decision, not something to add to shared state. The limitation is real but would require a significant refactor to address and is already noted as a non-blocking issue."
+    },
+    {
+      "observation": "Fullstack-worker skill says 'implement backend first, then frontend' but audit features may not have a backend component.",
+      "reason": "Already flagged in project-setup scrutiny. The skill procedure is flexible enough — workers correctly adapted by noting it in their skill feedback."
+    },
+    {
+      "observation": "Worker used green hex colors matching existing studio palette rather than following AGENTS.md orange/amber convention.",
+      "reason": "Already documented in AGENTS.md as a convention. The root cause is a separate planned cleanup feature (color-hex-cleanup in misc-cleanup-1 milestone). Not a new guidance gap."
+    }
+  ],
+  "previousRound": null
+}

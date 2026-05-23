@@ -1,0 +1,52 @@
+{
+  "featureId": "worldview-shot-composer",
+  "reviewedAt": "2026-03-13T08:30:00.000Z",
+  "commitId": "334960016497b97b7af7d0f389891a99bc0abb30",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The ShotComposer component is a well-structured ~550-line addition to WorldviewSection.tsx that fully implements the shot-composer mode. All 13 expected behaviors are covered: TakeCard Compose Shot overlay wires into setActiveTake + setMode('shot-composer'); 256px take preview with gradient overlay; model selector dropdown with 4 models and emerald highlight; resolution/aspect-ratio/batch-size cycling buttons; send button disabled/enabled states and loading spinner; character chips (violet) and take reference chip (sky-blue) with dismiss; back-to-canvas navigation. The submit flow correctly builds a composite prompt, creates a GeneratedShot record, calls worldLabsService.generateShot, handles success (addShotResults, toast, switch to canvas) and failure (updateShotStatus, toast.error). Seven new store tests cover activeTake, generatingShot, character CRUD, and shot results. Code follows project conventions: @/ imports, cn() utility, Tailwind CSS, Framer Motion animations, sonner toasts, lucide-react icons, and the amber/emerald/violet/sky design language.",
+    "issues": [
+      {
+        "file": "src/components/worldview/WorldviewSection.tsx",
+        "line": 35,
+        "severity": "non_blocking",
+        "description": "Unused import: CharacterRef type is imported but never referenced in the component code. The characters array is typed via Zustand store inference. This doesn't cause errors since noImplicitAny is false, but is dead code."
+      },
+      {
+        "file": "src/components/worldview/WorldviewSection.tsx",
+        "line": 1130,
+        "severity": "non_blocking",
+        "description": "Default resolution is '1K' rather than '512'. The expected behavior lists cycling as '512 → 1K → 2K → 4K → 512', which could imply 512 as the starting value. However, the cycling logic itself works correctly and the worker's interactive checks confirmed 1K→2K cycling. This is a minor UX design choice, not a functional bug."
+      },
+      {
+        "file": "src/components/worldview/WorldviewSection.tsx",
+        "line": 1435,
+        "severity": "non_blocking",
+        "description": "Model selector dropdown and character menu (charMenuOpen) lack click-outside-to-close handlers. They only close on item selection or re-clicking the trigger button. This is consistent with the toggle pattern used elsewhere in the codebase but is a minor UX gap."
+      },
+      {
+        "file": "src/components/worldview/WorldviewSection.tsx",
+        "line": 1243,
+        "severity": "non_blocking",
+        "description": "In handleSubmit's catch block, updateShotStatus is called via useWorldviewStore.getState().updateShotStatus() instead of being destructured from the hook like other actions. This works correctly (common pattern in async callbacks) but is stylistically inconsistent with the rest of the component. The function should either be destructured at the top alongside other store actions, or the pattern should be consistent."
+      },
+      {
+        "file": "src/components/worldview/WorldviewSection.tsx",
+        "line": 1200,
+        "severity": "non_blocking",
+        "description": "selectedCharacters is a derived value recomputed every render (not memoized). It's included in handleSubmit's useCallback dependency array, which means the callback is recreated on every render anyway, negating the useCallback optimization. A useMemo for selectedCharacters would make the useCallback effective, though the performance impact is negligible for this component."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "No documented convention for dropdown dismiss behavior (click-outside-to-close). The ShotComposer's model selector and character menu use simple toggle buttons without click-outside handlers, which is consistent with other dropdowns in the file but could be worth documenting as a pattern decision.",
+      "evidence": "WorldviewSection.tsx lines ~1435 and ~1395 — modelDropdownOpen and charMenuOpen state toggles without useEffect click-outside listeners. Compare to similar toggle patterns in GSplatViewer's lens selector."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "PASS. The ShotComposer implementation fully covers all 13 expected behaviors with clean code following project conventions. Five non-blocking issues identified: one unused type import (CharacterRef), default resolution starting at 1K instead of 512, missing click-outside-to-close on dropdowns, inconsistent store access pattern in async catch block, and a non-memoized derived value in useCallback deps. None of these affect functionality or correctness. The 7 new store tests are well-structured and verify the key store actions. The worker followed the skill procedure, ran all automated checks (tsc, vitest, eslint), and performed thorough manual verification via agent-browser."
+}

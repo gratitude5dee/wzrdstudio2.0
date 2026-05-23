@@ -1,0 +1,62 @@
+{
+  "featureId": "worldview-canvas-responsive-a11y",
+  "reviewedAt": "2026-03-13T09:15:00.000Z",
+  "commitId": "9fadbbf",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The implementation correctly delivers all four required sub-features: canvas integration (Plus button → addObject + toast), responsive layout (flex-nowrap scene strip, responsive takes grid, min-w-0 container), accessibility (aria-selected, aria-pressed, aria-labels, pointer-events-none viewfinder, focus management on mode switch), and scene deletion cleanup (best-effort Supabase Storage removal). The code is clean, follows existing conventions (cn(), Tailwind, sonner toast, Zustand getState() pattern), and passes all automated checks (tsc, vitest, lint) with no regressions. The diff is 149 insertions / 53 deletions, all confined to WorldviewSection.tsx as claimed.",
+    "issues": [
+      {
+        "file": "src/components/worldview/WorldviewSection.tsx",
+        "line": 1710,
+        "severity": "non_blocking",
+        "description": "Scene deletion storage cleanup extracts only the last URL segment via split('/').pop(). If Supabase Storage uses nested paths (e.g., 'user-id/take-id.png'), this would only send 'take-id.png', missing the folder prefix. The current worldLabsService.captureTake uploads to the root of the bucket so this works today, but it's fragile if the storage path strategy changes. Consider extracting the path after the bucket name in the public URL instead of just the last segment."
+      },
+      {
+        "file": "src/components/worldview/WorldviewSection.tsx",
+        "line": 1703,
+        "severity": "non_blocking",
+        "description": "The filter `!t.imageUrl.startsWith('data:')` is a good guard against trying to delete data URIs from storage, but does not guard against empty-string imageUrls that aren't falsy. In practice, WorldviewTake.imageUrl starts as '' (empty string) which is falsy so the earlier `t.imageUrl` filter catches it — no actual bug, but the chain of guards is implicit."
+      },
+      {
+        "file": "src/components/worldview/WorldviewSection.tsx",
+        "line": 1841,
+        "severity": "non_blocking",
+        "description": "The handleAddToCanvas callback uses `type: 'image' as const` to satisfy the CanvasObject union, and the data object uses { url, width, height } matching the ImageData interface. However, the feature description originally specified `data: { src: imageUrl, ... }` (using 'src' not 'url'). The worker correctly deviated to match the actual TypeScript ImageData type which uses 'url'. This is correct behavior — the feature spec had a typo."
+      },
+      {
+        "file": "src/components/worldview/WorldviewSection.tsx",
+        "line": 1865,
+        "severity": "non_blocking",
+        "description": "Focus management uses a 300ms setTimeout to wait for AnimatePresence transitions. This is a reasonable heuristic but is coupled to the animation duration (fadeIn transition.duration is 0.2s = 200ms). If animation durations change, focus might fire at the wrong time. A more robust approach would use AnimatePresence's onExitComplete callback, but the current approach is pragmatic and works."
+      },
+      {
+        "file": "src/components/worldview/WorldviewSection.tsx",
+        "line": 98,
+        "severity": "non_blocking",
+        "description": "SceneChip's aria-label was changed from `Select ${scene.name}` to `Scene ${index + 1}`. The feature spec required 'Scene N' which this satisfies. However, the removal of the scene name from the label means screen readers no longer announce the scene's custom name — only its number. This is a minor a11y trade-off; the scene name is still visible as text content within the chip."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "The worker used `useWorldviewStore.setState()` directly in the captureTake handler (line ~871) to update take imageUrl, bypassing the store's defined actions. AGENTS.md says 'Do not call useStore.setState() directly in components' and 'Always use defined store actions for state mutations.' This was pre-existing code from a prior feature, not introduced by this worker, but the convention violation persists.",
+      "evidence": "WorldviewSection.tsx line ~871: `useWorldviewStore.setState((state) => ({...}))` — compare to AGENTS.md 'Store mutations' section. The worldview-store has updateTakeStatus but no updateTakeImageUrl action."
+    },
+    {
+      "area": "skills",
+      "observation": "Worker noted in skillFeedback.suggestedChanges that the skill's 'Write Tests First (Red Phase)' requirement doesn't apply well to pure UI attribute/styling changes (adding aria-labels, responsive Tailwind classes, onClick handlers). The skill could add an exemption note for polish/a11y features that only add HTML attributes and CSS classes.",
+      "evidence": "Handoff skillFeedback.suggestedChanges: 'The skill suggests writing tests first (Red Phase) but for pure UI attribute/styling/integration changes (adding aria-label, responsive Tailwind classes, onClick handlers), writing tests doesn't add value. The skill could note that UI attribute changes are exempt from the test-first requirement.'"
+    },
+    {
+      "area": "conventions",
+      "observation": "The feature description specified `data: { src: imageUrl, width: 512, height: 288 }` but the actual ImageData TypeScript interface uses `url` not `src`. The worker correctly used `url` to match types. The feature description template for canvas integration should be updated to reference the correct field name.",
+      "evidence": "features.json description says 'data: { src: imageUrl, width: 512, height: 288 }' but src/types/canvas.ts ImageData interface has 'url: string' not 'src: string'. Worker used 'url' correctly."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Feature passes review. All four sub-features (canvas integration, responsive layout, accessibility, scene deletion cleanup) are correctly implemented. The Plus button on GeneratedImageCard properly creates a CanvasObject with correct ImageData structure and calls addObject + toast. Responsive layout uses flex-nowrap scene strip, responsive grid-cols-2/sm:grid-cols-3 for takes, and min-w-0 with responsive padding. Accessibility adds aria-selected on scene chips, aria-pressed on toggle buttons, and focus management via useEffect with 300ms delay. Scene deletion cleanup does fire-and-forget Supabase Storage removal. All validation contract assertions (VAL-POLISH-003, VAL-POLISH-005, VAL-POLISH-006, VAL-CROSS-001) are addressed. Five non-blocking issues noted, mostly around robustness of the storage path extraction and the hardcoded 300ms focus delay. No blocking issues found."
+}

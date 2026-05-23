@@ -1,0 +1,38 @@
+import { expect, test } from '@playwright/test';
+
+test('voice action layer appears and can drive core navigation through the test harness', async ({ page }) => {
+  await page.goto('/home');
+
+  await page.waitForFunction(() => Boolean(window.__wzrdVoiceActionTest), undefined, {
+    timeout: 15_000,
+  });
+  await expect(page.getByRole('button', { name: 'Hold to speak' })).toBeVisible({
+    timeout: 15_000,
+  });
+  const micBox = await page.getByRole('button', { name: 'Hold to speak' }).boundingBox();
+  const viewport = page.viewportSize();
+  expect(micBox).not.toBeNull();
+  expect(viewport).not.toBeNull();
+  expect(micBox!.x).toBeGreaterThan(viewport!.width - 96);
+
+  await expect(page.getByRole('button', { name: /IP Vault/i })).toBeVisible();
+
+  const ipVaultResult = await page.evaluate(() =>
+    window.__wzrdVoiceActionTest!.execute('open_ip_vault'),
+  );
+  expect(ipVaultResult.ok).toBe(true);
+  await expect(page).toHaveURL(/\/ip-vault$/);
+  await expect(page.getByTestId('ip-vault-page')).toBeVisible();
+
+  const projectResult = await page.evaluate(() =>
+    window.__wzrdVoiceActionTest!.execute('start_new_project'),
+  );
+  expect(projectResult.ok).toBe(true);
+  await expect(page).toHaveURL(/\/project-setup$/);
+
+  const characterResult = await page.evaluate(() =>
+    window.__wzrdVoiceActionTest!.execute('character_open'),
+  );
+  expect(characterResult.ok).toBe(true);
+  await expect(page).toHaveURL(/\/kanvas\?studio=character-creation$/);
+});

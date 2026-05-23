@@ -1,0 +1,101 @@
+import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import {
+  buildFalCatalogRows,
+  parseFalModelsMarkdown,
+} from "./falModelsCatalog";
+
+const currentDir = dirname(fileURLToPath(import.meta.url));
+const modelsMarkdown = readFileSync(resolve(currentDir, "../../models.md"), "utf8");
+const falSeedRows = JSON.parse(readFileSync(resolve(currentDir, "../supabase/seeds/fal-model-catalog.seed.json"), "utf8"));
+const parsedModels = parseFalModelsMarkdown(modelsMarkdown);
+const rows = buildFalCatalogRows(parsedModels);
+const rowsById = new Map(rows.map((row) => [row.id, row]));
+
+describe("fal models.md catalog parser", () => {
+  it("parses the full exported catalog", () => {
+    expect(parsedModels).toHaveLength(1330);
+    expect(rows).toHaveLength(1330);
+  });
+
+  it.each([
+    ["fal-ai/nano-banana-2", "image", "text-to-image", ["prompt", "num_images"]],
+    ["fal-ai/nano-banana-2/edit", "image", "image-to-image", ["prompt", "image_urls"]],
+    ["fal-ai/kling-video/o3/standard/text-to-video", "video", "text-to-video", ["prompt"]],
+    ["fal-ai/kling-video/o3/standard/image-to-video", "video", "image-to-video", ["prompt", "image_url"]],
+    ["fal-ai/elevenlabs/tts/turbo-v2.5", "audio", "text-to-speech", ["text"]],
+    ["openai/gpt-image-2", "image", "text-to-image", ["prompt"]],
+    ["fal-ai/trellis/multi", "3d", "image-to-3d", ["image_url"]],
+  ])("maps %s into a usable catalog row", (endpointId, mediaType, workflowType, payloadKeys) => {
+    const row = rowsById.get(endpointId);
+    expect(row).toBeTruthy();
+    expect(row?.endpointId).toBe(endpointId);
+    expect(row?.provider).toBe("fal-ai");
+    expect(row?.mediaType).toBe(mediaType);
+    expect(row?.workflowType).toBe(workflowType);
+    expect(row?.modelUrl).toContain(endpointId);
+    for (const key of payloadKeys) {
+      expect(row?.payloadKeys).toContain(key);
+    }
+  });
+
+  it("keeps Fal runtime provider separate from vendor family", () => {
+    const openAi = rowsById.get("openai/gpt-image-2");
+    const google = rowsById.get("fal-ai/nano-banana-2");
+    expect(openAi?.provider).toBe("fal-ai");
+    expect(openAi?.vendor).toBe("OpenAI");
+    expect(openAi?.family).toBe("GPT Image");
+    expect(google?.provider).toBe("fal-ai");
+    expect(google?.vendor).toBe("Google");
+    expect(google?.family).toBe("Nano Banana");
+  });
+
+  it("maps every enabled endpoint to a Studio surface", () => {
+    const enabledRows = rows.filter((row) => row.enabled);
+    expect(enabledRows).toHaveLength(1330);
+    for (const row of enabledRows) {
+      expect(row.studioSurfaces).toContain(`studio:${row.mediaType}`);
+    }
+  });
+
+  it("keeps recommended defaults ahead of non-default rows", () => {
+    const sorted = [...rows].sort((left, right) => {
+      if (left.isDefault !== right.isDefault) {
+        return left.isDefault ? -1 : 1;
+      }
+      if (left.defaultRank !== right.defaultRank) {
+        return left.defaultRank - right.defaultRank;
+      }
+      return left.sortRank - right.sortRank;
+    });
+
+    expect(sorted.slice(0, 8).every((row) => row.isDefault)).toBe(true);
+    expect(sorted[0].id).toBe("fal-ai/nano-banana-2");
+  });
+
+  it("keeps the committed Fal seed visible to Studio surfaces", () => {
+    const requiredIds = [
+      "fal-ai/nano-banana-2",
+      "fal-ai/nano-banana-2/edit",
+      "fal-ai/kling-video/o3/standard/text-to-video",
+      "fal-ai/kling-video/o3/standard/image-to-video",
+      "fal-ai/elevenlabs/tts/turbo-v2.5",
+      "fal-ai/trellis/multi",
+      "openai/gpt-image-2",
+      "openai/gpt-image-2/edit",
+    ];
+    const seedRowsById = new Map(falSeedRows.map((row: any) => [row.id, row]));
+
+    for (const id of requiredIds) {
+      const row = seedRowsById.get(id) as any;
+      expect(row).toBeTruthy();
+      expect(row.provider).toBe("fal-ai");
+      expect(row.enabled).toBe(true);
+      expect(row.isDefault).toBe(true);
+      expect(row.studioSurfaces).toContain(`studio:${row.mediaType}`);
+    }
+  });
+});

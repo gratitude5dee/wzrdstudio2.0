@@ -1,0 +1,90 @@
+{
+  "groupId": "group-polish",
+  "testedAt": "2026-03-13T00:00:00.000Z",
+  "isolation": {
+    "appUrl": "http://localhost:8080/kanvas?studio=worldview",
+    "browserSession": "ba5792be7323__group-polish",
+    "authBypass": true,
+    "stateType": "in-memory Zustand"
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-POLISH-001",
+      "title": "API error toast notifications",
+      "status": "pass",
+      "steps": [
+        { "action": "Navigate to /kanvas?studio=worldview", "expected": "Worldview tab active with empty scene strip", "observed": "Worldview tab active, 'Create a new scene to get started' message displayed" },
+        { "action": "Click 'New Scene' to create Scene 1", "expected": "Scene chip created, 'Create a 3D World' CTA visible", "observed": "Scene 1 chip created and active, CTA displayed" },
+        { "action": "Click 'Create a 3D World' CTA", "expected": "World creator panel opens with prompt textarea and Generate button", "observed": "World creator panel opened with text/image toggle, textarea, model selector, and disabled Generate World button" },
+        { "action": "Enter prompt 'A mystical forest with glowing mushrooms and a crystal stream'", "expected": "Generate World button becomes enabled", "observed": "Generate World button enabled after text entered" },
+        { "action": "Clear console errors, then click 'Generate World'", "expected": "API call fails gracefully, toast.error shows descriptive message, no unhandled promise rejections", "observed": "Toast notification appeared: 'Failed to send a request to the Edge Function'. No unhandled promise rejections in console. Console showed expected CORS/401 network errors from the edge function (API key not configured), but all were handled gracefully." }
+      ],
+      "evidence": {
+        "screenshots": [
+          "foundation/group-polish/world-creator-with-prompt.png",
+          "foundation/group-polish/VAL-POLISH-001-error-toast.png"
+        ],
+        "consoleErrors": "No unhandled promise rejections. Expected network errors: CORS block on worldlabs-proxy (401 status, no API key). React validateDOMNesting warning (button nested in button — pre-existing). All API failures caught and displayed as toast notifications.",
+        "network": "POST to worldlabs-proxy edge function -> CORS blocked (no API key configured)"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-POLISH-002",
+      "title": "Inline error state for failed world generation",
+      "status": "pass",
+      "steps": [
+        { "action": "After world generation fails (from VAL-POLISH-001 flow)", "expected": "Inline error state appears in world card area with error message and retry option", "observed": "Inline error card appeared showing: 'World generation failed' title (in red/amber text), 'Failed to send a request to the Edge Function' descriptive message, and a 'Retry' button with refresh icon" }
+      ],
+      "evidence": {
+        "screenshots": [
+          "foundation/group-polish/VAL-POLISH-001-error-toast.png",
+          "foundation/group-polish/VAL-POLISH-002-inline-error-state.png"
+        ],
+        "consoleErrors": "none (checked after generation failure — no unhandled errors)",
+        "network": "N/A — testing inline UI error state display"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-006",
+      "title": "Multi-scene state isolation",
+      "status": "fail",
+      "steps": [
+        { "action": "Scene 1 already has failed world generation error state from previous tests", "expected": "Scene 1 shows inline error card", "observed": "Scene 1 shows inline error card with 'World generation failed' — correct" },
+        { "action": "Click '+ New Scene' to create Scene 2", "expected": "Scene 2 created and activated, showing empty 'Create a 3D World' CTA", "observed": "Scene 2 created and activated, but STILL shows 'World generation failed' error card from Scene 1 — state leakage" },
+        { "action": "Click Scene 1 chip to switch back", "expected": "Scene 1 content with error state", "observed": "Scene 1 shows error state — correct" },
+        { "action": "Click Scene 2 chip to switch to it", "expected": "Scene 2 shows empty 'Create a 3D World' CTA (no error state)", "observed": "Scene 2 still shows 'World generation failed' error card — same state as Scene 1. State is NOT isolated." }
+      ],
+      "evidence": {
+        "screenshots": [
+          "foundation/group-polish/VAL-CROSS-006-scene-A-with-error.png",
+          "foundation/group-polish/VAL-CROSS-006-scene-B-empty-CTA.png",
+          "foundation/group-polish/VAL-CROSS-006-switch-to-scene1.png",
+          "foundation/group-polish/VAL-CROSS-006-switch-to-scene2.png",
+          "foundation/group-polish/VAL-CROSS-006-scene2-shows-error.png"
+        ],
+        "consoleErrors": "N/A — testing state isolation, not error handling",
+        "network": "N/A"
+      },
+      "issues": "State isolation bug: generationError is stored as component-level React useState (WorldviewSection.tsx line 669) rather than per-scene in the Zustand store. When world generation fails in Scene A, the error persists globally and leaks into Scene B (and all other scenes). Scene B should show the empty 'Create a 3D World' CTA but instead shows Scene A's error state. Fix: either move generationError into per-scene state in the Zustand store, or reset generationError when activeSceneId changes."
+    }
+  ],
+  "frictions": [
+    {
+      "description": "Initial page load shows a splash screen ('INITIALIZING MOG STUDIO...') with an 'Edge Function returned a non-2xx status code' toast during initialization — requires waiting 3-5 seconds before the Worldview UI is accessible",
+      "resolved": true,
+      "resolution": "Used agent-browser wait 5000 after initial load to allow initialization to complete",
+      "affectedAssertions": ["VAL-POLISH-001", "VAL-POLISH-002", "VAL-CROSS-006"]
+    },
+    {
+      "description": "React validateDOMNesting warning in console: button nested inside button in SceneChip component (WorldviewSection.tsx:61). Pre-existing issue, not related to error handling assertions.",
+      "resolved": false,
+      "resolution": "Not in scope — noted as pre-existing DOM nesting issue",
+      "affectedAssertions": []
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 3 assertions: 2 passed (VAL-POLISH-001, VAL-POLISH-002), 1 failed (VAL-CROSS-006: generationError state leaks across scenes because it is tracked as component-level useState rather than per-scene Zustand state)"
+}

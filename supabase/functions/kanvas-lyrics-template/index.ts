@@ -1,660 +1,369 @@
-// Action API for kanvas_lyric_templates. Owner-scoped via the caller's JWT,
-// or via a shared anonymous user when the dashboard is unauthenticated.
-import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.105.4";
-import { handleOptions } from "../_shared/cors.ts";
-import { errorEnvelope, okEnvelope } from "../_shared/envelope.ts";
-import { transcriptToKanvasLyricBlocks } from "../_shared/lyrics.ts";
-import type { Transcript } from "../_shared/transcribe.ts";
+// supabase/functions/kanvas-lyrics-template/index.ts
+// CRUD + finalize/archive for Kanvas Lyrics templates.
+// Authenticates the caller, then uses the service-role client with explicit
+// ownership checks (we never trust auth.uid() alone for cross-table joins).
 
-const ANON_USER_ID = "00000000-0000-0000-0000-000000000000";
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
 
-type AudioClipRow = {
-  id: string;
-  source_asset_id: string;
-  trimmed_asset_id: string | null;
-  default_lyric_template_id: string | null;
-  duration_sec: number | null;
-  file_name: string | null;
-  selection_start_sec: number | null;
-  selection_end_sec: number | null;
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers':
+    'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-type MediaAssetRow = {
+// Accept both new (15/30/45/60) and legacy (20/25) durations on read paths;
+// only the new set is acceptable for new selections.
+const VALID_DURATIONS = new Set([15000, 30000, 45000, 60000]);
+const LEGACY_DURATIONS = new Set([20000, 25000]);
+const MAX_PEAKS = 2048;
+const MAX_WORDS = 500;
+const MAX_WORD_LEN = 80;
+const MARKER_DEDUPE_MS = 250;
+
+function ok(data: unknown, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+function err(message: string, status = 400) {
+  return new Response(JSON.stringify({ error: message }), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+interface AssetRow {
   id: string;
-  transcript: Transcript | null;
-  file_name: string | null;
-  mime_type: string | null;
+  project_id: string | null;
+  name: string;
+  url: string;
+  type: string;
   metadata: Record<string, unknown> | null;
-  storage_bucket: string;
-  storage_path: string | null;
-  byte_size: number | null;
-  duration_seconds: number | null;
-  public_url: string | null;
-};
-
-type LyricTemplateRow = {
+}
+interface TemplateRow {
   id: string;
+  user_id: string;
+  project_id: string | null;
+  title: string;
   status: string;
-  audio_clip_id: string | null;
+  source_audio_asset_id: string;
   trimmed_audio_asset_id: string | null;
-  lyric_blocks: unknown[] | null;
-  transcript_meta?: Record<string, unknown> | null;
-  render_defaults?: Record<string, unknown> | null;
-};
-
-const AUDIO_CLIP_SELECT =
-  "id,source_asset_id,trimmed_asset_id,default_lyric_template_id,duration_sec,file_name,selection_start_sec,selection_end_sec";
-const MEDIA_ASSET_SELECT =
-  "id,transcript,file_name,mime_type,metadata,storage_bucket,storage_path,byte_size,duration_seconds,public_url";
-
-function nonEmptyString(value: unknown): string | null {
-  return typeof value === "string" && value.length > 0 ? value : null;
+  selection_start_ms: number;
+  selection_duration_ms: number;
+  total_duration_ms: number | null;
+  waveform_peaks: unknown;
+  lyric_blocks: unknown;
+  cut_markers: unknown;
+  transcript_meta: unknown;
+  render_defaults: unknown;
+  error_message: string | null;
+  saved_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
-function record(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+function toCamel(row: TemplateRow) {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    title: row.title,
+    status: row.status,
+    sourceAudioAssetId: row.source_audio_asset_id,
+    trimmedAudioAssetId: row.trimmed_audio_asset_id,
+    selectionStartMs: row.selection_start_ms,
+    selectionDurationMs: row.selection_duration_ms,
+    totalDurationMs: row.total_duration_ms,
+    waveformPeaks: row.waveform_peaks ?? [],
+    lyricBlocks: row.lyric_blocks ?? [],
+    cutMarkers: row.cut_markers ?? [],
+    transcriptMeta: row.transcript_meta ?? {},
+    renderDefaults: row.render_defaults ?? {},
+    errorMessage: row.error_message,
+    savedAt: row.saved_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
 }
 
-async function ensureProjectAssetForMediaAsset(input: {
-  admin: SupabaseClient;
-  asset: MediaAssetRow;
-  userId: string;
-  durationMs: number;
-}): Promise<string> {
-  const storagePath = nonEmptyString(input.asset.storage_path);
-  if (!storagePath) {
-    throw new Error("Audio clip media asset is missing storage_path.");
+// --- validation ----------------------------------------------------------
+
+export function validatePeaks(peaks: unknown): number[] {
+  if (!Array.isArray(peaks)) throw new Error('waveformPeaks must be an array');
+  if (peaks.length > MAX_PEAKS) throw new Error(`waveformPeaks exceeds ${MAX_PEAKS}`);
+  return peaks.map((p) => {
+    const n = Number(p);
+    if (!Number.isFinite(n)) throw new Error('waveformPeaks contains non-numeric values');
+    return Math.max(0, Math.min(1, n));
+  });
+}
+
+export function validateLyricBlocks(blocks: unknown, durationMs: number) {
+  if (!Array.isArray(blocks)) throw new Error('lyricBlocks must be an array');
+  let totalWords = 0;
+  const cleaned = blocks.map((b: any) => {
+    if (!b || typeof b !== 'object') throw new Error('Invalid lyric block');
+    const words = Array.isArray(b.words) ? b.words : [];
+    totalWords += words.length;
+    if (totalWords > MAX_WORDS) throw new Error(`lyric_blocks exceed ${MAX_WORDS} words`);
+    const cleanWords = words.map((w: any) => {
+      const text = String(w?.text ?? '').slice(0, MAX_WORD_LEN);
+      const start = Math.max(0, Math.min(durationMs, Number(w?.startTimeMs ?? 0)));
+      const end = Math.max(start, Math.min(durationMs, Number(w?.endTimeMs ?? start)));
+      return {
+        id: String(w?.id ?? crypto.randomUUID()),
+        text,
+        startTimeMs: Math.round(start),
+        endTimeMs: Math.round(end),
+        ...(typeof w?.confidence === 'number' ? { confidence: w.confidence } : {}),
+      };
+    });
+    cleanWords.sort((a: any, z: any) => a.startTimeMs - z.startTimeMs);
+    const startTimeMs = cleanWords[0]?.startTimeMs ?? Number(b.startTimeMs ?? 0);
+    const endTimeMs =
+      cleanWords[cleanWords.length - 1]?.endTimeMs ?? Number(b.endTimeMs ?? startTimeMs);
+    return {
+      id: String(b.id ?? crypto.randomUUID()),
+      startTimeMs: Math.max(0, Math.min(durationMs, startTimeMs)),
+      endTimeMs: Math.max(0, Math.min(durationMs, endTimeMs)),
+      words: cleanWords,
+    };
+  });
+  cleaned.sort((a, z) => a.startTimeMs - z.startTimeMs);
+  return cleaned;
+}
+
+export function validateMarkers(markers: unknown, durationMs: number) {
+  if (!Array.isArray(markers)) throw new Error('cutMarkers must be an array');
+  const sorted = markers
+    .map((m: any) => ({
+      id: String(m?.id ?? crypto.randomUUID()),
+      timestampMs: Math.max(0, Math.min(durationMs, Math.round(Number(m?.timestampMs ?? 0)))),
+    }))
+    .sort((a, z) => a.timestampMs - z.timestampMs);
+  // dedupe within 250ms
+  const out: typeof sorted = [];
+  for (const m of sorted) {
+    const last = out[out.length - 1];
+    if (!last || m.timestampMs - last.timestampMs >= MARKER_DEDUPE_MS) out.push(m);
   }
+  return out;
+}
 
-  const existing = await input.admin
-    .from("project_assets")
-    .select("id")
-    .eq("user_id", input.userId)
-    .eq("storage_bucket", input.asset.storage_bucket)
-    .eq("storage_path", storagePath)
-    .limit(1)
+function validateSelection(startMs: number, durationMs: number, totalMs: number | null) {
+  if (!VALID_DURATIONS.has(durationMs) && !LEGACY_DURATIONS.has(durationMs)) {
+    throw new Error('selectionDurationMs must be 15000, 30000, 45000, or 60000');
+  }
+  if (!Number.isFinite(startMs) || startMs < 0) throw new Error('selectionStartMs invalid');
+  if (totalMs != null && startMs + durationMs > totalMs) {
+    throw new Error('selection exceeds audio total duration');
+  }
+}
+
+// --- handlers ------------------------------------------------------------
+
+async function handleCreate(svc: any, userId: string, body: any) {
+  const sourceAudioAssetId = String(body.sourceAudioAssetId ?? '');
+  if (!sourceAudioAssetId) return err('sourceAudioAssetId required');
+  const selectionStartMs = Math.round(Number(body.selectionStartMs ?? 0));
+  const selectionDurationMs = Math.round(Number(body.selectionDurationMs ?? 15000));
+  const totalDurationMs = body.totalDurationMs != null ? Math.round(Number(body.totalDurationMs)) : null;
+  validateSelection(selectionStartMs, selectionDurationMs, totalDurationMs);
+
+  const projectId = body.projectId ? String(body.projectId) : null;
+
+  // Verify asset ownership: project_assets has no user_id; ownership is via
+  // metadata.user_id (set by asset-upload) OR via the parent project.
+  const { data: asset, error: assetErr } = await svc
+    .from('project_assets')
+    .select('id, project_id, type, metadata')
+    .eq('id', sourceAudioAssetId)
     .maybeSingle();
-  if (existing.error) throw existing.error;
-  if (existing.data?.id) return String(existing.data.id);
-
-  const inserted = await input.admin
-    .from("project_assets")
-    .insert({
-      user_id: input.userId,
-      kind: "audio_trimmed",
-      storage_bucket: input.asset.storage_bucket,
-      storage_path: storagePath,
-      file_name: input.asset.file_name,
-      mime_type: input.asset.mime_type,
-      byte_size: input.asset.byte_size,
-      duration_ms: input.durationMs,
-      public_url: input.asset.public_url,
-      metadata: {
-        ...(input.asset.metadata ?? {}),
-        source: "fanagent_audio_clip",
-        source_media_asset_id: input.asset.id,
-      },
-    })
-    .select("id")
-    .single();
-  if (inserted.error) throw inserted.error;
-  return String(inserted.data.id);
-}
-
-function buildExistingTemplateRepair(input: {
-  template: LyricTemplateRow;
-  audioClipId: string;
-  mediaAssetId: string;
-  projectAssetId: string;
-  lyricBlocks: ReturnType<typeof transcriptToKanvasLyricBlocks>;
-}): Record<string, unknown> {
-  const patch: Record<string, unknown> = {};
-  if (input.template.audio_clip_id !== input.audioClipId) {
-    patch.audio_clip_id = input.audioClipId;
-  }
-  if (!input.template.trimmed_audio_asset_id) {
-    patch.trimmed_audio_asset_id = input.projectAssetId;
-  }
-
-  const hasExistingLyrics = Array.isArray(input.template.lyric_blocks)
-    ? input.template.lyric_blocks.length > 0
-    : false;
-  if (!hasExistingLyrics && input.lyricBlocks.length > 0) {
-    patch.lyric_blocks = input.lyricBlocks;
-    patch.error_message = null;
-    if (["draft", "audio_ready", "failed", "lyrics_processing"].includes(input.template.status)) {
-      patch.status = "lyrics_ready";
+  if (assetErr || !asset) return err('audio asset not found', 404);
+  const assetUserId = (asset.metadata as any)?.user_id;
+  if (assetUserId !== userId) {
+    if (asset.project_id) {
+      const { data: proj } = await svc
+        .from('projects')
+        .select('id')
+        .eq('id', asset.project_id)
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (!proj) return err('forbidden: not your audio asset', 403);
+    } else {
+      return err('forbidden: not your audio asset', 403);
     }
   }
 
-  const transcriptMeta = record(input.template.transcript_meta);
-  if (
-    transcriptMeta.audio_clip_id !== input.audioClipId ||
-    transcriptMeta.project_asset_id !== input.projectAssetId ||
-    transcriptMeta.media_asset_id !== input.mediaAssetId
-  ) {
-    patch.transcript_meta = {
-      ...transcriptMeta,
-      audio_clip_id: input.audioClipId,
-      media_asset_id: input.mediaAssetId,
-      project_asset_id: input.projectAssetId,
-    };
+  if (projectId) {
+    const { data: proj } = await svc
+      .from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
+    if (!proj) return err('forbidden: not your project', 403);
   }
 
-  const renderDefaults = record(input.template.render_defaults);
-  if (
-    renderDefaults.audio_clip_id !== input.audioClipId ||
-    renderDefaults.project_asset_id !== input.projectAssetId
-  ) {
-    patch.render_defaults = {
-      ...renderDefaults,
-      audio_clip_id: input.audioClipId,
-      project_asset_id: input.projectAssetId,
-      source: "fanagent_audio_clip",
-    };
-  }
+  const peaks = body.waveformPeaks ? validatePeaks(body.waveformPeaks) : [];
 
-  return patch;
-}
-
-async function bindAudioClipToTemplate(input: {
-  admin: SupabaseClient;
-  audioClipId: string;
-  templateId: string;
-}): Promise<void> {
-  const updated = await input.admin
-    .from("audio_clips")
-    .update({
-      default_lyric_template_id: input.templateId,
-      lyric_template_id: input.templateId,
-      updated_at: new Date().toISOString(),
+  const { data, error } = await svc
+    .from('kanvas_lyric_templates')
+    .insert({
+      user_id: userId,
+      project_id: projectId,
+      title: String(body.title ?? 'Untitled Template').slice(0, 200),
+      status: 'draft',
+      source_audio_asset_id: sourceAudioAssetId,
+      selection_start_ms: selectionStartMs,
+      selection_duration_ms: selectionDurationMs,
+      total_duration_ms: totalDurationMs,
+      waveform_peaks: peaks,
     })
-    .eq("id", input.audioClipId);
-  if (updated.error) throw updated.error;
+    .select('*')
+    .single();
+  if (error) return err(error.message, 500);
+  return ok({ template: toCamel(data as TemplateRow) });
 }
 
-Deno.serve(async (req) => {
-  const opt = handleOptions(req);
-  if (opt) return opt;
-  if (req.method !== "POST") {
-    return errorEnvelope("Method not allowed", "METHOD_NOT_ALLOWED", 405);
+async function handleGet(svc: any, userId: string, templateId: string) {
+  if (!templateId) return err('templateId required');
+  const { data, error } = await svc
+    .from('kanvas_lyric_templates').select('*').eq('id', templateId).maybeSingle();
+  if (error) return err(error.message, 500);
+  if (!data) return err('not found', 404);
+  if (data.user_id !== userId) return err('forbidden', 403);
+  return ok({ template: toCamel(data as TemplateRow) });
+}
+
+async function handleList(svc: any, userId: string, body: any) {
+  let q = svc.from('kanvas_lyric_templates').select('*').eq('user_id', userId);
+  if (body.projectId) q = q.eq('project_id', String(body.projectId));
+  if (body.status) q = q.eq('status', String(body.status));
+  q = q.order('created_at', { ascending: false }).limit(Math.min(Number(body.limit ?? 50), 200));
+  const { data, error } = await q;
+  if (error) return err(error.message, 500);
+  return ok({ templates: (data as TemplateRow[]).map(toCamel) });
+}
+
+async function handlePatch(svc: any, userId: string, body: any) {
+  const templateId = String(body.templateId ?? '');
+  if (!templateId) return err('templateId required');
+  const { data: existing, error: getErr } = await svc
+    .from('kanvas_lyric_templates').select('*').eq('id', templateId).maybeSingle();
+  if (getErr) return err(getErr.message, 500);
+  if (!existing) return err('not found', 404);
+  if (existing.user_id !== userId) return err('forbidden', 403);
+
+  const update: Record<string, unknown> = {};
+  if (typeof body.title === 'string') update.title = body.title.slice(0, 200);
+  let durationMs = existing.selection_duration_ms;
+  if (body.selection) {
+    const startMs = Math.round(Number(body.selection.startMs ?? 0));
+    durationMs = Math.round(Number(body.selection.durationMs ?? existing.selection_duration_ms));
+    validateSelection(startMs, durationMs, existing.total_duration_ms);
+    update.selection_start_ms = startMs;
+    update.selection_duration_ms = durationMs;
   }
+  if (body.waveformPeaks) update.waveform_peaks = validatePeaks(body.waveformPeaks);
+  if (body.lyricBlocks) update.lyric_blocks = validateLyricBlocks(body.lyricBlocks, durationMs);
+  if (body.cutMarkers) update.cut_markers = validateMarkers(body.cutMarkers, durationMs);
+  if (body.renderDefaults && typeof body.renderDefaults === 'object') {
+    update.render_defaults = body.renderDefaults;
+  }
+  if (typeof body.status === 'string') update.status = body.status;
+
+  if (Object.keys(update).length === 0) {
+    return ok({ template: toCamel(existing as TemplateRow) });
+  }
+
+  const { data, error } = await svc
+    .from('kanvas_lyric_templates')
+    .update(update)
+    .eq('id', templateId)
+    .select('*')
+    .single();
+  if (error) return err(error.message, 500);
+  return ok({ template: toCamel(data as TemplateRow) });
+}
+
+async function handleFinalize(svc: any, userId: string, templateId: string) {
+  if (!templateId) return err('templateId required');
+  const { data: existing, error: getErr } = await svc
+    .from('kanvas_lyric_templates').select('*').eq('id', templateId).maybeSingle();
+  if (getErr) return err(getErr.message, 500);
+  if (!existing) return err('not found', 404);
+  if (existing.user_id !== userId) return err('forbidden', 403);
+
+  const blocks = Array.isArray(existing.lyric_blocks) ? existing.lyric_blocks : [];
+  if (blocks.length === 0) return err('lyric_blocks required to finalize', 422);
+  if (!Array.isArray(existing.cut_markers)) return err('cut_markers must be an array', 422);
+
+  const { data, error } = await svc
+    .from('kanvas_lyric_templates')
+    .update({ status: 'saved', saved_at: new Date().toISOString() })
+    .eq('id', templateId)
+    .select('*')
+    .single();
+  if (error) return err(error.message, 500);
+  return ok({ template: toCamel(data as TemplateRow) });
+}
+
+async function handleArchive(svc: any, userId: string, templateId: string) {
+  if (!templateId) return err('templateId required');
+  const { data: existing } = await svc
+    .from('kanvas_lyric_templates').select('user_id').eq('id', templateId).maybeSingle();
+  if (!existing) return err('not found', 404);
+  if (existing.user_id !== userId) return err('forbidden', 403);
+  const { data, error } = await svc
+    .from('kanvas_lyric_templates')
+    .update({ status: 'archived' })
+    .eq('id', templateId)
+    .select('*')
+    .single();
+  if (error) return err(error.message, 500);
+  return ok({ template: toCamel(data as TemplateRow) });
+}
+
+// --- entry ---------------------------------------------------------------
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  if (req.method !== 'POST') return err('method not allowed', 405);
 
   try {
-    const auth = req.headers.get("Authorization") ?? "";
-    const token = auth.replace(/^Bearer\s+/i, "");
-    let userId = ANON_USER_ID;
-    let supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) return err('unauthorized', 401);
+    const token = authHeader.slice('Bearer '.length);
+
+    const svc = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
-    if (token) {
-      const userClient = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_ANON_KEY")!,
-        { global: { headers: { Authorization: `Bearer ${token}` } } },
-      );
-      const { data: userRes } = await userClient.auth.getUser();
-      if (userRes?.user) {
-        userId = userRes.user.id;
-        supabase = userClient;
-      }
-    }
+    const { data: userRes, error: authErr } = await svc.auth.getUser(token);
+    if (authErr || !userRes.user) return err('unauthorized', 401);
+    const userId = userRes.user.id;
 
-    const body = (await req.json()) as { action: string; [k: string]: unknown };
+    const body = await req.json();
+    const action = String(body.action ?? '');
 
-    switch (body.action) {
-      case "create": {
-        const ins = await supabase
-          .from("kanvas_lyric_templates")
-          .insert({
-            user_id: userId,
-            title: (body.title as string) ?? "Untitled template",
-            source_audio_asset_id: (body.sourceAssetId as string) ?? null,
-            trimmed_audio_asset_id: (body.trimmedAssetId as string) ?? null,
-            selection_start_ms: (body.selectionStartMs as number) ?? 0,
-            selection_duration_ms: (body.selectionDurationMs as number) ?? 15000,
-            total_duration_ms: (body.totalDurationMs as number) ?? 0,
-            waveform_peaks: (body.waveformPeaks as number[]) ?? [],
-          })
-          .select("*")
-          .single();
-        if (ins.error) throw ins.error;
-        return okEnvelope({ template: ins.data });
-      }
-      case "createFromAudioClip": {
-        const audioClipId = body.audioClipId as string | undefined;
-        if (!audioClipId) {
-          return errorEnvelope("audioClipId is required", "AUDIO_CLIP_ID_REQUIRED", 400);
-        }
-
-        const force = body.force === true;
-        const admin = createClient(
-          Deno.env.get("SUPABASE_URL")!,
-          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-        );
-        const clip = await admin
-          .from("audio_clips")
-          .select(AUDIO_CLIP_SELECT)
-          .eq("id", audioClipId)
-          .single();
-        if (clip.error) throw clip.error;
-        const clipRow = clip.data as AudioClipRow;
-
-        const assetId = clipRow.trimmed_asset_id ?? clipRow.source_asset_id;
-        const asset = await admin
-          .from("media_assets")
-          .select(MEDIA_ASSET_SELECT)
-          .eq("id", assetId)
-          .single();
-        if (asset.error) throw asset.error;
-        const assetRow = asset.data as MediaAssetRow;
-
-        const transcript = assetRow.transcript;
-        const lyricBlocks = transcript ? transcriptToKanvasLyricBlocks(transcript) : [];
-        const hasLyrics = lyricBlocks.length > 0;
-        const durationMs = Math.round(
-          Number(clipRow.duration_sec ?? assetRow.duration_seconds ?? 15) * 1000,
-        );
-        const projectAssetId = await ensureProjectAssetForMediaAsset({
-          admin,
-          asset: assetRow,
-          userId,
-          durationMs,
-        });
-
-        if (!force && clipRow.default_lyric_template_id) {
-          const existing = await supabase
-            .from("kanvas_lyric_templates")
-            .select("*")
-            .eq("id", clipRow.default_lyric_template_id)
-            .maybeSingle();
-          if (existing.error) throw existing.error;
-          if (existing.data) {
-            const patch = buildExistingTemplateRepair({
-              template: existing.data as LyricTemplateRow,
-              audioClipId,
-              mediaAssetId: assetRow.id,
-              projectAssetId,
-              lyricBlocks,
-            });
-            await bindAudioClipToTemplate({
-              admin,
-              audioClipId,
-              templateId: existing.data.id,
-            });
-            if (Object.keys(patch).length === 0) return okEnvelope({ template: existing.data });
-            const repaired = await supabase
-              .from("kanvas_lyric_templates")
-              .update(patch)
-              .eq("id", existing.data.id)
-              .select("*")
-              .single();
-            if (repaired.error) throw repaired.error;
-            return okEnvelope({ template: repaired.data });
-          }
-        }
-
-        const title =
-          typeof body.title === "string" && body.title.trim()
-            ? body.title.trim()
-            : `${clipRow.file_name ?? assetRow.file_name ?? "Audio clip"} lyrics`;
-
-        const ins = await supabase
-          .from("kanvas_lyric_templates")
-          .insert({
-            user_id: userId,
-            title,
-            source_audio_asset_id: null,
-            trimmed_audio_asset_id: projectAssetId,
-            audio_clip_id: audioClipId,
-            selection_start_ms: 0,
-            selection_duration_ms: durationMs,
-            total_duration_ms: durationMs,
-            waveform_peaks: [],
-            status: hasLyrics ? "lyrics_ready" : "audio_ready",
-            lyric_blocks: lyricBlocks,
-            transcript_meta: {
-              provider: transcript ? "elevenlabs_scribe_v2" : null,
-              language: transcript?.language ?? null,
-              word_count: transcript?.words.length ?? 0,
-              audio_clip_id: audioClipId,
-              media_asset_id: assetRow.id,
-              project_asset_id: projectAssetId,
-              source_selection_start_sec: clipRow.selection_start_sec,
-              source_selection_end_sec: clipRow.selection_end_sec,
-            },
-            render_defaults: {
-              audio_clip_id: audioClipId,
-              project_asset_id: projectAssetId,
-              source: "fanagent_audio_clip",
-            },
-          })
-          .select("*")
-          .single();
-        if (ins.error) throw ins.error;
-
-        await bindAudioClipToTemplate({
-          admin,
-          audioClipId,
-          templateId: ins.data.id,
-        });
-
-        return okEnvelope({ template: ins.data });
-      }
-      case "get": {
-        const { data, error } = await supabase
-          .from("kanvas_lyric_templates")
-          .select("*")
-          .eq("id", body.templateId as string)
-          .single();
-        if (error) throw error;
-        return okEnvelope({ template: data });
-      }
-      case "list": {
-        const { data, error } = await supabase
-          .from("kanvas_lyric_templates")
-          .select("*")
-          .eq("user_id", userId)
-          .order("updated_at", { ascending: false });
-        if (error) throw error;
-        return okEnvelope({ templates: data });
-      }
-      case "patch": {
-        const patch = (body.patch as Record<string, unknown>) ?? {};
-        const { data, error } = await supabase
-          .from("kanvas_lyric_templates")
-          .update(patch)
-          .eq("id", body.templateId as string)
-          .select("*")
-          .single();
-        if (error) throw error;
-        return okEnvelope({ template: data });
-      }
-      case "finalize": {
-        const templateId = body.templateId as string;
-        // Load template so we can bridge to an audio_clips row for downstream
-        // generation pipelines that key off audio_clip_id.
-        const tpl = await supabase
-          .from("kanvas_lyric_templates")
-          .select("*")
-          .eq("id", templateId)
-          .single();
-        if (tpl.error) throw tpl.error;
-
-        const admin = createClient(
-          Deno.env.get("SUPABASE_URL")!,
-          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-        );
-
-        let audioClipId: string | null = tpl.data.audio_clip_id ?? null;
-        const trimmedProjectAssetId =
-          (tpl.data.trimmed_audio_asset_id as string | null) ??
-          (tpl.data.source_audio_asset_id as string | null);
-
-        // Resolve an account_id required by audio_clips / media_assets NOT NULL.
-        async function resolveAccountId(): Promise<string | null> {
-          const fromDefaults =
-            (tpl.data.render_defaults as Record<string, unknown> | null)?.account_id;
-          if (typeof fromDefaults === "string" && fromDefaults) return fromDefaults;
-          const primary = await admin
-            .from("accounts")
-            .select("id")
-            .eq("is_primary", true)
-            .order("created_at", { ascending: true })
-            .limit(1)
-            .maybeSingle();
-          if (primary.data?.id) return String(primary.data.id);
-          const any = await admin
-            .from("accounts")
-            .select("id")
-            .order("created_at", { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          return any.data?.id ? String(any.data.id) : null;
-        }
-
-        let resolvedAccountId: string | null = null;
-
-        if (!audioClipId && trimmedProjectAssetId) {
-          resolvedAccountId = await resolveAccountId();
-          if (!resolvedAccountId) {
-            return errorEnvelope(
-              "No account is configured. Connect a TikTok account before saving a lyric template.",
-              "KANVAS_LYRICS_TEMPLATE_NO_ACCOUNT",
-              400,
-            );
-          }
-          const projAsset = await admin
-            .from("project_assets")
-            .select(
-              "id,storage_bucket,storage_path,file_name,mime_type,byte_size,duration_ms,public_url,metadata",
-            )
-            .eq("id", trimmedProjectAssetId)
-            .single();
-          if (projAsset.error) throw projAsset.error;
-
-          const existingMedia = await admin
-            .from("media_assets")
-            .select("id")
-            .eq("storage_bucket", projAsset.data.storage_bucket)
-            .eq("storage_path", projAsset.data.storage_path)
-            .limit(1)
-            .maybeSingle();
-          if (existingMedia.error) throw existingMedia.error;
-
-          let mediaAssetId = existingMedia.data?.id as string | undefined;
-          if (!mediaAssetId) {
-            const inserted = await admin
-              .from("media_assets")
-              .insert({
-                account_id: resolvedAccountId,
-                kind: "audio",
-                source: "lyric_template",
-                storage_bucket: projAsset.data.storage_bucket,
-                storage_path: projAsset.data.storage_path,
-                public_url: projAsset.data.public_url ?? "",
-                file_name: projAsset.data.file_name,
-                mime_type: projAsset.data.mime_type,
-                byte_size: projAsset.data.byte_size,
-                duration_seconds: (projAsset.data.duration_ms ?? 0) / 1000,
-                metadata: {
-                  ...(projAsset.data.metadata ?? {}),
-                  bridged_from_project_asset_id: projAsset.data.id,
-                  bridged_for_lyric_template_id: templateId,
-                },
-              })
-              .select("id")
-              .single();
-            if (inserted.error) throw inserted.error;
-            mediaAssetId = String(inserted.data.id);
-          }
-
-          const durationSec = Math.max(
-            1,
-            Math.round(
-              (Number(tpl.data.selection_duration_ms ?? 0) ||
-                Number(projAsset.data.duration_ms ?? 0)) / 1000,
-            ),
-          );
-          const clipIns = await admin
-            .from("audio_clips")
-            .insert({
-              account_id: resolvedAccountId,
-              source_asset_id: mediaAssetId,
-              trimmed_asset_id: mediaAssetId,
-              selection_start_sec: Number(tpl.data.selection_start_ms ?? 0) / 1000,
-              selection_end_sec:
-                (Number(tpl.data.selection_start_ms ?? 0) +
-                  Number(tpl.data.selection_duration_ms ?? 0)) /
-                1000,
-              duration_sec: durationSec,
-              file_name: projAsset.data.file_name,
-              transcription_status:
-                Array.isArray(tpl.data.lyric_blocks) && tpl.data.lyric_blocks.length > 0
-                  ? "ready"
-                  : "pending",
-              default_lyric_template_id: templateId,
-              lyric_template_id: templateId,
-              metadata: { created_from: "kanvas-lyrics-template:finalize" },
-            })
-            .select("id")
-            .single();
-          if (clipIns.error) throw clipIns.error;
-          audioClipId = String(clipIns.data.id);
-        }
-
-        if (audioClipId) {
-          await bindAudioClipToTemplate({
-            admin,
-            audioClipId,
-            templateId,
-          });
-        }
-
-        const mergedDefaults = {
-          ...((tpl.data.render_defaults as Record<string, unknown>) ?? {}),
-          ...(resolvedAccountId ? { account_id: resolvedAccountId } : {}),
-          ...(audioClipId ? { audio_clip_id: audioClipId } : {}),
-          ...(trimmedProjectAssetId ? { project_asset_id: trimmedProjectAssetId } : {}),
-          source: "fanagent_audio_clip",
-        };
-
-        const { data, error } = await supabase
-          .from("kanvas_lyric_templates")
-          .update({
-            status: "saved",
-            saved_at: new Date().toISOString(),
-            audio_clip_id: audioClipId,
-            render_defaults: mergedDefaults,
-          })
-          .eq("id", templateId)
-          .select("*")
-          .single();
-        if (error) throw error;
-        return okEnvelope({ template: data });
-      }
-      case "archive": {
-        const { data, error } = await supabase
-          .from("kanvas_lyric_templates")
-          .update({ status: "archived", archived_at: new Date().toISOString() })
-          .eq("id", body.templateId as string)
-          .select("*")
-          .single();
-        if (error) throw error;
-        return okEnvelope({ template: data });
-      }
-      case "patchRenderDefaults": {
-        const renderDefaults = (body.renderDefaults as Record<string, unknown>) ?? {};
-        // Merge into existing render_defaults to avoid clobbering keys.
-        const current = await supabase
-          .from("kanvas_lyric_templates")
-          .select("render_defaults")
-          .eq("id", body.templateId as string)
-          .single();
-        if (current.error) throw current.error;
-        const merged = { ...(current.data.render_defaults ?? {}), ...renderDefaults };
-        const { data, error } = await supabase
-          .from("kanvas_lyric_templates")
-          .update({ render_defaults: merged })
-          .eq("id", body.templateId as string)
-          .select("*")
-          .single();
-        if (error) throw error;
-        return okEnvelope({ template: data });
-      }
-      case "signTrimmedAudio": {
-        // Returns a fresh signed URL for the template's trimmed audio asset.
-        // Runs with service-role so it bypasses project_assets RLS (templates
-        // created under the anon sentinel user can't be read from the browser).
-        const templateId = body.templateId as string;
-        if (!templateId) {
-          return errorEnvelope("templateId is required", "TEMPLATE_ID_REQUIRED", 400);
-        }
-        const ttlSec = typeof body.ttlSec === "number" ? Math.max(60, Math.min(86400, body.ttlSec)) : 3600;
-        const admin = createClient(
-          Deno.env.get("SUPABASE_URL")!,
-          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-        );
-        const tpl = await admin
-          .from("kanvas_lyric_templates")
-          .select("id,trimmed_audio_asset_id,source_audio_asset_id,transcript_meta,render_defaults")
-          .eq("id", templateId)
-          .single();
-        if (tpl.error) throw tpl.error;
-
-        let assetId: string | null =
-          (tpl.data.trimmed_audio_asset_id as string | null) ??
-          (tpl.data.source_audio_asset_id as string | null);
-
-        const tryFetchAsset = async (id: string) => {
-          const r = await admin
-            .from("project_assets")
-            .select("storage_bucket,storage_path")
-            .eq("id", id)
-            .maybeSingle();
-          if (r.error) throw r.error;
-          return r.data && r.data.storage_path ? r.data : null;
-        };
-
-        let asset = assetId ? await tryFetchAsset(assetId) : null;
-
-        // Fallback: rebuild the project_asset row from the linked media_asset.
-        if (!asset) {
-          const meta = (tpl.data.transcript_meta ?? {}) as Record<string, unknown>;
-          const renderDefaults = (tpl.data.render_defaults ?? {}) as Record<string, unknown>;
-          const mediaAssetId =
-            (typeof meta.media_asset_id === "string" && meta.media_asset_id) ||
-            (typeof renderDefaults.media_asset_id === "string" && renderDefaults.media_asset_id) ||
-            null;
-          if (mediaAssetId) {
-            const ma = await admin
-              .from("media_assets")
-              .select(MEDIA_ASSET_SELECT)
-              .eq("id", mediaAssetId)
-              .single();
-            if (ma.error) throw ma.error;
-            const newAssetId = await ensureProjectAssetForMediaAsset({
-              admin,
-              asset: ma.data as MediaAssetRow,
-              userId,
-              durationMs: Math.round(Number(ma.data?.duration_seconds ?? 0) * 1000) || 15000,
-            });
-            await admin
-              .from("kanvas_lyric_templates")
-              .update({ trimmed_audio_asset_id: newAssetId })
-              .eq("id", templateId);
-            assetId = newAssetId;
-            asset = await tryFetchAsset(newAssetId);
-          }
-        }
-
-        if (!asset) {
-          return errorEnvelope(
-            "No storage object available for this template.",
-            "TEMPLATE_AUDIO_MISSING",
-            404,
-          );
-        }
-
-        const signed = await admin.storage
-          .from(asset.storage_bucket)
-          .createSignedUrl(asset.storage_path!, ttlSec);
-        if (signed.error || !signed.data?.signedUrl) {
-          throw signed.error ?? new Error("Failed to sign trimmed audio URL");
-        }
-        return okEnvelope({
-          signedUrl: signed.data.signedUrl,
-          expiresInSec: ttlSec,
-          assetId,
-        });
-      }
+    switch (action) {
+      case 'create':
+        return await handleCreate(svc, userId, body);
+      case 'get':
+        return await handleGet(svc, userId, String(body.templateId ?? ''));
+      case 'list':
+        return await handleList(svc, userId, body);
+      case 'patch':
+        return await handlePatch(svc, userId, body);
+      case 'finalize':
+        return await handleFinalize(svc, userId, String(body.templateId ?? ''));
+      case 'archive':
+        return await handleArchive(svc, userId, String(body.templateId ?? ''));
       default:
-        return errorEnvelope(`Unknown action: ${body.action}`, "UNKNOWN_ACTION", 400);
+        return err(`unknown action: ${action}`);
     }
   } catch (e) {
-    return errorEnvelope(e, "KANVAS_LYRICS_TEMPLATE_FAILED", 500);
+    const msg = e instanceof Error ? e.message : 'internal error';
+    console.error('[kanvas-lyrics-template]', msg);
+    return err(msg, 500);
   }
 });

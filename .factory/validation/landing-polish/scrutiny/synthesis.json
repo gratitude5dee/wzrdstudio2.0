@@ -1,0 +1,134 @@
+{
+  "milestone": "landing-polish",
+  "round": 1,
+  "status": "pass",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "npm run test",
+      "exitCode": 1,
+      "note": "Exit code 1 from 9 pre-existing failing test files (8 with no test suite + 1 with 2 pre-existing assertion failures). 38 files passing, 279 tests passing, 2 tests failing — matches baseline (9 files failing, 2 tests failing). New tests added by workers increased passing count from 265 to 279."
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "npx tsc --noEmit",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "npm run lint",
+      "exitCode": 1,
+      "note": "Exit code 1 from 758 pre-existing lint errors (698 errors, 60 warnings). Verified identical count before and after mission changes via git stash comparison. No new lint errors introduced."
+    }
+  },
+  "reviewsSummary": {
+    "total": 6,
+    "passed": 6,
+    "failed": 0,
+    "failedFeatures": []
+  },
+  "blockingIssues": [],
+  "nonBlockingIssues": [
+    {
+      "featureId": "color-migration-core",
+      "severity": "non_blocking",
+      "description": "CSS variable names (--cyber-neon-green, --quantum-green, --accent-emerald) still reference green/emerald but contain orange HSL values. Naming debt — no functional impact."
+    },
+    {
+      "featureId": "color-migration-studio-landing",
+      "severity": "non_blocking",
+      "description": "QueueIndicator.tsx retains 4 non-exempt green hex colors (#B8C49A, #2EA866) for spinner text and progress bars. These are UI accents that should have been migrated but were missed because the verification grep only checked Tailwind class names, not hex values."
+    },
+    {
+      "featureId": "color-migration-studio-landing",
+      "severity": "non_blocking",
+      "description": "~20+ studio component files outside feature scope still use green hex accents (#2EA866, #B8C49A, #9FE8B3). These were not part of either color migration Part 1 or Part 2, suggesting a gap in migration planning."
+    },
+    {
+      "featureId": "cinematic-intro-animation",
+      "severity": "non_blocking",
+      "description": "Old LobsterIntro.tsx (124 lines) was not deleted. It is imported nowhere but remains as dead code in the repository."
+    },
+    {
+      "featureId": "cinematic-intro-animation",
+      "severity": "non_blocking",
+      "description": "Exit animation on CinematicIntro motion.div is effectively dead code — component returns null before AnimatePresence can capture it for exit animation."
+    },
+    {
+      "featureId": "loading-screen-polish",
+      "severity": "non_blocking",
+      "description": "Concentric ring animations animate width/height directly (triggers layout reflows) rather than transform:scale(). Minor performance concern on a 2s loading screen."
+    },
+    {
+      "featureId": "landing-page-redesign",
+      "severity": "non_blocking",
+      "description": "Multiple landing components still contain purple color references (#8b5cf6, purple-500, violet-500) in 6+ files. These were pre-existing and outside this feature's scope but represent incomplete color migration."
+    },
+    {
+      "featureId": "landing-page-redesign",
+      "severity": "non_blocking",
+      "description": "Unnecessary AnimatePresence wrapper around motion.video in VideoBackground.tsx — video is never unmounted with exit animation."
+    }
+  ],
+  "appliedUpdates": [
+    {
+      "target": "library",
+      "description": "Added React 18 ↔ Three.js version constraints to environment.md (fiber v9+ needs React 19, pin to v8.x for React 18). Added note about @types/three not being installed.",
+      "sourceFeature": "install-deps-move-assets"
+    },
+    {
+      "target": "library",
+      "description": "Added pre-existing lint error baseline (758 errors, 698 errors + 60 warnings) to environment.md so future workers can compare against the baseline.",
+      "sourceFeature": "loading-screen-polish"
+    }
+  ],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Add to Color Scheme section: 'Color migration verification must check BOTH Tailwind class names (green-/emerald-) AND hex color values (#2EA866, #B8C49A, #10B981, #50EF12, etc.) in target files. The Tailwind grep alone misses hex-based green accents used extensively in studio components.'",
+      "evidence": "color-migration-studio-landing review: QueueIndicator.tsx retains 4 non-exempt green hex colors that passed the Tailwind-only verification grep. ~20+ studio files still use green hex accents outside the migrated scope.",
+      "isSystemic": true
+    },
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Add coding convention: 'When replacing a component (e.g., LobsterIntro → CinematicIntro), delete the old component file if it is no longer imported anywhere. Leaving dead components accumulates unused code.'",
+      "evidence": "cinematic-intro-animation review: LobsterIntro.tsx (124 lines) was fully replaced but not deleted. Worker interpreted 'Replace LobsterIntro import in Landing.tsx' literally without deleting the source file.",
+      "isSystemic": false
+    },
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Add to Color Scheme section: 'Note: CSS custom property names (--cyber-neon-green, --quantum-green, --accent-emerald) in index.css still reference green/emerald but contain orange values. This naming debt exists and should be addressed in a future cleanup pass.'",
+      "evidence": "color-migration-core review: src/index.css lines 166, 237, 303 and light-premium.css line 36 have misleading variable names.",
+      "isSystemic": false
+    },
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Document export convention for new components: Prefer named exports (export function ComponentName) for consistency with shadcn/ui patterns. Avoid dual export (both named and default) unless needed for React.lazy().",
+      "evidence": "landing-page-redesign review: VideoBackground uses named export, HeroSection uses default, Landing.tsx mixes import styles. No documented convention exists.",
+      "isSystemic": false
+    },
+    {
+      "target": "skills",
+      "suggestion": "Frontend-worker skill: Add exception to 'write tests first' step: 'Skip test-first for purely visual/CSS-class-only changes (color migrations, layout adjustments) where there is no new logic to test. Still write tests if new components or behavioral logic are added.'",
+      "evidence": "Both color-migration-core and landing-page-redesign workers noted in skillFeedback that test-first is not meaningful for pure CSS replacements or visual layout redesigns. This was flagged independently by two separate workers.",
+      "isSystemic": true
+    },
+    {
+      "target": "skills",
+      "suggestion": "Frontend-worker skill: Clarify that 'return to orchestrator when dependencies needed' guidance doesn't apply to features whose explicit purpose is dependency installation.",
+      "evidence": "install-deps-move-assets worker noted the ambiguity in skillFeedback.",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "Git repository root is at the user's home directory rather than the project directory, causing inflated diffs",
+      "reason": "Environmental artifact specific to this machine. Not actionable by workers or the mission. Would need manual git repo re-initialization which is out of scope."
+    },
+    {
+      "observation": "WebGL testing limitation in headless Chromium",
+      "reason": "Already documented in .factory/library/user-testing.md under Known Limitations. Duplicate observation."
+    }
+  ],
+  "previousRound": null
+}

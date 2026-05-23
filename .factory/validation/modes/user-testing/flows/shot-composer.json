@@ -1,0 +1,185 @@
+{
+  "groupId": "shot-composer",
+  "testedAt": "2026-03-13T00:00:00.000Z",
+  "isolation": {
+    "appUrl": "http://localhost:8080/kanvas?studio=worldview",
+    "browserSession": "c2ce5c8ea561__shot2",
+    "auth": "bypassed via VITE_BYPASS_AUTH_FOR_TESTS=true",
+    "storeState": "fresh on each navigation (in-memory Zustand), seeded via browser console",
+    "apiKeys": "none configured — API calls fail with error toast (expected)"
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-SHOT-001",
+      "title": "Compose Shot opens composer mode",
+      "status": "pass",
+      "steps": [
+        { "action": "Navigate to /kanvas?studio=worldview", "expected": "Worldview tab active", "observed": "Worldview tab active, page loaded" },
+        { "action": "Click New Scene to create scene", "expected": "Scene 1 created", "observed": "Scene 1 chip appeared in scene strip" },
+        { "action": "Seed store with world + take via browser console", "expected": "World and take added to scene", "observed": "World card and take card rendered in canvas" },
+        { "action": "Hover over take card in takes grid", "expected": "Compose Shot overlay appears", "observed": "Compose Shot amber button overlay appeared on hover" },
+        { "action": "Click Compose Shot", "expected": "Switch to shot-composer mode with take reference", "observed": "Switched to shot-composer mode showing Take 1 as main preview, prompt area, model selector, and all composer controls" }
+      ],
+      "evidence": {
+        "screenshots": ["modes/shot-composer/VAL-SHOT-001-hover-compose-shot.png", "modes/shot-composer/VAL-SHOT-001-composer-opened.png"],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-SHOT-002",
+      "title": "Model selector with 4 models",
+      "status": "pass",
+      "steps": [
+        { "action": "Click Select model button", "expected": "Model dropdown opens with 4 options", "observed": "Dropdown opened showing 4 models" },
+        { "action": "Verify model names and emojis", "expected": "Nano Banana (🍌), Flux Dev (⚡), Flux Pro Ultra (🔥), OmniGen (🌀)", "observed": "All 4 models present with correct emojis: 🍌 Nano Banana, ⚡ Flux Dev, 🔥 Flux Pro Ultra, 🌀 OmniGen" },
+        { "action": "Check active model highlight", "expected": "Active model has emerald highlight", "observed": "Nano Banana has bg-emerald-500/20 text-emerald-300 (emerald highlight), others have zinc styling" }
+      ],
+      "evidence": {
+        "screenshots": ["modes/shot-composer/VAL-SHOT-002-model-selector-open.png"],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-SHOT-003",
+      "title": "Resolution cycling",
+      "status": "pass",
+      "steps": [
+        { "action": "Read initial resolution", "expected": "Shows a resolution value", "observed": "Initial value: 1K" },
+        { "action": "Click resolution button 4 times", "expected": "Cycles: 1K → 2K → 4K → 512 → 1K", "observed": "Cycled correctly: 1K → 2K → 4K → 512 → 1K (wraps)" }
+      ],
+      "evidence": {
+        "screenshots": ["modes/shot-composer/VAL-SHOT-003-resolution-1K.png", "modes/shot-composer/VAL-SHOT-003-resolution-cycled.png"],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-SHOT-004",
+      "title": "Aspect ratio cycling",
+      "status": "pass",
+      "steps": [
+        { "action": "Read initial aspect ratio", "expected": "Shows 16:9", "observed": "Initial value: 16:9" },
+        { "action": "Click aspect ratio button 5 times", "expected": "Cycles: 16:9 → 4:3 → 1:1 → 2.39:1 → 9:16 → 16:9", "observed": "Cycled correctly: 16:9 → 4:3 → 1:1 → 2.39:1 → 9:16 → 16:9 (wraps)" }
+      ],
+      "evidence": {
+        "screenshots": ["modes/shot-composer/VAL-SHOT-004-005-cycling-buttons.png"],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-SHOT-005",
+      "title": "Batch size cycling",
+      "status": "pass",
+      "steps": [
+        { "action": "Read initial batch size", "expected": "Shows 1x", "observed": "Initial value: 1x" },
+        { "action": "Click batch size button 4 times", "expected": "Cycles: 1x → 2x → 4x → 8x → 1x", "observed": "Cycled correctly: 1x → 2x → 4x → 8x → 1x (wraps)" }
+      ],
+      "evidence": {
+        "screenshots": ["modes/shot-composer/VAL-SHOT-004-005-cycling-buttons.png"],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-SHOT-006",
+      "title": "Send button disabled state",
+      "status": "pass",
+      "steps": [
+        { "action": "Check send button with empty prompt", "expected": "Send button disabled", "observed": "Send button disabled (is enabled = false), shown with [disabled] attribute" },
+        { "action": "Fill prompt with text", "expected": "Send button becomes enabled", "observed": "After filling 'A cinematic wide shot of the world', Send button enabled (is enabled = true), [disabled] attribute removed" }
+      ],
+      "evidence": {
+        "screenshots": ["modes/shot-composer/VAL-SHOT-006-send-disabled.png", "modes/shot-composer/VAL-SHOT-006-send-enabled.png"],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-SHOT-007",
+      "title": "Shot generation fires with graceful error",
+      "status": "pass",
+      "steps": [
+        { "action": "Click enabled Send button", "expected": "API call fires, graceful error toast on failure", "observed": "API call to fal-proxy fired, error toast appeared: 'Edge Function returned a non-2xx status code'" },
+        { "action": "Check for console errors", "expected": "No unhandled errors", "observed": "No console errors detected" }
+      ],
+      "evidence": {
+        "screenshots": ["modes/shot-composer/VAL-SHOT-007-error-toast.png"],
+        "consoleErrors": "none",
+        "network": "POST to fal-proxy -> non-2xx (expected, no API key)"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-SHOT-008",
+      "title": "Back to canvas navigation",
+      "status": "pass",
+      "steps": [
+        { "action": "Click 'Back to canvas' link", "expected": "Returns to canvas mode", "observed": "Returned to canvas mode showing world card with Enter World button, takes grid, and prompt bar. Shot composer no longer visible." }
+      ],
+      "evidence": {
+        "screenshots": ["modes/shot-composer/VAL-SHOT-008-back-to-canvas.png"],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-SHOT-009",
+      "title": "Character chip toggling",
+      "status": "pass",
+      "steps": [
+        { "action": "Seed 2 characters (Hero, Villain) via store", "expected": "Character roster appears", "observed": "Toggle Hero and Toggle Villain buttons appeared in character roster" },
+        { "action": "Click Toggle Hero", "expected": "Violet chip added to prompt area", "observed": "Hero violet chip appeared (bg-violet-500/20 text-violet-300) with Remove Hero X button" },
+        { "action": "Click Toggle Villain", "expected": "Second violet chip added", "observed": "Villain chip also appeared. Both Remove Hero and Remove Villain visible - multiple selection works" },
+        { "action": "Click Toggle Hero again", "expected": "Hero chip removed", "observed": "Hero chip removed, only Villain chip remains" }
+      ],
+      "evidence": {
+        "screenshots": ["modes/shot-composer/VAL-SHOT-009-hero-selected.png", "modes/shot-composer/VAL-SHOT-009-both-selected.png", "modes/shot-composer/VAL-SHOT-009-hero-deselected.png"],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-SHOT-010",
+      "title": "Take reference chip in prompt",
+      "status": "pass",
+      "steps": [
+        { "action": "Enter shot composer from take card", "expected": "Sky-blue take reference chip in prompt area", "observed": "Take reference chip present with bg-sky-500/20 text-sky-300 styling, thumbnail image, 'Take' label, and Remove take reference X button" },
+        { "action": "Click X to dismiss chip", "expected": "Take reference chip removed", "observed": "Chip removed from prompt area, Remove take reference button no longer in DOM" }
+      ],
+      "evidence": {
+        "screenshots": ["modes/shot-composer/VAL-SHOT-010-take-reference-chip.png", "modes/shot-composer/VAL-SHOT-010-chip-dismissed.png"],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "The take card for hover interaction was positioned below the viewport after scrolling to the world card. Required scrollIntoView via eval to bring it into the visible area before hovering to reveal the Compose Shot overlay.",
+      "resolved": true,
+      "resolution": "Used browser eval to scrollIntoView the take image, then used mouse coordinates to hover",
+      "affectedAssertions": ["VAL-SHOT-001"]
+    },
+    {
+      "description": "The addTake store action requires a WorldviewTake object with sceneId and cameraTransform fields (including fov), not a simplified object. The task prompt's seeding example used an incorrect structure (separate sceneId parameter and missing cameraTransform/fov).",
+      "resolved": true,
+      "resolution": "Inspected the store types (WorldviewTake, CameraSettings, CameraTransform) and used the correct structure with sceneId inside the take object and proper cameraTransform with fov field",
+      "affectedAssertions": ["VAL-SHOT-001"]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 10 assertions: 10 passed, 0 failed. All shot composer features work correctly: compose shot overlay, model selector with 4 models and emerald highlight, resolution/aspect-ratio/batch-size cycling with proper wrapping, send button disabled/enabled states, graceful error toast on API failure, back-to-canvas navigation, character chip toggling with violet styling, and take reference chip with sky-blue styling and dismiss functionality."
+}

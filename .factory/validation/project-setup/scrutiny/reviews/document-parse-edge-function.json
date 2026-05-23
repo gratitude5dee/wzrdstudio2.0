@@ -1,0 +1,56 @@
+{
+  "featureId": "document-parse-edge-function",
+  "reviewedAt": "2026-03-14T13:30:00.000Z",
+  "commitId": "4fa1c1c",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Clean, well-structured implementation of the document-parse edge function and client-side documentService. The edge function correctly follows existing patterns (CORS, auth via _shared/, error handling, npm: specifiers). Smart client-side routing parses TXT/MD locally and only sends PDF/DOCX to the edge function. DynamicConceptForm.tsx properly updated with .pdf,.docx accept attributes, loading spinners, and error toasts for both DefaultConceptForm and MusicVideoForm. 17 comprehensive unit tests cover validation, local parsing, remote parsing, and error handling. All expected behaviors from the feature description are met.",
+    "issues": [
+      {
+        "file": "supabase/functions/document-parse/index.ts",
+        "line": 5,
+        "severity": "non_blocking",
+        "description": "Header comment says 'ACCEPTS: multipart/form-data with a file field, or JSON { storagePath }' but the JSON path actually expects { fileName, fileData, mimeType }, not { storagePath }. The storagePath option mentioned in the feature description was not implemented — instead base64-encoded file data is sent via JSON. The comment is misleading."
+      },
+      {
+        "file": "supabase/functions/document-parse/index.ts",
+        "line": 196,
+        "severity": "non_blocking",
+        "description": "Error matching with errorMsg.includes('stream') is overly broad and could match unrelated errors that happen to contain the word 'stream' (e.g., streaming-related errors from other operations). Consider a more specific pattern like 'stream must have data' or similar unpdf-specific messages."
+      },
+      {
+        "file": "src/services/documentService.ts",
+        "line": 96,
+        "severity": "non_blocking",
+        "description": "Large files (up to 10MB) are base64-encoded for the JSON payload, inflating size by ~33% to ~13.3MB. While this works given supabase.functions.invoke's API constraints, it could cause issues with Supabase Edge Function payload size limits for files near the 10MB boundary. Multipart/form-data would be more efficient but may not be supported by the invoke API. Consider documenting this limitation or reducing the effective max size for remote-parsed files."
+      },
+      {
+        "file": "src/components/project-setup/DynamicConceptForm.tsx",
+        "line": 483,
+        "severity": "non_blocking",
+        "description": "Minor inconsistency: MusicVideoForm extracts the upload handler into a named function (handleLyricsFileUpload) while DefaultConceptForm keeps it inline in the onClick prop. Extracting both would improve readability and consistency."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The backend-worker SKILL.md already contains a document-parse example in its handoff template, which aligns perfectly with what this worker implemented. The skill procedure was followed correctly — tests written, validators run, interactive verification performed. No skill gaps identified.",
+      "evidence": "skillFeedback.followedProcedure: true, no deviations reported. SKILL.md example matches actual implementation closely."
+    },
+    {
+      "area": "conventions",
+      "observation": "The edge function does not validate HTTP method (no check for POST). A GET request would fall through to content-type parsing and return a confusing 'Unsupported Content-Type' error instead of a 405 Method Not Allowed. Other existing edge functions (e.g., generate-concept-examples) also skip this check, so this is consistent with current patterns but could be documented as a convention gap.",
+      "evidence": "supabase/functions/document-parse/index.ts — no req.method === 'POST' check. Compare to generate-concept-examples/index.ts which also lacks this check."
+    },
+    {
+      "area": "conventions",
+      "observation": "The storagePath input mode mentioned in the feature description was not implemented. The edge function accepts multipart/form-data or JSON with base64-encoded file data, but not a Supabase Storage path reference. This is a pragmatic choice since the client-side always has the file object, but if other features need to parse documents already in storage, they would need to download first. Not necessarily a gap, but worth noting for future features.",
+      "evidence": "Feature description says 'accepts file uploads (multipart/form-data or storage path)' but only multipart and base64 JSON are implemented."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "PASS. The document-parse edge function and client-side documentService are well-implemented, following all existing codebase patterns. The edge function correctly uses _shared/ helpers for CORS, auth, and responses, and leverages npm:unpdf and npm:mammoth via dynamic imports. The client-side service smartly routes TXT/MD to local parsing and PDF/DOCX to the edge function. DynamicConceptForm.tsx is properly updated for both DefaultConceptForm and MusicVideoForm with loading states and error handling. 17 unit tests provide comprehensive coverage. Four non-blocking issues identified: a misleading header comment about storagePath, an overly broad error pattern match, base64 size inflation for large files, and a minor consistency difference in handler extraction between the two form components. None are blocking."
+}

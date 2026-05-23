@@ -1,0 +1,14 @@
+commands:
+  install: npm install
+  typecheck: npx tsc --noEmit
+  build: npx vite build
+  test: npm run test
+  lint: npm run lint
+
+services:
+  web:
+    start: cd /Users/gratitud3/Downloads/mogstudio-repo && VITE_BYPASS_AUTH_FOR_TESTS=true ./node_modules/.bin/vite --port 8080
+    stop: lsof -ti :8080 | xargs kill -9 2>/dev/null || true
+    healthcheck: curl -sf http://localhost:8080
+    port: 8080
+    depends_on: []

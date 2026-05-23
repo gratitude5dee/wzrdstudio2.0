@@ -1,0 +1,46 @@
+{
+  "milestone": "modes",
+  "round": 1,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 23,
+    "passed": 23,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-VIEWER-001",
+    "VAL-VIEWER-002",
+    "VAL-VIEWER-003",
+    "VAL-VIEWER-004",
+    "VAL-VIEWER-005",
+    "VAL-VIEWER-006",
+    "VAL-VIEWER-007",
+    "VAL-VIEWER-008",
+    "VAL-VIEWER-009",
+    "VAL-SHOT-001",
+    "VAL-SHOT-002",
+    "VAL-SHOT-003",
+    "VAL-SHOT-004",
+    "VAL-SHOT-005",
+    "VAL-SHOT-006",
+    "VAL-SHOT-007",
+    "VAL-SHOT-008",
+    "VAL-SHOT-009",
+    "VAL-SHOT-010",
+    "VAL-POLISH-004",
+    "VAL-CROSS-002",
+    "VAL-CROSS-004",
+    "VAL-CROSS-005"
+  ],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [
+    {
+      "target": "user-testing.md",
+      "description": "Updated store seeding guidance: use proper store actions (addWorld, assignWorldToScene, addTake) instead of flat setState to match WorldviewScene type structure",
+      "source": "flow-report"
+    }
+  ],
+  "previousRound": null
+}

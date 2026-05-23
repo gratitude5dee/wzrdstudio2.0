@@ -1,0 +1,116 @@
+{
+  "groupId": "group-scenes",
+  "testedAt": "2026-03-13T00:00:00.000Z",
+  "isolation": {
+    "appUrl": "http://localhost:8080/kanvas?studio=worldview",
+    "browserSession": "ba5792be7323__group-scenes",
+    "auth": "none (VITE_BYPASS_AUTH_FOR_TESTS=true)",
+    "state": "in-memory Zustand, fresh on page load"
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-SCENE-001",
+      "title": "New Scene creation",
+      "status": "pass",
+      "steps": [
+        { "action": "Navigate to /kanvas?studio=worldview", "expected": "Worldview tab active with empty scene strip showing 'New Scene' button", "observed": "Worldview tab active, scene strip shows '+ New Scene' button and 'Create a new scene to get started' message" },
+        { "action": "Click 'New Scene' button", "expected": "Scene chip appears with scene number and becomes active", "observed": "Scene 1 chip appeared with number '1', amber highlight indicating active state, 'Create a 3D World' CTA and bottom prompt bar appeared" }
+      ],
+      "evidence": {
+        "screenshots": ["foundation/group-scenes/VAL-SCENE-001-before-create.png", "foundation/group-scenes/VAL-SCENE-001-after-create.png"],
+        "consoleErrors": "none",
+        "network": "N/A (no API calls)"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-SCENE-002",
+      "title": "Scene selection",
+      "status": "pass",
+      "steps": [
+        { "action": "Create second scene by clicking 'New Scene'", "expected": "Scene 2 chip appears and becomes active", "observed": "Scene 2 chip appeared and became active" },
+        { "action": "Click Scene 1 chip", "expected": "Scene 1 becomes active with amber highlight and glow shadow", "observed": "Scene 1 gained amber highlight, Scene 2 lost highlight. Remove button appeared for Scene 1 (active scene). Content area shows 'Create a 3D World' CTA for this scene." }
+      ],
+      "evidence": {
+        "screenshots": ["foundation/group-scenes/VAL-SCENE-002-active-scene-amber.png"],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-SCENE-003",
+      "title": "Scene strip horizontal scroll",
+      "status": "pass",
+      "steps": [
+        { "action": "Create scenes until 9 total exist", "expected": "Scene strip overflows and scrolls horizontally, New Scene button remains accessible", "observed": "9 scene chips displayed in a horizontal row. The 'New Scene' button is visible at the right edge (partially clipped, confirming overflow/scroll behavior). All scene chips are accessible and the New Scene button remains clickable." }
+      ],
+      "evidence": {
+        "screenshots": ["foundation/group-scenes/VAL-SCENE-003-horizontal-scroll.png"],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-SCENE-004",
+      "title": "Empty scene shows Create World CTA",
+      "status": "pass",
+      "steps": [
+        { "action": "View active scene with no world assigned", "expected": "Canvas mode displays 'Create a 3D World' CTA with dashed border, Globe2 icon, and hover amber glow", "observed": "CTA button displays 'Create a 3D World' text with Globe2 icon above it. On hover, the border changes to amber/gold dashed style and the icon turns amber, confirming the hover glow effect." }
+      ],
+      "evidence": {
+        "screenshots": ["foundation/group-scenes/VAL-SCENE-004-create-world-cta.png", "foundation/group-scenes/VAL-SCENE-004-cta-hover.png"],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-SCENE-005",
+      "title": "Scene deletion",
+      "status": "pass",
+      "steps": [
+        { "action": "Hover over active Scene 9 to reveal delete button", "expected": "Remove button appears on the active scene chip", "observed": "'Remove Scene 9' button appeared on hover" },
+        { "action": "Click 'Remove Scene 9'", "expected": "Scene 9 chip removed, another scene becomes active", "observed": "Scene 9 removed. 8 scenes remain (Scene 1-8). Scene 1 became the new active scene with amber highlight." }
+      ],
+      "evidence": {
+        "screenshots": ["foundation/group-scenes/VAL-SCENE-005-before-delete.png", "foundation/group-scenes/VAL-SCENE-005-after-delete.png"],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-SCENE-006",
+      "title": "Canvas mode bottom prompt bar",
+      "status": "pass",
+      "steps": [
+        { "action": "Observe bottom area of canvas mode", "expected": "Bottom prompt bar visible with Sparkles icon and text input, amber/gold theme, dark glass-morphic styling", "observed": "Bottom prompt bar is visible below the CTA area. It includes a Sparkles icon (star/sparkle graphic) on the left and a text input with placeholder 'Describe what you'd like to create...'. The bar has a semi-transparent dark background with subtle border, matching the glass-morphic panel design language." }
+      ],
+      "evidence": {
+        "screenshots": ["foundation/group-scenes/VAL-SCENE-006-bottom-prompt-bar.png"],
+        "consoleErrors": "none",
+        "network": "N/A"
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "The 'Remove Scene' button only appears on hover over the active scene chip — not immediately visible. This is by design but could confuse users looking for a delete action.",
+      "resolved": true,
+      "resolution": "Hovered over the active scene chip to reveal the remove button",
+      "affectedAssertions": ["VAL-SCENE-005"]
+    },
+    {
+      "description": "The '+ New Scene' text could not be found using 'find text' semantic locator (the + symbol caused matching issues). Had to use 'find role button --name' instead.",
+      "resolved": true,
+      "resolution": "Used ref-based clicking and 'find role button --name New Scene' for reliable interaction",
+      "affectedAssertions": ["VAL-SCENE-003"]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 6 assertions: all 6 passed. Scene management (create, select, scroll, CTA, delete, prompt bar) works correctly. No console errors detected. All UI elements match the specification including amber highlights, Globe2 icon, Sparkles icon, dashed borders, and glass-morphic styling."
+}

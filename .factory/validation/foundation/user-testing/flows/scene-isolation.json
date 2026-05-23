@@ -1,0 +1,74 @@
+{
+  "groupId": "scene-isolation",
+  "testedAt": "2026-03-13T00:00:00.000Z",
+  "isolation": {
+    "browserSession": "01e145ec455d__scene-isolation",
+    "appUrl": "http://localhost:8080/kanvas?studio=worldview",
+    "auth": "VITE_BYPASS_AUTH_FOR_TESTS=true (no auth needed)",
+    "apiKey": "WORLDLABS_API_KEY not configured (expected failures)"
+  },
+  "toolsUsed": ["agent-browser"],
+  "assertions": [
+    {
+      "id": "VAL-CROSS-006",
+      "title": "Multi-scene state isolation",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Navigate to http://localhost:8080/kanvas?studio=worldview",
+          "expected": "Worldview tab active with empty scene strip",
+          "observed": "Worldview tab active, 'Create a new scene to get started' message displayed"
+        },
+        {
+          "action": "Click 'New Scene' to create Scene A",
+          "expected": "Scene 1 chip appears with 'Create a 3D World' CTA",
+          "observed": "Scene 1 chip created and active, 'Create a 3D World' CTA displayed correctly"
+        },
+        {
+          "action": "Click 'Create a 3D World' CTA to open world creator",
+          "expected": "World creator panel opens with text/image toggle, prompt textarea, model selector, Generate World button",
+          "observed": "World creator panel opened as expected"
+        },
+        {
+          "action": "Enter prompt 'A mystical floating island with waterfalls' and click 'Generate World'",
+          "expected": "API call fails gracefully, inline error card shows 'World generation failed'",
+          "observed": "Inline error card displayed: 'World generation failed - Failed to send a request to the Edge Function' with Retry button"
+        },
+        {
+          "action": "Click 'New Scene' to create Scene B",
+          "expected": "Scene 2 chip appears and becomes active, shows clean 'Create a 3D World' CTA (not Scene A's error card)",
+          "observed": "Scene 2 chip created and active. Shows world creator form (not the CTA button), but NO error card from Scene A. Error state did not leak to Scene B. However, showCreator state leaked from Scene A (creator form open instead of CTA button)"
+        },
+        {
+          "action": "Switch back to Scene A by clicking Scene 1 chip",
+          "expected": "Scene A still shows its error state ('World generation failed' with Retry button)",
+          "observed": "FAIL: Scene A shows the world creator form (clean, no error). The generationError was cleared by a useEffect that resets it to null on every activeSceneId change. Error state was NOT preserved for Scene A."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "foundation/scene-isolation/step01-initial-page.png",
+          "foundation/scene-isolation/step02-scene-A-created.png",
+          "foundation/scene-isolation/step03-world-creator-open.png",
+          "foundation/scene-isolation/step04-scene-A-error-state.png",
+          "foundation/scene-isolation/step06-scene-B-created.png",
+          "foundation/scene-isolation/step09-scene-A-after-switch-back.png",
+          "foundation/scene-isolation/scene-B-empty-CTA.png"
+        ],
+        "consoleErrors": "none",
+        "network": "POST to worldlabs-proxy edge function failed (expected - no API key)"
+      },
+      "issues": "Partial fix: (1) generationError does NOT leak from Scene A to Scene B — PASS on isolation. (2) generationError is NOT preserved for Scene A when switching back — FAIL on state preservation. The useEffect at WorldviewSection.tsx:679-681 blanket-resets generationError to null on every activeSceneId change, losing Scene A's error state. (3) showCreator (component-level useState in CanvasMode at line 567) leaks between scenes — Scene B shows the creator form instead of the CTA button because showCreator persists in component state. Root cause: Both generationError and showCreator are component-level useState rather than per-scene state in the Zustand store. The fix only added a useEffect reset for generationError which prevents leaking but also clears the originating scene's state."
+    }
+  ],
+  "frictions": [
+    {
+      "description": "showCreator state (component-level useState in CanvasMode) leaks between scenes — when Scene A has the creator open and you create/switch to Scene B, Scene B also shows the creator form instead of the CTA button",
+      "resolved": false,
+      "resolution": null,
+      "affectedAssertions": ["VAL-CROSS-006"]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 1 assertion: 0 passed, 1 failed. VAL-CROSS-006 FAILS because Scene A's error state is not preserved when switching back from Scene B (generationError is blanket-reset on every scene switch via useEffect). Additionally, showCreator state leaks between scenes. The error does NOT leak from Scene A to Scene B (partial fix success), but proper per-scene state isolation requires moving generationError and showCreator into the Zustand store keyed by scene ID."
+}

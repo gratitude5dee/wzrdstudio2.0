@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openclaw.dev/schemas/mcp.config.json",
+  "mcpServers": {
+    "wzrd-studio": {
+      "transport": "streamable-http",
+      "url": "https://ixkkrousepsiorwlaycp.supabase.co/functions/v1/mcp-server",
+      "description": "WZRD Studio MCP server — model catalog, credits, projects, generation, checkout.",
+      "headers": {
+        "Accept": "application/json, text/event-stream"
+      }
+    }
+  }
+}

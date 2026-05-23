@@ -1,0 +1,39 @@
+{
+  "milestone": "project-setup",
+  "round": 2,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 22,
+    "passed": 22,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-SETUP-001",
+    "VAL-SETUP-002",
+    "VAL-SETUP-003",
+    "VAL-SETUP-004",
+    "VAL-SETUP-005",
+    "VAL-SETUP-006",
+    "VAL-SETUP-007",
+    "VAL-SETUP-008",
+    "VAL-SETUP-009",
+    "VAL-SETUP-010",
+    "VAL-SETUP-011",
+    "VAL-SETUP-012",
+    "VAL-SETUP-013",
+    "VAL-SETUP-014",
+    "VAL-SETUP-015",
+    "VAL-SETUP-016",
+    "VAL-SETUP-017",
+    "VAL-SETUP-018",
+    "VAL-SETUP-019",
+    "VAL-SETUP-020",
+    "VAL-CROSS-002",
+    "VAL-CROSS-015"
+  ],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "previousRound": ".factory/validation/project-setup/user-testing/synthesis-round1.json"
+}

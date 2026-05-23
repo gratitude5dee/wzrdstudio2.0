@@ -1,0 +1,161 @@
+{
+  "groupId": "landing-intro",
+  "testedAt": "2026-03-14T04:20:00.000Z",
+  "isolation": {
+    "appUrl": "http://localhost:8080",
+    "browserSession": "1dcc008a7d12__landing-intro",
+    "authBypass": "VITE_BYPASS_AUTH_FOR_TESTS=true",
+    "headed": true
+  },
+  "toolsUsed": ["agent-browser", "grep", "vitest"],
+  "assertions": [
+    {
+      "id": "VAL-LAND-001",
+      "title": "WebGL Three.js Logo Reveal Replaces LobsterIntro",
+      "status": "pass",
+      "steps": [
+        { "action": "Grep src/ for 'import.*LobsterIntro'", "expected": "No active imports of LobsterIntro", "observed": "No matches found — LobsterIntro is not imported anywhere in src/" },
+        { "action": "Verify Landing.tsx imports CinematicIntro", "expected": "CinematicIntro is lazy-loaded via React.lazy", "observed": "Line 8: const CinematicIntro = lazy(() => import('@/components/landing/CinematicIntro'))" },
+        { "action": "Verify CinematicIntro uses Three.js Canvas", "expected": "Canvas from @react-three/fiber present", "observed": "CinematicIntro.tsx imports Canvas from @react-three/fiber, uses <Canvas> with WebGL shader material, Three.js scene, bloom, and vignette post-processing" },
+        { "action": "Clear sessionStorage and navigate to /", "expected": "WebGL intro animation visible", "observed": "WZRD.tech logo rendered with bloom/glow effects on black background, orange ambient particles visible — confirmed WebGL rendering" },
+        { "action": "Check DOM for LobsterIntro components", "expected": "No caustic overlay, lobster silhouette, ember particles, or thermal text", "observed": "All LobsterIntro sub-components absent from DOM (causticOverlay: false, lobsterSilhouette: false, emberParticles: false, thermalText: false)" }
+      ],
+      "evidence": {
+        "screenshots": [
+          "landing-polish/landing-intro/VAL-LAND-001-canvas-intro.png",
+          "landing-polish/landing-intro/VAL-LAND-001-canvas-check.png",
+          "landing-polish/landing-intro/VAL-LAND-001-initial-load.png"
+        ],
+        "consoleErrors": "Only pre-existing lovable-tagger errors (Cannot read properties of undefined reading 'lov') — no WebGL or intro-related errors",
+        "network": "N/A — client-side rendering only",
+        "codeInspection": "LobsterIntro.tsx exists but is NOT imported in Landing.tsx or any other file. CinematicIntro.tsx uses Three.js <Canvas> with custom GLSL shaders, LogoPlane, AmbientParticles, Bloom, and Vignette."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-LAND-002",
+      "title": "Intro Plays Automatically on First Visit",
+      "status": "pass",
+      "steps": [
+        { "action": "Clear sessionStorage (remove mog-intro-seen)", "expected": "sessionStorage cleared", "observed": "sessionStorage.removeItem('mog-intro-seen') executed successfully" },
+        { "action": "Navigate to / (fresh session)", "expected": "Intro plays automatically covering full viewport", "observed": "WebGL intro animation played automatically — WZRD.tech logo with bloom effects visible covering viewport (black background). Screenshot captured mid-animation." },
+        { "action": "Verify sessionStorage after intro completes", "expected": "mog-intro-seen set to 'true'", "observed": "sessionStorage.getItem('mog-intro-seen') === 'true' — confirmed auto-set after completion" },
+        { "action": "Verify intro covers viewport", "expected": "Fixed overlay with inset-0 and z-[99999]", "observed": "CinematicIntro renders with className 'fixed inset-0 z-[99999]' — covers full viewport" }
+      ],
+      "evidence": {
+        "screenshots": [
+          "landing-polish/landing-intro/VAL-LAND-002-intro-playing.png"
+        ],
+        "consoleErrors": "Only pre-existing lovable-tagger errors",
+        "network": "N/A"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-LAND-003",
+      "title": "Intro Skip on Click",
+      "status": "pass",
+      "steps": [
+        { "action": "Clear sessionStorage and navigate to /", "expected": "Intro starts playing", "observed": "Intro animation visible with WZRD.tech logo and bloom effects" },
+        { "action": "Wait 800ms (mid-animation), take before-click screenshot", "expected": "Intro still playing", "observed": "Screenshot shows intro mid-animation with logo and orange glow" },
+        { "action": "Click at center of viewport (500, 300)", "expected": "Intro dismisses within 600ms", "observed": "Intro dismissed — clicking triggered handleSkip which sets phase='complete' and calls onComplete()" },
+        { "action": "Wait 700ms, take after-click screenshot", "expected": "Landing page content visible", "observed": "Landing page fully visible with WZRD Studio headline, Agent-Native badge, feature cards" },
+        { "action": "Check sessionStorage", "expected": "mog-intro-seen = 'true'", "observed": "sessionStorage.getItem('mog-intro-seen') === 'true'" },
+        { "action": "Check intro overlay removed", "expected": "No [role='presentation'] element", "observed": "introPresent: false — overlay completely removed from DOM" }
+      ],
+      "evidence": {
+        "screenshots": [
+          "landing-polish/landing-intro/VAL-LAND-003-before-click.png",
+          "landing-polish/landing-intro/VAL-LAND-003-after-click.png"
+        ],
+        "consoleErrors": "Only pre-existing lovable-tagger errors",
+        "network": "N/A"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-LAND-004",
+      "title": "Intro Does Not Replay in Same Session",
+      "status": "pass",
+      "steps": [
+        { "action": "After intro completed (mog-intro-seen = 'true'), navigate to /home", "expected": "Navigation succeeds", "observed": "Successfully navigated to http://localhost:8080/home" },
+        { "action": "Navigate back to /", "expected": "Intro does NOT replay", "observed": "Landing page content shown directly — no intro overlay, no canvas, no animation" },
+        { "action": "Check DOM state", "expected": "No intro elements, sessionStorage still 'true'", "observed": "introPresent: false, canvasPresent: false, mogIntroSeen: 'true' — intro correctly suppressed" }
+      ],
+      "evidence": {
+        "screenshots": [
+          "landing-polish/landing-intro/VAL-LAND-004-navigated-away.png",
+          "landing-polish/landing-intro/VAL-LAND-004-returned-no-intro.png"
+        ],
+        "consoleErrors": "Only pre-existing lovable-tagger errors",
+        "network": "N/A"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-LAND-005",
+      "title": "Intro Completes Gracefully Without Skip",
+      "status": "pass",
+      "steps": [
+        { "action": "Clear sessionStorage and navigate to /", "expected": "Intro starts playing", "observed": "Intro animation started automatically" },
+        { "action": "Wait 8000ms without any interaction", "expected": "Intro auto-dismisses after ~5s sequence", "observed": "After 8s wait, intro fully completed and dismissed" },
+        { "action": "Take screenshot and check DOM", "expected": "Landing page visible, no orphaned elements", "observed": "Landing page content visible (WZRD Studio headline, feature cards). No intro overlay, no canvas elements, no orphaned DOM elements." },
+        { "action": "Verify sessionStorage", "expected": "mog-intro-seen = 'true'", "observed": "mogIntroSeen: 'true' — auto-set by onComplete callback" }
+      ],
+      "evidence": {
+        "screenshots": [
+          "landing-polish/landing-intro/VAL-LAND-005-after-full-animation.png"
+        ],
+        "consoleErrors": "Only pre-existing lovable-tagger errors",
+        "network": "N/A"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-LAND-006",
+      "title": "Intro WebGL Fallback",
+      "status": "pass",
+      "steps": [
+        { "action": "Inspect CinematicIntro.tsx for WebGL detection", "expected": "WebGL availability check exists", "observed": "isWebGLAvailable() function at lines 10-15 checks for webgl2/webgl/experimental-webgl context. Returns false if unavailable." },
+        { "action": "Inspect fallback behavior when WebGL unavailable", "expected": "Graceful fallback — skip to landing page", "observed": "Lines 332-335: if (!webglAvailable) { onComplete(); return; } — immediately completes intro when WebGL unavailable" },
+        { "action": "Inspect WebGLErrorBoundary", "expected": "Error boundary catches rendering failures", "observed": "WebGLErrorBoundary class component catches errors, calls onError → handleWebGLError → onComplete(). Renders fallback (null) on error." },
+        { "action": "Inspect Canvas fallback prop", "expected": "Canvas has fallback for rendering failures", "observed": "Canvas component has fallback={<div className='w-full h-full bg-black' />}" },
+        { "action": "Inspect safety timeout", "expected": "Safety mechanism prevents indefinite hang", "observed": "6000ms safety timeout in useEffect calls onComplete() if phase hasn't reached 'complete'" },
+        { "action": "Run unit test: 'skips intro when WebGL is not available'", "expected": "Test passes", "observed": "All 7 CinematicIntro tests passed including 'skips intro when WebGL is not available' — verifies onComplete() called immediately when WebGL unavailable, no canvas rendered" }
+      ],
+      "evidence": {
+        "screenshots": [
+          "landing-polish/landing-intro/VAL-LAND-006-webgl-disabled.png",
+          "landing-polish/landing-intro/VAL-LAND-006-fallback-test.png"
+        ],
+        "consoleErrors": "No WebGL-related errors in any test scenario",
+        "network": "N/A",
+        "codeInspection": "CinematicIntro.tsx has robust 3-layer fallback: (1) isWebGLAvailable() pre-check skips intro immediately, (2) WebGLErrorBoundary catches runtime rendering errors, (3) 6s safety timeout prevents hangs. Unit test confirms correct behavior.",
+        "unitTests": "npx vitest run src/components/landing/__tests__/CinematicIntro.test.tsx — 7/7 passed including WebGL fallback test"
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "Canvas element is extremely transient — created by React Three Fiber during intro animation but removed on phase='complete'. DOM inspection via eval consistently misses it because the intro completes before sequential eval can execute.",
+      "resolved": true,
+      "resolution": "Verified canvas presence through visual screenshots (clearly showing WebGL-rendered logo with bloom effects) and code inspection confirming <Canvas> from @react-three/fiber is used.",
+      "affectedAssertions": ["VAL-LAND-001"]
+    },
+    {
+      "description": "Cannot disable WebGL at runtime for VAL-LAND-006 because JavaScript context resets on page navigation. Monkey-patching HTMLCanvasElement.prototype.getContext before navigation is ineffective.",
+      "resolved": true,
+      "resolution": "Verified fallback through code inspection and unit tests. The CinematicIntro.test.tsx includes a dedicated 'skips intro when WebGL is not available' test that passes — it mocks WebGL as unavailable and verifies onComplete is called immediately.",
+      "affectedAssertions": ["VAL-LAND-006"]
+    },
+    {
+      "description": "Pre-existing console errors from lovable-tagger: 'Cannot read properties of undefined (reading lov)' — 16 occurrences. These are unrelated to the intro system.",
+      "resolved": false,
+      "resolution": "Pre-existing issue noted in AGENTS.md (do NOT remove lovable-related files). Not a regression.",
+      "affectedAssertions": ["VAL-LAND-001", "VAL-LAND-002", "VAL-LAND-003", "VAL-LAND-004", "VAL-LAND-005"]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 6 assertions: all 6 passed. The CinematicIntro (Three.js WebGL logo reveal) correctly replaces LobsterIntro, plays automatically on first visit, supports click-to-skip with sessionStorage persistence, does not replay in same session, completes gracefully without skip, and has robust WebGL fallback (verified via code inspection and unit tests)."
+}

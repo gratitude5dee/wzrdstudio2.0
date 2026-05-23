@@ -1,0 +1,62 @@
+{
+  "groupId": "credits-sourcing",
+  "testedAt": "2026-03-14T12:00:00.000Z",
+  "isolation": {
+    "repoRoot": "/Users/gratitud3/Downloads/mogstudio-repo",
+    "browserNeeded": false,
+    "testingMethod": "source code inspection"
+  },
+  "toolsUsed": ["Grep", "Read"],
+  "assertions": [
+    {
+      "id": "VAL-CROSS-015",
+      "title": "Credit Costs Sourced from Single Constants File",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Verify ImagesToVideoNode.tsx fix — previously had hardcoded '2 credits' string and creditUsed: 2",
+          "expected": "Should import from @/lib/constants/credits and @/lib/studio-model-constants, no hardcoded values",
+          "observed": "Lines 9-10 import getModelCredits and getDefaultVideoModel. Line 26-29 uses useMemo to dynamically compute videoCreditCost via getModelCredits(getDefaultVideoModel()). Line 55 uses videoCreditCost for credit deduction. Line 85 uses {videoCreditCost} for display. No hardcoded credit values remain."
+        },
+        {
+          "action": "Verify src/lib/constants/credits.ts exists and contains canonical credit helpers",
+          "expected": "File exists with getModelCredits, getShotImageCredits, getShotVideoCredits, formatModelLabel, DIRECTORS_CUT_CREDITS, STORYLINE_MODEL_OPTIONS",
+          "observed": "File exists with all expected exports. Re-exports from studio-model-constants. Provides getModelCredits(), buildCreditsMap(), formatModelLabel(), formatModelLabelById(), getShotImageCredits(), getShotVideoCredits(), DIRECTORS_CUT_CREDITS (12), STORYLINE_MODEL_OPTIONS."
+        },
+        {
+          "action": "Verify src/lib/studio-model-constants.ts exists and contains canonical model catalog",
+          "expected": "File exists with IMAGE_MODELS, VIDEO_MODELS, AUDIO_MODELS, TEXT_MODELS arrays each with credits property",
+          "observed": "File exists with 10 image generation + 10 image advanced + 17 video generation + 20 video advanced + 5 audio + 4 text models. All have credits property. getModelById, getDefaultVideoModel, getDefaultImageModel helpers provided."
+        },
+        {
+          "action": "Grep entire src/ for hardcoded credit strings like '\"X credits\"'",
+          "expected": "No hardcoded credit display strings outside constants/test files",
+          "observed": "Zero matches found. All credit displays use dynamic values from constants helpers."
+        },
+        {
+          "action": "Grep entire src/ for hardcoded credit cost assignments (credits: N, creditUsed: N) outside constants files",
+          "expected": "No hardcoded credit cost assignments in components or pages",
+          "observed": "All credit: N values found only in studio-model-constants.ts (canonical catalog), credits.ts (storyline models), KanvasPage.test.tsx (test fixtures), and SettingsBillingPage.tsx (billing pack pricing data — separate domain from generation costs)."
+        },
+        {
+          "action": "Verify all UI components displaying credit costs import from constants files",
+          "expected": "Components use getModelCredits, getShotImageCredits, getShotVideoCredits, formatModelLabel, or DIRECTORS_CUT_CREDITS",
+          "observed": "Confirmed 7 consumer files: ImagesToVideoNode.tsx, ConceptTab.tsx, ShotImage.tsx, ShotImageActions.tsx, ShotsRow.tsx, StoryboardPage.tsx, DirectorCutPage.tsx — all import from @/lib/constants/credits and/or @/lib/studio-model-constants."
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "N/A — source code inspection only",
+        "network": "N/A — source code inspection only",
+        "codeInspection": [
+          "project-setup/credits-sourcing/VAL-CROSS-015-ImagesToVideoNode-fix.txt",
+          "project-setup/credits-sourcing/VAL-CROSS-015-codebase-audit.txt"
+        ]
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 1 assertion: 1 passed. VAL-CROSS-015 passes — the previous failure in ImagesToVideoNode.tsx has been fixed. The component now imports getModelCredits and getDefaultVideoModel from constants files instead of hardcoding '2 credits'. Full codebase audit confirms all credit cost values displayed in UI are sourced from src/lib/constants/credits.ts and src/lib/studio-model-constants.ts. No hardcoded credit values found in any component or page file."
+}

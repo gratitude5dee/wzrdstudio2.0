@@ -1,0 +1,200 @@
+{
+  "groupId": "storyline-voice",
+  "testedAt": "2026-03-14T12:00:00.000Z",
+  "isolation": {
+    "appUrl": "http://localhost:8080",
+    "authBypass": true,
+    "browserSession": "5e9570cd7db5__storyline-voice",
+    "loginRequired": false
+  },
+  "toolsUsed": ["agent-browser", "code-inspection"],
+  "assertions": [
+    {
+      "id": "VAL-SETUP-008",
+      "title": "Storyline Typewriter Animation",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Navigate to Storyline tab in project setup wizard",
+          "expected": "Storyline tab renders with animation components",
+          "observed": "Storyline tab loaded successfully with Import/Upload section and storyline display area"
+        },
+        {
+          "action": "Inspect StreamingTextAnimate component source code",
+          "expected": "Component implements word-by-word blur-in/typewriter animation using Framer Motion",
+          "observed": "StreamingTextAnimate.tsx (89 lines) implements progressive typewriter/blur-in with: initial={{ opacity: 0, filter: 'blur(8px)' }}, animate={{ opacity: 1, filter: 'blur(0px)' }}, staggered delay per word (0.04s), blinking cursor during streaming"
+        },
+        {
+          "action": "Verify StreamingTextAnimate is used in StorylineTab.tsx",
+          "expected": "Component imported and rendered for storyline text display",
+          "observed": "StorylineTab.tsx imports StreamingTextAnimate at line 13, renders it at line 461 for AI-generated text. Also uses TextAnimate (blurInUp, fadeIn by word) for section titles"
+        },
+        {
+          "action": "Verify unit tests exist for StreamingTextAnimate",
+          "expected": "Test file covers core functionality",
+          "observed": "StreamingTextAnimate.test.tsx exists with 6 tests covering: rendering text, empty text, isStreaming cursor, non-streaming, className prop, word splitting"
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "project-setup/storyline-voice/VAL-SETUP-008-storyline-tab.png",
+          "project-setup/storyline-voice/VAL-SETUP-008-storyline-scrolled.png"
+        ],
+        "consoleErrors": "none",
+        "codeInspection": "StreamingTextAnimate.tsx uses Framer Motion motion.span with blur-in animation (blur 8px→0px, opacity 0→1), 0.04s stagger per word, blinking cursor during streaming. Imported and used in StorylineTab.tsx line 461. TextAnimate used for section titles with blurInUp and fadeIn by word."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-SETUP-009",
+      "title": "Storyline Document Upload",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Navigate to Storyline tab",
+          "expected": "Upload area visible with supported formats listed",
+          "observed": "Upload area displays 'Drag & drop a script, chapter, or treatment' with 'PDF, DOCX, MD, TXT — up to 10 MB' and Browse files button"
+        },
+        {
+          "action": "Verify file input accept attribute",
+          "expected": "Accepts .pdf, .docx, .md, .txt",
+          "observed": "file input accept='.pdf,.docx,.md,.txt,.text'"
+        },
+        {
+          "action": "Upload test .txt file via file input",
+          "expected": "File parsed and content used as storyline input",
+          "observed": "Toast notification 'Document loaded' appeared confirming successful parse. StorylineDocumentUpload.tsx handles: file selection, drag-drop, loading state (spinner), error handling (toast), and URL import"
+        },
+        {
+          "action": "Verify URL import option exists",
+          "expected": "'Import from URL' link visible",
+          "observed": "'Import from URL' button visible below upload area, with URL input and Import button in expandable section"
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "project-setup/storyline-voice/VAL-SETUP-008-storyline-tab.png",
+          "project-setup/storyline-voice/VAL-SETUP-009-document-upload.png",
+          "project-setup/storyline-voice/VAL-SETUP-009-document-loaded.png"
+        ],
+        "consoleErrors": "none",
+        "network": "TXT file parsed client-side (no edge function needed). PDF/DOCX parsing via document-parse edge function."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-SETUP-010",
+      "title": "Voice Clone Audio Upload Popup",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Navigate to Settings & Cast tab",
+          "expected": "Clone Voice button visible in VOICEOVER SELECTION section",
+          "observed": "Clone Voice button with + icon visible next to VOICEOVER SELECTION heading"
+        },
+        {
+          "action": "Click Clone Voice button",
+          "expected": "Dialog opens with audio upload instructions and requirements",
+          "observed": "Dialog opens with: mic icon + 'Clone Voice' title, description about uploading clear audio, requirements box (Format: MP3/WAV, Duration: 30s-5min, Quality: clear speech), Voice Name input, drag-drop zone for audio files, Cancel and Clone Voice buttons"
+        },
+        {
+          "action": "Verify dialog has progress indicator support",
+          "expected": "Progress bar shown during upload",
+          "observed": "VoiceCloneDialog.tsx implements Progress component with stages: idle→validating→uploading→success/error. Progress bar shows percentage (0-100%) with animated updates during upload. Success state shows CheckCircle2 icon."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "project-setup/storyline-voice/VAL-SETUP-010-settings-cast-tab.png",
+          "project-setup/storyline-voice/VAL-SETUP-010-clone-voice-dialog.png"
+        ],
+        "consoleErrors": "none",
+        "network": "Clone voice calls elevenlabs-voices edge function with action: 'clone', audioBase64, name"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-SETUP-011",
+      "title": "Voice Clone Validation",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Open Clone Voice dialog",
+          "expected": "Dialog with audio requirements visible",
+          "observed": "Dialog showing Format: MP3/WAV, Duration: 30s-5min requirements"
+        },
+        {
+          "action": "Upload a 1-second WAV file (below 30s minimum)",
+          "expected": "Rejection with validation error message about minimum duration",
+          "observed": "Red error box displayed: 'Audio is too short (1s). Minimum duration is 30 seconds.' File was not accepted, drop zone remained empty."
+        },
+        {
+          "action": "Verify validation logic in VoiceCloneDialog.tsx",
+          "expected": "File type, size, and duration validation before upload",
+          "observed": "validateAudioFile() checks: 1) file type (MP3/WAV), 2) file size (max 50MB), 3) audio duration via Web Audio API (min 30s, max 300s/5min). Validation errors show in red AlertCircle box. All validation happens client-side before upload."
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "project-setup/storyline-voice/VAL-SETUP-011-validation-error.png"
+        ],
+        "consoleErrors": "none",
+        "codeInspection": "VoiceCloneDialog.tsx validates: ACCEPTED_AUDIO_TYPES=['audio/mpeg','audio/wav','audio/x-wav','audio/wave'], MIN_DURATION_SECONDS=30, MAX_DURATION_SECONDS=300, MAX_FILE_SIZE_MB=50. Error messages include actual vs expected values."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-SETUP-012",
+      "title": "Improved Cast Member Card UI",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Navigate to Settings & Cast tab",
+          "expected": "Cast section visible with Add character card",
+          "observed": "Cast section shows 'Add character' placeholder card and text 'No characters generated or added yet.'"
+        },
+        {
+          "action": "Inspect CharacterCard.tsx component source",
+          "expected": "Cleaner layout with avatar, hover overlay with Edit/Generate/Delete, state indicators",
+          "observed": "CharacterCard.tsx (264 lines) implements: 1) Avatar display area — shows character image, loading spinner during generation, or placeholder User icon in circular frame. 2) Hover overlay — gradient overlay (from-black/90 via-black/50) with 3 action buttons: Edit (Pencil icon, disabled without image), Generate/Regenerate (ImagePlus icon with primary color), Delete (Trash2 icon with red color). 3) Generation state badges — STATUS_BADGE map with 4 states: pending (Clock, zinc), generating (Loader2 spinning, primary), completed (CheckCircle2, green), failed (AlertCircle, red). 4) Info footer with name (truncated) and description. Uses Framer Motion for layout animations and AnimatePresence for image transitions."
+        },
+        {
+          "action": "Verify CharacterCard is rendered in SettingsTab",
+          "expected": "CharacterCard imported and used for character display",
+          "observed": "SettingsTab.tsx imports CharacterCard at line 12, renders it at line 344 inside a character cards grid section"
+        }
+      ],
+      "evidence": {
+        "screenshots": [
+          "project-setup/storyline-voice/VAL-SETUP-012-cast-section.png",
+          "project-setup/storyline-voice/VAL-SETUP-012-settings-cast-annotated.png"
+        ],
+        "consoleErrors": "none",
+        "codeInspection": "CharacterCard.tsx has: avatar display (image/placeholder), hover overlay with 3 action buttons (Edit/Generate/Delete), 4 generation state indicator badges (pending/generating/completed/failed), Framer Motion animations, Card-based layout with aspect-[3/4] proportion. Cannot test hover actions visually since no characters exist without a saved project."
+      },
+      "issues": "Character cards could not be fully tested in browser because creating a character requires a saved project (projectId), which this fresh wizard doesn't have. Card component is code-verified with all required features present."
+    }
+  ],
+  "frictions": [
+    {
+      "description": "Creating characters requires a saved project (projectId). In a fresh project-setup wizard without prior completion, the 'Add character' action shows 'Please save the project first' error. This prevents visual testing of CharacterCard hover overlay and state indicators.",
+      "resolved": false,
+      "resolution": "Used code inspection of CharacterCard.tsx as supplemental evidence to verify all required UI features exist in the component",
+      "affectedAssertions": ["VAL-SETUP-012"]
+    },
+    {
+      "description": "The intro animation plays on first visit to any page, requiring a click to dismiss before testing can begin.",
+      "resolved": true,
+      "resolution": "Clicked to dismiss intro, then navigated to /home",
+      "affectedAssertions": []
+    },
+    {
+      "description": "Storyline generation (for testing typewriter animation live) requires API keys for the Groq/storyline model which are not available in the test environment.",
+      "resolved": false,
+      "resolution": "Used code inspection to verify StreamingTextAnimate component implements the required word-by-word blur-in animation with Framer Motion",
+      "affectedAssertions": ["VAL-SETUP-008"]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 5 assertions: all 5 passed. VAL-SETUP-009 (document upload) confirmed via successful .txt upload with 'Document loaded' toast. VAL-SETUP-010 (voice clone dialog) opens with correct requirements and audio upload area. VAL-SETUP-011 (validation) correctly rejects 1s audio with 'too short' error. VAL-SETUP-008 (typewriter animation) and VAL-SETUP-012 (cast card UI) verified via code inspection showing complete implementations with Framer Motion animations, generation state indicators, and hover action buttons."
+}

@@ -1,0 +1,39 @@
+{
+  "featureId": "misc-scrutiny-fixes",
+  "reviewedAt": "2026-03-13T09:45:00.000Z",
+  "commitId": "7d97795",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "All 6 code quality fixes are correctly implemented. Fix 1 (@ts-expect-error) resolves the lint error. Fix 2 removes the genuinely unused `resolution` parameter from `captureTake` and updates the single call site. Fix 3 filters worldview from fetchKanvasModels using `.filter()` (appropriate since the code uses `.map()`, not a for loop); the downstream `modelGroups[0..3]` indexing remains correct since worldview was the last element. Fix 4 adds explicit `worldview` case returning `undefined` with correct return type update. Fix 5 wires up image upload through `uploadMediaAsset()` → `generateWorld(imageUrl)` → edge function `image_url` field, forming a complete end-to-end path. Fix 6 resets `showCreator` via useEffect on `activeSceneId` change. TypeScript, tests (44 passing), and lint all pass with zero new errors.",
+    "issues": [
+      {
+        "file": "supabase/functions/worldlabs-proxy/index.ts",
+        "line": 46,
+        "severity": "non_blocking",
+        "description": "Inconsistent indentation in `generateBody` object literal: the object properties use 12-space indent while the surrounding code uses 8-space indent, and the closing `};` uses 10-space indent. Cosmetic only."
+      },
+      {
+        "file": "src/components/worldview/WorldviewSection.tsx",
+        "line": 1847,
+        "severity": "non_blocking",
+        "description": "The useEffect that resets showCreator uses `eslint-disable-line react-hooks/exhaustive-deps` to suppress the missing `setSceneShowCreator` dependency. Since store actions are stable references this is safe, but including it in the dep array would be cleaner and avoid the eslint suppression."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "AGENTS.md states 'Do NOT modify existing services (src/services/) — only create the new worldLabsService.ts', but this polish feature correctly modified worldLabsService.ts (adding imageUrl param to generateWorld). The boundary was written for the foundation milestone and doesn't account for polish/fix milestones where mission-created files need updating. AGENTS.md could clarify that mission-created files are modifiable in subsequent milestones.",
+      "evidence": "AGENTS.md line: 'Do NOT modify existing services (src/services/) — only create the new worldLabsService.ts'. Diff modifies src/services/worldLabsService.ts to add imageUrl parameter."
+    },
+    {
+      "area": "conventions",
+      "observation": "The edge function generateBody object has slightly inconsistent indentation after the refactoring to support the conditional image_url field. This may indicate the edge function linting/formatting isn't as strict (Deno file, not covered by project prettier).",
+      "evidence": "supabase/functions/worldlabs-proxy/index.ts lines 46-49: object properties indented at 12 spaces while surrounding code uses 8-space indentation."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "All 6 code quality fixes from the foundation scrutiny review are correctly implemented. The @ts-expect-error fix resolves the edge function lint error. The unused resolution parameter removal from captureTake is clean with call site updated. The worldview filter in fetchKanvasModels correctly preserves model group indexing. The image upload wiring forms a complete end-to-end path (file → uploadMediaAsset → generateWorld → edge function → WorldLabs API). The buildRequestForStudio worldview case and showCreator reset are both clean implementations. Two non-blocking cosmetic issues noted (edge function indentation, eslint-disable comment). Verification confirms tsc, vitest (44 tests), and eslint all pass with zero new errors."
+}

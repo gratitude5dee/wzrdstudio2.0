@@ -1,0 +1,184 @@
+{
+  "groupId": "landing-content",
+  "testedAt": "2026-03-14T12:00:00.000Z",
+  "isolation": {
+    "appUrl": "http://localhost:8080",
+    "browserSession": "1dcc008a7d12__landing-content",
+    "authBypass": "VITE_BYPASS_AUTH_FOR_TESTS=true"
+  },
+  "toolsUsed": ["agent-browser", "source-code-inspection"],
+  "assertions": [
+    {
+      "id": "VAL-LAND-007",
+      "title": "Loading Screen Uses wzrdtechlogo.png with Orange Theme",
+      "status": "pass",
+      "steps": [
+        { "action": "Inspect LoadingScreen.tsx source code", "expected": "Uses wzrdtechlogo.png", "observed": "Logo src is '/lovable-uploads/wzrdtechlogo.png', centered with z-10 relative positioning" },
+        { "action": "Check for orange/amber animations in LoadingScreen.tsx", "expected": "Orange/amber glow, rings, particles, progress bar", "observed": "Radial glow hsla(14,100%,64%), rings border-orange-500/20 and border-amber-500/15, particles bg-orange-500/30, conic-gradient with #f97316 and #f59e0b, progress bar with linear-gradient(90deg, #f97316, #f59e0b)" },
+        { "action": "Grep for green/emerald in LoadingScreen.tsx", "expected": "No green accents", "observed": "No matches found — zero green/emerald references" },
+        { "action": "Verify App.tsx uses LoadingScreen", "expected": "LoadingScreen rendered app-wide", "observed": "LoadingScreen isLoading={isLoading} rendered in App component, visible for ~2s on initial load" }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "none (loading screen dismissed before browser connected)",
+        "sourceFiles": ["src/components/ui/LoadingScreen.tsx", "src/App.tsx"],
+        "notes": "Loading screen appears for ~2s on page load and auto-dismisses. Verified through source code inspection since it completes before agent-browser can capture it. All colors confirmed orange/amber only."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-LAND-008",
+      "title": "Loading Screen Animated Progress Bar",
+      "status": "pass",
+      "steps": [
+        { "action": "Inspect progress bar implementation in LoadingScreen.tsx", "expected": "Progress bar animates 0-100% over ~2s with orange-to-amber gradient", "observed": "Bottom progress bar uses scaleX animation from 0 to 1 over duration: 2s with ease [0.22, 1, 0.36, 1]. Style: linear-gradient(90deg, #f97316, #f59e0b) — orange (#f97316) to amber (#f59e0b). Height: 3px, positioned absolute bottom-0 left-0 right-0." },
+        { "action": "Verify timing matches App.tsx loading duration", "expected": "Animation duration matches loading screen display time", "observed": "App.tsx sets isLoading=false after 2000ms timeout, progress bar animation duration is 2s — perfectly synchronized" }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "none",
+        "sourceFiles": ["src/components/ui/LoadingScreen.tsx lines 188-199"],
+        "notes": "Progress bar verified via source code. The scaleX animation with transformOrigin: 'left' creates a left-to-right fill effect from 0% to 100% width."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-LAND-009",
+      "title": "Fullscreen Background Video on Landing Page",
+      "status": "pass",
+      "steps": [
+        { "action": "Navigate to http://localhost:8080/", "expected": "Landing page loads", "observed": "Landing page loaded successfully" },
+        { "action": "Inspect DOM for video element", "expected": "Video element with bgvid.mp4 src, autoplay, loop, muted, playsInline", "observed": "Video found: src='http://localhost:8080/bgvid.mp4', autoplay=true, loop=true, muted=true, playsInline=true, readyState=4 (HAVE_ENOUGH_DATA), paused=false" },
+        { "action": "Verify fullscreen styling", "expected": "Video covers full viewport", "observed": "Video classes: 'absolute inset-0 w-full h-full object-cover', parent: 'fixed inset-0 z-0' — fills entire viewport" },
+        { "action": "Verify bgvid.mp4 exists in /public", "expected": "File exists at public/bgvid.mp4", "observed": "File exists: 1,872,572 bytes (1.8MB)" }
+      ],
+      "evidence": {
+        "screenshots": ["landing-polish/landing-content/VAL-LAND-009-landing-page.png"],
+        "consoleErrors": "none",
+        "network": "GET /bgvid.mp4 -> loaded (readyState=4)"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-LAND-010",
+      "title": "Video Background Text Legibility",
+      "status": "pass",
+      "steps": [
+        { "action": "Take screenshot of landing page with video background", "expected": "Text readable over video", "observed": "All text clearly legible — white text on dark overlay" },
+        { "action": "Inspect dark overlay in DOM", "expected": "Dark overlay present", "observed": "Overlay gradient: linear-gradient(180deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.5) 30%, rgba(0,0,0,0.6) 70%, rgba(0,0,0,0.85) 100%)" },
+        { "action": "Calculate contrast ratios", "expected": "WCAG AA: 4.5:1 body, 3:1 large text", "observed": "White on dark: 17.40:1, text-white/60 on dark: 6.11:1, orange on dark: 6.21:1 — all exceed WCAG AA requirements" }
+      ],
+      "evidence": {
+        "screenshots": ["landing-polish/landing-content/VAL-LAND-010-text-legibility.png"],
+        "consoleErrors": "none",
+        "contrastRatios": {
+          "whiteOnDark": "17.40:1",
+          "semiWhiteOnDark": "6.11:1",
+          "orangeOnDark": "6.21:1"
+        }
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-LAND-011",
+      "title": "Video Background Fallback",
+      "status": "pass",
+      "steps": [
+        { "action": "Inspect VideoBackground.tsx source for error handling", "expected": "onError handler with fallback", "observed": "hasVideoError state tracks errors via 'error' event listener. When error occurs, video element is removed from DOM (!hasVideoError && <video>). Dark gradient fallback div is always present underneath." },
+        { "action": "Simulate video error via browser console", "expected": "Fallback background shown, no blank space", "observed": "After dispatching error event, video element removed from DOM (videoExists=false). Dark gradient fallback visible: linear-gradient(135deg, #0a0a0a 0%, #111111 25%, #0d0d0d 50%, #141414 75%, #0a0a0a 100%)" },
+        { "action": "Screenshot after video error", "expected": "Content visible with fallback background", "observed": "All content remains visible and readable on dark gradient background" }
+      ],
+      "evidence": {
+        "screenshots": ["landing-polish/landing-content/VAL-LAND-011-video-fallback.png"],
+        "consoleErrors": "none",
+        "sourceFiles": ["src/components/landing/VideoBackground.tsx"]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-LAND-012",
+      "title": "Landing Page Cardboard.dev-Inspired Aesthetic",
+      "status": "pass",
+      "steps": [
+        { "action": "Take screenshots of landing page sections", "expected": "Card-based layout, dark theme, orange accents, generous whitespace", "observed": "Card-based layout confirmed: sections use rounded-2xl borders, bg-white/[0.02] backgrounds, backdrop-blur-sm. Dark theme with black/near-black backgrounds throughout." },
+        { "action": "Verify orange/amber as primary accent", "expected": "Orange/amber CTA buttons, badges, gradients", "observed": "CTA buttons use gradient from-[#FF6B4A] to-[#e55a3a], badges use orange-500/10 backgrounds, section dividers use orange-500/20 gradients" },
+        { "action": "Verify typography and whitespace", "expected": "Refined typography, generous spacing", "observed": "Hero text: text-5xl to text-8xl font-bold tracking-tight. Sections have py-20 px-4 spacing. Subtle noise texture overlay for depth." }
+      ],
+      "evidence": {
+        "screenshots": ["landing-polish/landing-content/VAL-LAND-009-landing-page.png", "landing-polish/landing-content/VAL-LAND-012-features-section.png", "landing-polish/landing-content/VAL-LAND-012-pricing-section.png"],
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-LAND-013",
+      "title": "Landing Page All Sections Render",
+      "status": "pass",
+      "steps": [
+        { "action": "Enumerate all sections in DOM via JavaScript", "expected": "All sections present in order", "observed": "All 10 sections render in order: (0) MogPromoSection, (1) HeroSection, (2) Trust Indicators, (3) FeatureGrid, (4) UseCasesSection, (5) TestimonialsSection, (6) NewReleasePromo, (7) PricingSectionRedesigned, (8) FAQAccordion, (9) StickyFooter" },
+        { "action": "Take full-page screenshot", "expected": "All sections visible", "observed": "Full-page screenshot captured showing all sections rendered" },
+        { "action": "Check console errors", "expected": "No errors", "observed": "Only 2 Framer Motion warnings about controls.start() — these are non-blocking informational warnings, not errors" }
+      ],
+      "evidence": {
+        "screenshots": ["landing-polish/landing-content/VAL-LAND-013-full-page.png", "landing-polish/landing-content/VAL-LAND-013-faq-footer.png"],
+        "consoleErrors": "2 Framer Motion warnings (controls.start() before mount) — non-blocking, informational only"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-LAND-014",
+      "title": "Landing Page CTA Buttons Route Correctly",
+      "status": "pass",
+      "steps": [
+        { "action": "Check 'Start Creating Free' href attribute", "expected": "/login?mode=signup", "observed": "href='/login?mode=signup' confirmed via DOM inspection and get attr" },
+        { "action": "Click 'Start Creating Free' button", "expected": "Navigates to /login?mode=signup", "observed": "Navigated to /home (auto-redirect because auth bypass makes user authenticated — login page redirects authenticated users to dashboard)" },
+        { "action": "Click 'Dashboard' link", "expected": "Navigates to /home", "observed": "Navigated to http://localhost:8080/home — confirmed" },
+        { "action": "Verify 'Log In' href in source code (unauth state)", "expected": "/login", "observed": "Source code confirms: <Link to='/login'>Log In</Link> rendered when user is null" }
+      ],
+      "evidence": {
+        "screenshots": ["landing-polish/landing-content/VAL-LAND-014-dashboard-redirect.png"],
+        "consoleErrors": "none",
+        "notes": "All 3 CTA routes verified. 'Log In' → /login verified via source code (unavailable in UI due to auth bypass). 'Start Creating Free' → /login?mode=signup verified via href attribute. 'Dashboard' → /home verified via click test."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-LAND-015",
+      "title": "Landing Page Auth-Conditional Header",
+      "status": "pass",
+      "steps": [
+        { "action": "Inspect authenticated header in browser", "expected": "Shows 'Dashboard' and 'Log Out'", "observed": "Header displays: Logo, Features, Pricing, Testimonials, FAQ, Demo, Dashboard (link to /home), Log Out (button with handleLogout)" },
+        { "action": "Verify unauthenticated header in source code", "expected": "Shows 'Log In' and 'Sign Up'", "observed": "Landing.tsx uses {user ? (Dashboard + Log Out) : (Log In + Sign Up)} conditional rendering. Unauth state: Log In (link to /login), Sign Up (link to /login?mode=signup). Both desktop and mobile headers have this conditional." },
+        { "action": "Screenshot authenticated header", "expected": "Dashboard and Log Out visible", "observed": "Annotated screenshot shows: @e3 link 'Dashboard', @e4 button 'Log Out'" }
+      ],
+      "evidence": {
+        "screenshots": ["landing-polish/landing-content/VAL-LAND-015-header-authenticated.png"],
+        "consoleErrors": "none",
+        "notes": "Cannot test unauthenticated state via browser because VITE_BYPASS_AUTH_FOR_TESTS=true forces authenticated state. Source code review confirms both auth states are properly handled with conditional rendering."
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "Loading screen (VAL-LAND-007/008) appears for only ~2s on page load and auto-dismisses before agent-browser can capture screenshots. Had to verify via source code inspection instead of visual testing.",
+      "resolved": true,
+      "resolution": "Used source code inspection of LoadingScreen.tsx and App.tsx to verify logo, colors, and animation details. All orange/amber colors and wzrdtechlogo.png confirmed.",
+      "affectedAssertions": ["VAL-LAND-007", "VAL-LAND-008"]
+    },
+    {
+      "description": "Auth bypass (VITE_BYPASS_AUTH_FOR_TESTS=true) prevents testing unauthenticated header state in browser. Can only verify authenticated state visually.",
+      "resolved": true,
+      "resolution": "Verified unauthenticated rendering path via source code review of Landing.tsx conditional {user ? auth : unauth} rendering.",
+      "affectedAssertions": ["VAL-LAND-015"]
+    },
+    {
+      "description": "Framer Motion warnings in console: 'controls.start() should only be called after a component has mounted' (2 occurrences). These are non-blocking informational warnings.",
+      "resolved": false,
+      "resolution": "Not a bug — Framer Motion animation timing warning. Does not affect functionality.",
+      "affectedAssertions": ["VAL-LAND-013"]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 9 assertions: 9 passed, 0 failed. All landing page content assertions verified. Video background has correct attributes (autoplay, loop, muted, playsInline), dark overlay provides WCAG-compliant contrast (6.11:1 minimum), video fallback works correctly, card-based layout with orange/amber accents confirmed, all 10 sections render in order, CTA routing is correct, and auth-conditional header works. Loading screen verified via source code (appears too briefly for browser capture)."
+}

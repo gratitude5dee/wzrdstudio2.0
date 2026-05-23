@@ -1,0 +1,63 @@
+{
+  "featureId": "timeline-improvements",
+  "reviewedAt": "2026-03-14T13:15:00.000Z",
+  "commitId": "e8e47c9",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The implementation covers the four feature requirements: (1) structured JSON payload sent to finalize-project-setup with concept, storyline, settings, and cast data; (2) state persistence via userEditedShotsRef that preserves user-edited shot content during regeneration; (3) credit costs displayed on all generation buttons sourced from credits constants; (4) generated assets already stored in Supabase Storage via existing infrastructure. Tests added (9 new, all passing), typecheck clean, no new lint errors. Several non-blocking issues found around dead enrichment code, missing breakdown data in payload, hardcoded Director's Cut credits, and default-only model credits in button labels.",
+    "issues": [
+      {
+        "file": "src/components/project-setup/ProjectContext.tsx",
+        "line": 337,
+        "severity": "non_blocking",
+        "description": "Feature description requires 'ALL prior step data (concept, storyline, settings, cast, breakdown)' but the structuredPayload omits breakdown data entirely. The edge function fetches scenes/shots from the DB so it works functionally, but the payload doesn't match the stated requirement. The RequestBody interface declares 'breakdown?: Record<string, unknown>' but it's never populated."
+      },
+      {
+        "file": "supabase/functions/finalize-project-setup/index.ts",
+        "line": 453,
+        "severity": "non_blocking",
+        "description": "Characters (_characters) and selected storyline (_selectedStoryline) are fetched from DB and attached to projectData but are never consumed by any prompt function in _shared/prompts.ts. The prompt functions only use explicit fields (genre, tone, video_style, etc.) — these underscore-prefixed enrichment fields are dead code that don't contribute to richer prompts as the comments suggest."
+      },
+      {
+        "file": "src/lib/constants/credits.ts",
+        "line": 99,
+        "severity": "non_blocking",
+        "description": "DIRECTORS_CUT_CREDITS = 12 is hardcoded rather than derived from the model catalog via getModelById('fal-ai/ffmpeg-api/compose')?.credits. The catalog does list FFmpeg Compose at 12 credits (studio-model-constants.ts:749). AGENTS.md states 'Single source of truth — never hardcode credit values elsewhere.' If the catalog cost changes, this constant would become stale."
+      },
+      {
+        "file": "src/components/storyboard/ShotsRow.tsx",
+        "line": 623,
+        "severity": "non_blocking",
+        "description": "getShotImageCredits() and getShotVideoCredits() are called without the project's selected model ID, so they always return default (first model) credits. The same pattern applies in StoryboardPage.tsx:401, ShotImage.tsx:307, and ShotImageActions.tsx:163/176. If the user selects a non-default model, displayed credits won't match actual cost."
+      },
+      {
+        "file": "src/components/storyboard/ShotsRow.tsx",
+        "line": 92,
+        "severity": "non_blocking",
+        "description": "userEditedShotsRef is never cleared. Once a shot is marked as user-edited, it permanently prevents content field updates (prompt_idea, visual_prompt, dialogue, sound_effects, shot_type) from the server. If a user later wants to regenerate content for a previously edited shot, those fields will never update. Consider clearing the entry when the user explicitly triggers regeneration for that shot."
+      },
+      {
+        "file": "src/components/storyboard/shot/ShotImage.tsx",
+        "line": 54,
+        "severity": "non_blocking",
+        "description": "The video polling useEffect includes onUpdate in its dependency array, but onUpdate is created as an inline arrow function in ShotsRow.tsx:768 (via handleShotUpdate). This causes the effect to re-run and recreate the polling interval on every parent render. Consider memoizing the callback or removing it from the dependency array."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "AGENTS.md credit costs section says 'Single source of truth — never hardcode credit values elsewhere,' but DIRECTORS_CUT_CREDITS in credits.ts is hardcoded as 12 rather than derived from the studio model catalog which has FFmpeg Compose at 12 credits. The convention guidance could be more explicit about how to reference non-model-dropdown credit values (like Director's Cut composition cost).",
+      "evidence": "src/lib/constants/credits.ts:99 — `export const DIRECTORS_CUT_CREDITS = 12` vs src/lib/studio-model-constants.ts:749 — `credits: 12` for fal-ai/ffmpeg-api/compose"
+    },
+    {
+      "area": "conventions",
+      "observation": "The prompt generation functions in _shared/prompts.ts accept projectData/projectContext as loose 'any' types. The finalize-project-setup edge function attaches enrichment data (_characters, _selectedStoryline) to projectData, but prompts.ts doesn't use these fields. AGENTS.md says 'Include all context from prior wizard steps in downstream generation calls' but doesn't specify which fields prompt functions should consume. A more explicit mapping or type contract could prevent this dead-code pattern.",
+      "evidence": "supabase/functions/finalize-project-setup/index.ts:453,466 attaches _characters and _selectedStoryline. supabase/functions/_shared/prompts.ts getVisualPromptUserPrompt only uses genre, tone, video_style, aspect_ratio, cinematic_inspiration."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Feature passes review. The four core requirements are implemented: structured JSON payload flows concept/storyline/settings/cast to the edge function; user edits are preserved during regeneration via ref-based tracking; credit costs are displayed on all generation buttons; assets are stored in Supabase Storage via existing infrastructure. Nine new unit tests cover credit helpers. Non-blocking issues include: breakdown data missing from the client payload (fetched from DB instead), dead enrichment code for characters/storyline that prompts don't consume, hardcoded Director's Cut credits instead of catalog reference, default-only model credits in button labels, and a never-clearing edited-shots ref. No regressions introduced."
+}
