@@ -50,6 +50,524 @@ export type Database = {
         }
         Relationships: []
       }
+      af_ad_drafts: {
+        Row: {
+          artist_id: string
+          created_at: string
+          cta: string | null
+          headline: string | null
+          id: string
+          objective: string | null
+          platform: string
+          primary_text: string | null
+          status: string
+          targeting: Json
+          updated_at: string
+        }
+        Insert: {
+          artist_id: string
+          created_at?: string
+          cta?: string | null
+          headline?: string | null
+          id?: string
+          objective?: string | null
+          platform: string
+          primary_text?: string | null
+          status?: string
+          targeting?: Json
+          updated_at?: string
+        }
+        Update: {
+          artist_id?: string
+          created_at?: string
+          cta?: string | null
+          headline?: string | null
+          id?: string
+          objective?: string | null
+          platform?: string
+          primary_text?: string | null
+          status?: string
+          targeting?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "af_ad_drafts_artist_id_fkey"
+            columns: ["artist_id"]
+            isOneToOne: false
+            referencedRelation: "af_artists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      af_albums: {
+        Row: {
+          artist_id: string
+          cover_art: Json | null
+          created_at: string
+          id: string
+          is_popular: boolean
+          name: string | null
+          ranking: number | null
+          release_date: string | null
+          spotify_id: string
+          total_tracks: number | null
+          type: string | null
+        }
+        Insert: {
+          artist_id: string
+          cover_art?: Json | null
+          created_at?: string
+          id?: string
+          is_popular?: boolean
+          name?: string | null
+          ranking?: number | null
+          release_date?: string | null
+          spotify_id: string
+          total_tracks?: number | null
+          type?: string | null
+        }
+        Update: {
+          artist_id?: string
+          cover_art?: Json | null
+          created_at?: string
+          id?: string
+          is_popular?: boolean
+          name?: string | null
+          ranking?: number | null
+          release_date?: string | null
+          spotify_id?: string
+          total_tracks?: number | null
+          type?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "af_albums_artist_id_fkey"
+            columns: ["artist_id"]
+            isOneToOne: false
+            referencedRelation: "af_artists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      af_artist_aura: {
+        Row: {
+          artist_id: string
+          generated_at: string
+          model: string | null
+          payload: Json
+          prompt_version: number
+          updated_at: string
+        }
+        Insert: {
+          artist_id: string
+          generated_at?: string
+          model?: string | null
+          payload: Json
+          prompt_version?: number
+          updated_at?: string
+        }
+        Update: {
+          artist_id?: string
+          generated_at?: string
+          model?: string | null
+          payload?: Json
+          prompt_version?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "af_artist_aura_artist_id_fkey"
+            columns: ["artist_id"]
+            isOneToOne: true
+            referencedRelation: "af_artists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      af_artists: {
+        Row: {
+          analytics: Json | null
+          avg_streams_per_top_track: number | null
+          bio: string | null
+          contact_info: Json | null
+          cover_art: Json | null
+          created_at: string
+          external_links: Json | null
+          follower_listener_ratio: number | null
+          followers: number | null
+          genres: string[] | null
+          id: string
+          image_url: string | null
+          last_refreshed_at: string | null
+          metadata: Json
+          monthly_listeners: number | null
+          name: string
+          owner_id: string
+          scraped_at: string | null
+          spotify_id: string | null
+          total_top_track_streams: number | null
+          updated_at: string
+          verified: boolean | null
+          workspace_id: string
+          world_rank: number | null
+        }
+        Insert: {
+          analytics?: Json | null
+          avg_streams_per_top_track?: number | null
+          bio?: string | null
+          contact_info?: Json | null
+          cover_art?: Json | null
+          created_at?: string
+          external_links?: Json | null
+          follower_listener_ratio?: number | null
+          followers?: number | null
+          genres?: string[] | null
+          id?: string
+          image_url?: string | null
+          last_refreshed_at?: string | null
+          metadata?: Json
+          monthly_listeners?: number | null
+          name: string
+          owner_id: string
+          scraped_at?: string | null
+          spotify_id?: string | null
+          total_top_track_streams?: number | null
+          updated_at?: string
+          verified?: boolean | null
+          workspace_id: string
+          world_rank?: number | null
+        }
+        Update: {
+          analytics?: Json | null
+          avg_streams_per_top_track?: number | null
+          bio?: string | null
+          contact_info?: Json | null
+          cover_art?: Json | null
+          created_at?: string
+          external_links?: Json | null
+          follower_listener_ratio?: number | null
+          followers?: number | null
+          genres?: string[] | null
+          id?: string
+          image_url?: string | null
+          last_refreshed_at?: string | null
+          metadata?: Json
+          monthly_listeners?: number | null
+          name?: string
+          owner_id?: string
+          scraped_at?: string | null
+          spotify_id?: string | null
+          total_top_track_streams?: number | null
+          updated_at?: string
+          verified?: boolean | null
+          workspace_id?: string
+          world_rank?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "af_artists_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "af_workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      af_audience_geo: {
+        Row: {
+          artist_id: string
+          city: string | null
+          country: string | null
+          country_code: string | null
+          created_at: string
+          id: string
+          lat: number | null
+          listeners: number
+          lng: number | null
+          percentile: number | null
+          source: string
+        }
+        Insert: {
+          artist_id: string
+          city?: string | null
+          country?: string | null
+          country_code?: string | null
+          created_at?: string
+          id?: string
+          lat?: number | null
+          listeners?: number
+          lng?: number | null
+          percentile?: number | null
+          source?: string
+        }
+        Update: {
+          artist_id?: string
+          city?: string | null
+          country?: string | null
+          country_code?: string | null
+          created_at?: string
+          id?: string
+          lat?: number | null
+          listeners?: number
+          lng?: number | null
+          percentile?: number | null
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "af_audience_geo_artist_id_fkey"
+            columns: ["artist_id"]
+            isOneToOne: false
+            referencedRelation: "af_artists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      af_collaborators: {
+        Row: {
+          artist_id: string
+          created_at: string
+          id: string
+          name: string
+          payload: Json
+          reason: string | null
+          score: number | null
+          type: string
+        }
+        Insert: {
+          artist_id: string
+          created_at?: string
+          id?: string
+          name: string
+          payload?: Json
+          reason?: string | null
+          score?: number | null
+          type?: string
+        }
+        Update: {
+          artist_id?: string
+          created_at?: string
+          id?: string
+          name?: string
+          payload?: Json
+          reason?: string | null
+          score?: number | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "af_collaborators_artist_id_fkey"
+            columns: ["artist_id"]
+            isOneToOne: false
+            referencedRelation: "af_artists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      af_recommendations: {
+        Row: {
+          artist_id: string
+          created_at: string
+          id: string
+          kind: string
+          payload: Json
+          rationale: string | null
+          score: number | null
+          title: string
+        }
+        Insert: {
+          artist_id: string
+          created_at?: string
+          id?: string
+          kind: string
+          payload?: Json
+          rationale?: string | null
+          score?: number | null
+          title: string
+        }
+        Update: {
+          artist_id?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          payload?: Json
+          rationale?: string | null
+          score?: number | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "af_recommendations_artist_id_fkey"
+            columns: ["artist_id"]
+            isOneToOne: false
+            referencedRelation: "af_artists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      af_refresh_jobs: {
+        Row: {
+          apify_run_id: string | null
+          artist_id: string
+          error: string | null
+          finished_at: string | null
+          id: string
+          started_at: string
+          stats: Json
+          status: string
+        }
+        Insert: {
+          apify_run_id?: string | null
+          artist_id: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          started_at?: string
+          stats?: Json
+          status?: string
+        }
+        Update: {
+          apify_run_id?: string | null
+          artist_id?: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          started_at?: string
+          stats?: Json
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "af_refresh_jobs_artist_id_fkey"
+            columns: ["artist_id"]
+            isOneToOne: false
+            referencedRelation: "af_artists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      af_search_cache: {
+        Row: {
+          created_at: string
+          owner_id: string
+          query: string
+          query_hash: string
+          results: Json
+        }
+        Insert: {
+          created_at?: string
+          owner_id: string
+          query: string
+          query_hash: string
+          results?: Json
+        }
+        Update: {
+          created_at?: string
+          owner_id?: string
+          query?: string
+          query_hash?: string
+          results?: Json
+        }
+        Relationships: []
+      }
+      af_top_playlists: {
+        Row: {
+          artist_id: string
+          created_at: string
+          curator: string | null
+          id: string
+          name: string | null
+          payload: Json
+          ranking: number
+        }
+        Insert: {
+          artist_id: string
+          created_at?: string
+          curator?: string | null
+          id?: string
+          name?: string | null
+          payload?: Json
+          ranking?: number
+        }
+        Update: {
+          artist_id?: string
+          created_at?: string
+          curator?: string | null
+          id?: string
+          name?: string | null
+          payload?: Json
+          ranking?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "af_top_playlists_artist_id_fkey"
+            columns: ["artist_id"]
+            isOneToOne: false
+            referencedRelation: "af_artists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      af_top_tracks: {
+        Row: {
+          artist_id: string
+          created_at: string
+          id: string
+          payload: Json
+          ranking: number
+          title: string | null
+        }
+        Insert: {
+          artist_id: string
+          created_at?: string
+          id?: string
+          payload?: Json
+          ranking?: number
+          title?: string | null
+        }
+        Update: {
+          artist_id?: string
+          created_at?: string
+          id?: string
+          payload?: Json
+          ranking?: number
+          title?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "af_top_tracks_artist_id_fkey"
+            columns: ["artist_id"]
+            isOneToOne: false
+            referencedRelation: "af_artists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      af_workspaces: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          owner_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name?: string
+          owner_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          owner_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       agent_activity_log: {
         Row: {
           activity_type: string
@@ -689,6 +1207,41 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      aura_scores: {
+        Row: {
+          created_at: string
+          id: string
+          model: string
+          scores: Json
+          verdict: string | null
+          zap_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          model?: string
+          scores?: Json
+          verdict?: string | null
+          zap_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          model?: string
+          scores?: Json
+          verdict?: string | null
+          zap_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "aura_scores_zap_id_fkey"
+            columns: ["zap_id"]
+            isOneToOne: false
+            referencedRelation: "zaps"
             referencedColumns: ["id"]
           },
         ]
@@ -3800,6 +4353,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      gmi_generation_settlements: {
+        Row: {
+          amount: number
+          created_at: string
+          hold_id: string | null
+          hold_skipped: boolean
+          model_id: string
+          request_id: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          hold_id?: string | null
+          hold_skipped?: boolean
+          model_id: string
+          request_id: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          hold_id?: string | null
+          hold_skipped?: boolean
+          model_id?: string
+          request_id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       idempotency_keys: {
         Row: {
@@ -6939,6 +7528,474 @@ export type Database = {
         }
         Relationships: []
       }
+      postz_analytics: {
+        Row: {
+          captured_at: string
+          captured_for: string
+          channel_id: string
+          created_at: string
+          deleted_at: string | null
+          id: string
+          metric: string
+          owner_id: string
+          post_id: string | null
+          updated_at: string
+          value: number
+        }
+        Insert: {
+          captured_at?: string
+          captured_for: string
+          channel_id: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          metric: string
+          owner_id?: string
+          post_id?: string | null
+          updated_at?: string
+          value: number
+        }
+        Update: {
+          captured_at?: string
+          captured_for?: string
+          channel_id?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          metric?: string
+          owner_id?: string
+          post_id?: string | null
+          updated_at?: string
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "postz_analytics_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "postz_channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "postz_analytics_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "postz_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      postz_channels: {
+        Row: {
+          additional_settings: Json
+          composio_account_id: string | null
+          connection_mode: string
+          created_at: string
+          custom_instance_url: string | null
+          deleted_at: string | null
+          disabled: boolean
+          id: string
+          name: string | null
+          owner_id: string
+          picture: string | null
+          posting_times: Json
+          profile: Json | null
+          provider: string
+          provider_account_id: string
+          refresh_token_ref: string | null
+          status: string
+          token_expires_at: string | null
+          token_ref: string
+          updated_at: string
+          username: string | null
+          workspace_id: string | null
+        }
+        Insert: {
+          additional_settings?: Json
+          composio_account_id?: string | null
+          connection_mode?: string
+          created_at?: string
+          custom_instance_url?: string | null
+          deleted_at?: string | null
+          disabled?: boolean
+          id?: string
+          name?: string | null
+          owner_id?: string
+          picture?: string | null
+          posting_times?: Json
+          profile?: Json | null
+          provider: string
+          provider_account_id: string
+          refresh_token_ref?: string | null
+          status?: string
+          token_expires_at?: string | null
+          token_ref: string
+          updated_at?: string
+          username?: string | null
+          workspace_id?: string | null
+        }
+        Update: {
+          additional_settings?: Json
+          composio_account_id?: string | null
+          connection_mode?: string
+          created_at?: string
+          custom_instance_url?: string | null
+          deleted_at?: string | null
+          disabled?: boolean
+          id?: string
+          name?: string | null
+          owner_id?: string
+          picture?: string | null
+          posting_times?: Json
+          profile?: Json | null
+          provider?: string
+          provider_account_id?: string
+          refresh_token_ref?: string | null
+          status?: string
+          token_expires_at?: string | null
+          token_ref?: string
+          updated_at?: string
+          username?: string | null
+          workspace_id?: string | null
+        }
+        Relationships: []
+      }
+      postz_oauth_state: {
+        Row: {
+          access_token_ref: string | null
+          app_return_url: string | null
+          auth_details: Json | null
+          code_verifier: string
+          created_at: string
+          deleted_at: string | null
+          expires_at: string
+          id: string
+          owner_id: string
+          provider: string
+          redirect: string | null
+          refresh_token_ref: string | null
+          state: string
+          token_expires_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          access_token_ref?: string | null
+          app_return_url?: string | null
+          auth_details?: Json | null
+          code_verifier: string
+          created_at?: string
+          deleted_at?: string | null
+          expires_at: string
+          id?: string
+          owner_id?: string
+          provider: string
+          redirect?: string | null
+          refresh_token_ref?: string | null
+          state: string
+          token_expires_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          access_token_ref?: string | null
+          app_return_url?: string | null
+          auth_details?: Json | null
+          code_verifier?: string
+          created_at?: string
+          deleted_at?: string | null
+          expires_at?: string
+          id?: string
+          owner_id?: string
+          provider?: string
+          redirect?: string | null
+          refresh_token_ref?: string | null
+          state?: string
+          token_expires_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      postz_post_tags: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          owner_id: string
+          post_id: string
+          tag_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          owner_id?: string
+          post_id: string
+          tag_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          owner_id?: string
+          post_id?: string
+          tag_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "postz_post_tags_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "postz_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "postz_post_tags_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "postz_tags"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      postz_posts: {
+        Row: {
+          attempts: number
+          channel_id: string
+          content: string
+          created_at: string
+          creation_method: string
+          deleted_at: string | null
+          description: string | null
+          error: string | null
+          first_comment: string | null
+          group_id: string
+          id: string
+          interval_in_days: number | null
+          media: Json
+          owner_id: string
+          parent_post_id: string | null
+          poll: Json | null
+          publish_date: string
+          release_provider_id: string | null
+          release_url: string | null
+          settings: Json | null
+          state: string
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          channel_id: string
+          content?: string
+          created_at?: string
+          creation_method?: string
+          deleted_at?: string | null
+          description?: string | null
+          error?: string | null
+          first_comment?: string | null
+          group_id: string
+          id?: string
+          interval_in_days?: number | null
+          media?: Json
+          owner_id?: string
+          parent_post_id?: string | null
+          poll?: Json | null
+          publish_date: string
+          release_provider_id?: string | null
+          release_url?: string | null
+          settings?: Json | null
+          state?: string
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          channel_id?: string
+          content?: string
+          created_at?: string
+          creation_method?: string
+          deleted_at?: string | null
+          description?: string | null
+          error?: string | null
+          first_comment?: string | null
+          group_id?: string
+          id?: string
+          interval_in_days?: number | null
+          media?: Json
+          owner_id?: string
+          parent_post_id?: string | null
+          poll?: Json | null
+          publish_date?: string
+          release_provider_id?: string | null
+          release_url?: string | null
+          settings?: Json | null
+          state?: string
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "postz_posts_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "postz_channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "postz_posts_parent_post_id_fkey"
+            columns: ["parent_post_id"]
+            isOneToOne: false
+            referencedRelation: "postz_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      postz_publish_log: {
+        Row: {
+          attempt: number
+          channel_id: string
+          created_at: string
+          deleted_at: string | null
+          detail: Json | null
+          id: string
+          outcome: string
+          owner_id: string
+          post_id: string
+          updated_at: string
+        }
+        Insert: {
+          attempt: number
+          channel_id: string
+          created_at?: string
+          deleted_at?: string | null
+          detail?: Json | null
+          id?: string
+          outcome: string
+          owner_id?: string
+          post_id: string
+          updated_at?: string
+        }
+        Update: {
+          attempt?: number
+          channel_id?: string
+          created_at?: string
+          deleted_at?: string | null
+          detail?: Json | null
+          id?: string
+          outcome?: string
+          owner_id?: string
+          post_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "postz_publish_log_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "postz_channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "postz_publish_log_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "postz_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      postz_sets: {
+        Row: {
+          content: Json
+          created_at: string
+          deleted_at: string | null
+          id: string
+          name: string
+          owner_id: string
+          updated_at: string
+        }
+        Insert: {
+          content?: Json
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          name: string
+          owner_id?: string
+          updated_at?: string
+        }
+        Update: {
+          content?: Json
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          name?: string
+          owner_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      postz_signatures: {
+        Row: {
+          content: string
+          created_at: string
+          deleted_at: string | null
+          id: string
+          name: string
+          owner_id: string
+          updated_at: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          name: string
+          owner_id?: string
+          updated_at?: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          name?: string
+          owner_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      postz_tags: {
+        Row: {
+          color: string | null
+          created_at: string
+          deleted_at: string | null
+          id: string
+          name: string
+          owner_id: string
+          updated_at: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          name: string
+          owner_id?: string
+          updated_at?: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          name?: string
+          owner_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       press_quotes: {
         Row: {
           created_at: string | null
@@ -8082,6 +9139,30 @@ export type Database = {
         }
         Relationships: []
       }
+      secret_access_log: {
+        Row: {
+          accessed_at: string
+          id: number
+          reason: string
+          secret_type: string
+          user_id: string
+        }
+        Insert: {
+          accessed_at?: string
+          id?: number
+          reason: string
+          secret_type: string
+          user_id: string
+        }
+        Update: {
+          accessed_at?: string
+          id?: number
+          reason?: string
+          secret_type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       security_audit_log: {
         Row: {
           created_at: string
@@ -8228,6 +9309,8 @@ export type Database = {
           failure_reason: string | null
           id: string
           image_asset_id: string | null
+          image_generation_attempts: number
+          image_generation_error: string | null
           image_progress: number | null
           image_status: string | null
           image_url: string | null
@@ -8243,6 +9326,8 @@ export type Database = {
           updated_at: string | null
           upscaled_image_url: string | null
           video_asset_id: string | null
+          video_generation_attempts: number
+          video_generation_error: string | null
           video_status: string | null
           video_url: string | null
           visual_prompt: string | null
@@ -8256,6 +9341,8 @@ export type Database = {
           failure_reason?: string | null
           id?: string
           image_asset_id?: string | null
+          image_generation_attempts?: number
+          image_generation_error?: string | null
           image_progress?: number | null
           image_status?: string | null
           image_url?: string | null
@@ -8271,6 +9358,8 @@ export type Database = {
           updated_at?: string | null
           upscaled_image_url?: string | null
           video_asset_id?: string | null
+          video_generation_attempts?: number
+          video_generation_error?: string | null
           video_status?: string | null
           video_url?: string | null
           visual_prompt?: string | null
@@ -8284,6 +9373,8 @@ export type Database = {
           failure_reason?: string | null
           id?: string
           image_asset_id?: string | null
+          image_generation_attempts?: number
+          image_generation_error?: string | null
           image_progress?: number | null
           image_status?: string | null
           image_url?: string | null
@@ -8299,6 +9390,8 @@ export type Database = {
           updated_at?: string | null
           upscaled_image_url?: string | null
           video_asset_id?: string | null
+          video_generation_attempts?: number
+          video_generation_error?: string | null
           video_status?: string | null
           video_url?: string | null
           visual_prompt?: string | null
@@ -9457,25 +10550,40 @@ export type Database = {
       }
       user_secrets: {
         Row: {
+          ciphertext: string | null
           created_at: string
-          encrypted_value: string
+          encrypted_value: string | null
           id: string
+          key_version: number
+          last4: string | null
+          nonce: string | null
+          provider: string | null
           secret_type: string
           updated_at: string
           user_id: string
         }
         Insert: {
+          ciphertext?: string | null
           created_at?: string
-          encrypted_value: string
+          encrypted_value?: string | null
           id?: string
+          key_version?: number
+          last4?: string | null
+          nonce?: string | null
+          provider?: string | null
           secret_type: string
           updated_at?: string
           user_id: string
         }
         Update: {
+          ciphertext?: string | null
           created_at?: string
-          encrypted_value?: string
+          encrypted_value?: string | null
           id?: string
+          key_version?: number
+          last4?: string | null
+          nonce?: string | null
+          provider?: string | null
           secret_type?: string
           updated_at?: string
           user_id?: string
@@ -9865,6 +10973,53 @@ export type Database = {
         }
         Relationships: []
       }
+      wallet_auth_nonces: {
+        Row: {
+          address: string
+          nonce: string
+          used_at: string
+        }
+        Insert: {
+          address: string
+          nonce: string
+          used_at?: string
+        }
+        Update: {
+          address?: string
+          nonce?: string
+          used_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wallet_auth_nonces_address_fkey"
+            columns: ["address"]
+            isOneToOne: false
+            referencedRelation: "wallet_auth_users"
+            referencedColumns: ["address"]
+          },
+        ]
+      }
+      wallet_auth_users: {
+        Row: {
+          address: string
+          created_at: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          address: string
+          created_at?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          address?: string
+          created_at?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       wallet_flow_messages: {
         Row: {
           content: string
@@ -10058,6 +11213,56 @@ export type Database = {
           wallet_address?: string
         }
         Relationships: []
+      }
+      web_render_jobs: {
+        Row: {
+          created_at: string
+          error: string | null
+          id: string
+          idempotency_hash: string
+          project_id: string
+          request: Json
+          result: Json
+          status: string
+          storage_path: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          idempotency_hash: string
+          project_id: string
+          request?: Json
+          result?: Json
+          status?: string
+          storage_path?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          idempotency_hash?: string
+          project_id?: string
+          request?: Json
+          result?: Json
+          status?: string
+          storage_path?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "web_render_jobs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       workflow_actions: {
         Row: {
@@ -10310,6 +11515,1047 @@ export type Database = {
         }
         Relationships: []
       }
+      wzrd_fanpic_history_claims: {
+        Row: {
+          attempts: number
+          available_at: string
+          claimed_at: string | null
+          completed_at: string | null
+          created_at: string
+          last_error: string | null
+          lease_expires_at: string | null
+          lease_version: number
+          message_id: string
+          space_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          available_at?: string
+          claimed_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          last_error?: string | null
+          lease_expires_at?: string | null
+          lease_version?: number
+          message_id: string
+          space_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          available_at?: string
+          claimed_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          last_error?: string | null
+          lease_expires_at?: string | null
+          lease_version?: number
+          message_id?: string
+          space_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      wzrd_fanpic_runs: {
+        Row: {
+          attempt: number
+          completed_at: string | null
+          created_at: string
+          delivery_claim_expires_at: string | null
+          delivery_claim_token: string | null
+          expires_at: string
+          generation_claim_token: string | null
+          generation_claimed_at: string | null
+          id: string
+          input_byte_count: number | null
+          input_mime_type: string | null
+          input_object_path: string | null
+          input_origin: string
+          input_ready_at: string | null
+          input_sha256: string | null
+          preset_id: string
+          prompt_hash: string
+          prompt_version: string
+          result_byte_count: number | null
+          result_mime_type: string | null
+          result_object_path: string | null
+          result_sha256: string | null
+          source_message_id: string
+          space_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          attempt?: number
+          completed_at?: string | null
+          created_at?: string
+          delivery_claim_expires_at?: string | null
+          delivery_claim_token?: string | null
+          expires_at: string
+          generation_claim_token?: string | null
+          generation_claimed_at?: string | null
+          id: string
+          input_byte_count?: number | null
+          input_mime_type?: string | null
+          input_object_path?: string | null
+          input_origin: string
+          input_ready_at?: string | null
+          input_sha256?: string | null
+          preset_id: string
+          prompt_hash: string
+          prompt_version: string
+          result_byte_count?: number | null
+          result_mime_type?: string | null
+          result_object_path?: string | null
+          result_sha256?: string | null
+          source_message_id: string
+          space_id: string
+          status: string
+          updated_at?: string
+        }
+        Update: {
+          attempt?: number
+          completed_at?: string | null
+          created_at?: string
+          delivery_claim_expires_at?: string | null
+          delivery_claim_token?: string | null
+          expires_at?: string
+          generation_claim_token?: string | null
+          generation_claimed_at?: string | null
+          id?: string
+          input_byte_count?: number | null
+          input_mime_type?: string | null
+          input_object_path?: string | null
+          input_origin?: string
+          input_ready_at?: string | null
+          input_sha256?: string | null
+          preset_id?: string
+          prompt_hash?: string
+          prompt_version?: string
+          result_byte_count?: number | null
+          result_mime_type?: string | null
+          result_object_path?: string | null
+          result_sha256?: string | null
+          source_message_id?: string
+          space_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      wzrd_generation_events: {
+        Row: {
+          created_at: string
+          event_type: string
+          id: number
+          metadata: Json
+          run_id: string
+          stage: string
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          id?: never
+          metadata?: Json
+          run_id: string
+          stage: string
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          id?: never
+          metadata?: Json
+          run_id?: string
+          stage?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wzrd_generation_events_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "wzrd_generation_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wzrd_generation_runs: {
+        Row: {
+          artifact_snapshot: Json | null
+          attempt: number
+          completed_at: string | null
+          created_at: string
+          error_code: string | null
+          error_http_status: number | null
+          error_stage: string | null
+          expires_at: string
+          id: string
+          media_object_paths: Json
+          mode: string | null
+          pending_consumed_at: string | null
+          prompt_hash: string | null
+          prompt_version: string | null
+          provider_request_id: string | null
+          request_snapshot: Json | null
+          source_message_id: string
+          space_id: string
+          status: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          artifact_snapshot?: Json | null
+          attempt?: number
+          completed_at?: string | null
+          created_at?: string
+          error_code?: string | null
+          error_http_status?: number | null
+          error_stage?: string | null
+          expires_at: string
+          id?: string
+          media_object_paths?: Json
+          mode?: string | null
+          pending_consumed_at?: string | null
+          prompt_hash?: string | null
+          prompt_version?: string | null
+          provider_request_id?: string | null
+          request_snapshot?: Json | null
+          source_message_id: string
+          space_id: string
+          status: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          artifact_snapshot?: Json | null
+          attempt?: number
+          completed_at?: string | null
+          created_at?: string
+          error_code?: string | null
+          error_http_status?: number | null
+          error_stage?: string | null
+          expires_at?: string
+          id?: string
+          media_object_paths?: Json
+          mode?: string | null
+          pending_consumed_at?: string | null
+          prompt_hash?: string | null
+          prompt_version?: string | null
+          provider_request_id?: string | null
+          request_snapshot?: Json | null
+          source_message_id?: string
+          space_id?: string
+          status?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: []
+      }
+      wzrd_inbound_events: {
+        Row: {
+          attempts: number
+          available_at: string
+          claimed_at: string | null
+          completed_at: string | null
+          created_at: string
+          event_key: string
+          last_error: string | null
+          lease_expires_at: string | null
+          lease_version: number
+          message_id: string
+          phone: string | null
+          raw_body_base64: string | null
+          sender_id: string | null
+          space_id: string
+          status: string
+          webhook_id: string | null
+        }
+        Insert: {
+          attempts?: number
+          available_at?: string
+          claimed_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          event_key: string
+          last_error?: string | null
+          lease_expires_at?: string | null
+          lease_version?: number
+          message_id: string
+          phone?: string | null
+          raw_body_base64?: string | null
+          sender_id?: string | null
+          space_id: string
+          status?: string
+          webhook_id?: string | null
+        }
+        Update: {
+          attempts?: number
+          available_at?: string
+          claimed_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          event_key?: string
+          last_error?: string | null
+          lease_expires_at?: string | null
+          lease_version?: number
+          message_id?: string
+          phone?: string | null
+          raw_body_base64?: string | null
+          sender_id?: string | null
+          space_id?: string
+          status?: string
+          webhook_id?: string | null
+        }
+        Relationships: []
+      }
+      wzrd_ol_context: {
+        Row: {
+          area_id: string | null
+          conversation_key: string
+          created_at: string
+          day: string | null
+          expires_at: string
+          map_delivered_at: string | null
+          performer_id: string | null
+          set_id: string | null
+          source: string
+          stage_id: string | null
+          time_anchor: string
+          updated_at: string
+        }
+        Insert: {
+          area_id?: string | null
+          conversation_key: string
+          created_at?: string
+          day?: string | null
+          expires_at: string
+          map_delivered_at?: string | null
+          performer_id?: string | null
+          set_id?: string | null
+          source: string
+          stage_id?: string | null
+          time_anchor: string
+          updated_at?: string
+        }
+        Update: {
+          area_id?: string | null
+          conversation_key?: string
+          created_at?: string
+          day?: string | null
+          expires_at?: string
+          map_delivered_at?: string | null
+          performer_id?: string | null
+          set_id?: string | null
+          source?: string
+          stage_id?: string | null
+          time_anchor?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      wzrd_studio_asset_casts: {
+        Row: {
+          asset_id: string
+          cast_id: string
+        }
+        Insert: {
+          asset_id: string
+          cast_id: string
+        }
+        Update: {
+          asset_id?: string
+          cast_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wzrd_studio_asset_casts_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "wzrd_studio_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wzrd_studio_asset_casts_cast_id_fkey"
+            columns: ["cast_id"]
+            isOneToOne: false
+            referencedRelation: "wzrd_studio_casts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wzrd_studio_assets: {
+        Row: {
+          board_id: string | null
+          byte_count: number | null
+          cast_id: string
+          content_hash: string | null
+          created_at: string
+          delivery_message_id: string | null
+          erased_at: string | null
+          expires_at: string | null
+          id: string
+          kind: string
+          mime_type: string | null
+          object_path: string | null
+          panel_id: string | null
+          provenance: string | null
+          sheet_id: string | null
+          source_message_id: string | null
+          source_sender_id: string | null
+          space_id: string
+          tombstoned_at: string | null
+        }
+        Insert: {
+          board_id?: string | null
+          byte_count?: number | null
+          cast_id: string
+          content_hash?: string | null
+          created_at?: string
+          delivery_message_id?: string | null
+          erased_at?: string | null
+          expires_at?: string | null
+          id?: string
+          kind: string
+          mime_type?: string | null
+          object_path?: string | null
+          panel_id?: string | null
+          provenance?: string | null
+          sheet_id?: string | null
+          source_message_id?: string | null
+          source_sender_id?: string | null
+          space_id: string
+          tombstoned_at?: string | null
+        }
+        Update: {
+          board_id?: string | null
+          byte_count?: number | null
+          cast_id?: string
+          content_hash?: string | null
+          created_at?: string
+          delivery_message_id?: string | null
+          erased_at?: string | null
+          expires_at?: string | null
+          id?: string
+          kind?: string
+          mime_type?: string | null
+          object_path?: string | null
+          panel_id?: string | null
+          provenance?: string | null
+          sheet_id?: string | null
+          source_message_id?: string | null
+          source_sender_id?: string | null
+          space_id?: string
+          tombstoned_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wzrd_studio_assets_board_fk"
+            columns: ["board_id"]
+            isOneToOne: false
+            referencedRelation: "wzrd_studio_boards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wzrd_studio_assets_cast_id_fkey"
+            columns: ["cast_id"]
+            isOneToOne: false
+            referencedRelation: "wzrd_studio_casts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wzrd_studio_assets_panel_fk"
+            columns: ["panel_id"]
+            isOneToOne: false
+            referencedRelation: "wzrd_studio_panels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wzrd_studio_assets_sheet_fk"
+            columns: ["sheet_id"]
+            isOneToOne: false
+            referencedRelation: "wzrd_studio_sheets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wzrd_studio_boards: {
+        Row: {
+          cast_id: string
+          contact_sheet_asset_id: string | null
+          created_at: string
+          delivery_message_id: string | null
+          expires_at: string | null
+          id: string
+          operation_id: string
+          panels: Json | null
+          premise: string | null
+          space_id: string
+          status: string
+          style_lock: string | null
+          tombstoned_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          cast_id: string
+          contact_sheet_asset_id?: string | null
+          created_at?: string
+          delivery_message_id?: string | null
+          expires_at?: string | null
+          id?: string
+          operation_id: string
+          panels?: Json | null
+          premise?: string | null
+          space_id: string
+          status?: string
+          style_lock?: string | null
+          tombstoned_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cast_id?: string
+          contact_sheet_asset_id?: string | null
+          created_at?: string
+          delivery_message_id?: string | null
+          expires_at?: string | null
+          id?: string
+          operation_id?: string
+          panels?: Json | null
+          premise?: string | null
+          space_id?: string
+          status?: string
+          style_lock?: string | null
+          tombstoned_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wzrd_studio_boards_cast_id_fkey"
+            columns: ["cast_id"]
+            isOneToOne: false
+            referencedRelation: "wzrd_studio_casts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wzrd_studio_boards_contact_asset_fk"
+            columns: ["contact_sheet_asset_id"]
+            isOneToOne: false
+            referencedRelation: "wzrd_studio_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wzrd_studio_boards_operation_id_fkey"
+            columns: ["operation_id"]
+            isOneToOne: true
+            referencedRelation: "wzrd_studio_operations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wzrd_studio_casts: {
+        Row: {
+          anchor_asset_id: string | null
+          created_at: string
+          deletion_completed_at: string | null
+          descriptor: string | null
+          drop_requested_at: string | null
+          drop_requested_by: string | null
+          handle: string
+          id: string
+          source_message_id: string | null
+          source_sender_id: string | null
+          space_id: string
+          steward_id: string
+          tombstoned_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          anchor_asset_id?: string | null
+          created_at?: string
+          deletion_completed_at?: string | null
+          descriptor?: string | null
+          drop_requested_at?: string | null
+          drop_requested_by?: string | null
+          handle: string
+          id?: string
+          source_message_id?: string | null
+          source_sender_id?: string | null
+          space_id: string
+          steward_id: string
+          tombstoned_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          anchor_asset_id?: string | null
+          created_at?: string
+          deletion_completed_at?: string | null
+          descriptor?: string | null
+          drop_requested_at?: string | null
+          drop_requested_by?: string | null
+          handle?: string
+          id?: string
+          source_message_id?: string | null
+          source_sender_id?: string | null
+          space_id?: string
+          steward_id?: string
+          tombstoned_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wzrd_studio_casts_anchor_asset_fk"
+            columns: ["anchor_asset_id"]
+            isOneToOne: false
+            referencedRelation: "wzrd_studio_assets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wzrd_studio_delete_outbox: {
+        Row: {
+          asset_id: string | null
+          attempts: number
+          available_at: string
+          cast_id: string | null
+          claimed_at: string | null
+          completed_at: string | null
+          created_at: string
+          dead_lettered_at: string | null
+          id: number
+          last_error: string | null
+          lease_expires_at: string | null
+          lease_version: number
+          object_path: string | null
+          operation_id: string | null
+          path_receipt_hash: string
+        }
+        Insert: {
+          asset_id?: string | null
+          attempts?: number
+          available_at?: string
+          cast_id?: string | null
+          claimed_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          dead_lettered_at?: string | null
+          id?: never
+          last_error?: string | null
+          lease_expires_at?: string | null
+          lease_version?: number
+          object_path?: string | null
+          operation_id?: string | null
+          path_receipt_hash: string
+        }
+        Update: {
+          asset_id?: string | null
+          attempts?: number
+          available_at?: string
+          cast_id?: string | null
+          claimed_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          dead_lettered_at?: string | null
+          id?: never
+          last_error?: string | null
+          lease_expires_at?: string | null
+          lease_version?: number
+          object_path?: string | null
+          operation_id?: string | null
+          path_receipt_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wzrd_studio_delete_outbox_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "wzrd_studio_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wzrd_studio_delete_outbox_cast_id_fkey"
+            columns: ["cast_id"]
+            isOneToOne: false
+            referencedRelation: "wzrd_studio_casts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wzrd_studio_delete_outbox_operation_id_fkey"
+            columns: ["operation_id"]
+            isOneToOne: false
+            referencedRelation: "wzrd_studio_operations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wzrd_studio_operation_casts: {
+        Row: {
+          cast_id: string
+          operation_id: string
+          ordinal: number
+        }
+        Insert: {
+          cast_id: string
+          operation_id: string
+          ordinal: number
+        }
+        Update: {
+          cast_id?: string
+          operation_id?: string
+          ordinal?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wzrd_studio_operation_casts_cast_id_fkey"
+            columns: ["cast_id"]
+            isOneToOne: false
+            referencedRelation: "wzrd_studio_casts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wzrd_studio_operation_casts_operation_id_fkey"
+            columns: ["operation_id"]
+            isOneToOne: false
+            referencedRelation: "wzrd_studio_operations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wzrd_studio_operations: {
+        Row: {
+          cast_id: string | null
+          completed_at: string | null
+          created_at: string
+          error_code: string | null
+          id: string
+          kind: string
+          provider_request_id: string | null
+          request_hash: string
+          request_snapshot: Json
+          result_asset_id: string | null
+          source_message_id: string
+          space_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          cast_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          error_code?: string | null
+          id?: string
+          kind: string
+          provider_request_id?: string | null
+          request_hash: string
+          request_snapshot?: Json
+          result_asset_id?: string | null
+          source_message_id: string
+          space_id: string
+          status: string
+          updated_at?: string
+        }
+        Update: {
+          cast_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          error_code?: string | null
+          id?: string
+          kind?: string
+          provider_request_id?: string | null
+          request_hash?: string
+          request_snapshot?: Json
+          result_asset_id?: string | null
+          source_message_id?: string
+          space_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wzrd_studio_operations_cast_id_fkey"
+            columns: ["cast_id"]
+            isOneToOne: false
+            referencedRelation: "wzrd_studio_casts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wzrd_studio_operations_result_asset_fk"
+            columns: ["result_asset_id"]
+            isOneToOne: false
+            referencedRelation: "wzrd_studio_assets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wzrd_studio_panels: {
+        Row: {
+          asset_id: string | null
+          board_id: string
+          created_at: string
+          delivery_message_id: string | null
+          id: string
+          operation_id: string
+          panel_index: number
+          space_id: string
+          tombstoned_at: string | null
+        }
+        Insert: {
+          asset_id?: string | null
+          board_id: string
+          created_at?: string
+          delivery_message_id?: string | null
+          id?: string
+          operation_id: string
+          panel_index: number
+          space_id: string
+          tombstoned_at?: string | null
+        }
+        Update: {
+          asset_id?: string | null
+          board_id?: string
+          created_at?: string
+          delivery_message_id?: string | null
+          id?: string
+          operation_id?: string
+          panel_index?: number
+          space_id?: string
+          tombstoned_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wzrd_studio_panels_asset_fk"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "wzrd_studio_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wzrd_studio_panels_board_id_fkey"
+            columns: ["board_id"]
+            isOneToOne: false
+            referencedRelation: "wzrd_studio_boards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wzrd_studio_panels_operation_id_fkey"
+            columns: ["operation_id"]
+            isOneToOne: true
+            referencedRelation: "wzrd_studio_operations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wzrd_studio_sheets: {
+        Row: {
+          asset_id: string | null
+          cast_id: string
+          created_at: string
+          delivery_message_id: string | null
+          id: string
+          operation_id: string
+          space_id: string
+          status: string
+          tombstoned_at: string | null
+        }
+        Insert: {
+          asset_id?: string | null
+          cast_id: string
+          created_at?: string
+          delivery_message_id?: string | null
+          id?: string
+          operation_id: string
+          space_id: string
+          status?: string
+          tombstoned_at?: string | null
+        }
+        Update: {
+          asset_id?: string | null
+          cast_id?: string
+          created_at?: string
+          delivery_message_id?: string | null
+          id?: string
+          operation_id?: string
+          space_id?: string
+          status?: string
+          tombstoned_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wzrd_studio_sheets_asset_fk"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "wzrd_studio_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wzrd_studio_sheets_cast_id_fkey"
+            columns: ["cast_id"]
+            isOneToOne: false
+            referencedRelation: "wzrd_studio_casts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wzrd_studio_sheets_operation_id_fkey"
+            columns: ["operation_id"]
+            isOneToOne: false
+            referencedRelation: "wzrd_studio_operations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wzrdos_runs: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          events: Json
+          id: string
+          metadata: Json
+          mode: string
+          plan: Json
+          plan_id: string
+          prompt: string
+          started_at: string | null
+          status: string
+          summary: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          events?: Json
+          id?: string
+          metadata?: Json
+          mode?: string
+          plan?: Json
+          plan_id: string
+          prompt?: string
+          started_at?: string | null
+          status?: string
+          summary?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          events?: Json
+          id?: string
+          metadata?: Json
+          mode?: string
+          plan?: Json
+          plan_id?: string
+          prompt?: string
+          started_at?: string | null
+          status?: string
+          summary?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      zap_feedback: {
+        Row: {
+          context: Json
+          created_at: string
+          feedback_text: string | null
+          id: string
+          rating: string | null
+          tags: string[] | null
+          zap_id: string | null
+        }
+        Insert: {
+          context?: Json
+          created_at?: string
+          feedback_text?: string | null
+          id?: string
+          rating?: string | null
+          tags?: string[] | null
+          zap_id?: string | null
+        }
+        Update: {
+          context?: Json
+          created_at?: string
+          feedback_text?: string | null
+          id?: string
+          rating?: string | null
+          tags?: string[] | null
+          zap_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "zap_feedback_zap_id_fkey"
+            columns: ["zap_id"]
+            isOneToOne: false
+            referencedRelation: "zaps"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      zaps: {
+        Row: {
+          body_sheet_url: string | null
+          cost_actual: number | null
+          cost_estimate: number | null
+          country: string | null
+          created_at: string
+          duration_s: number | null
+          failed_step: string | null
+          id: string
+          name: string | null
+          number: number | null
+          request_ids: Json
+          sketch_url: string | null
+          status: string
+          thumbnail_url: string | null
+          timings: Json
+          updated_at: string
+          upload_url: string | null
+          video_url: string | null
+        }
+        Insert: {
+          body_sheet_url?: string | null
+          cost_actual?: number | null
+          cost_estimate?: number | null
+          country?: string | null
+          created_at?: string
+          duration_s?: number | null
+          failed_step?: string | null
+          id?: string
+          name?: string | null
+          number?: number | null
+          request_ids?: Json
+          sketch_url?: string | null
+          status?: string
+          thumbnail_url?: string | null
+          timings?: Json
+          updated_at?: string
+          upload_url?: string | null
+          video_url?: string | null
+        }
+        Update: {
+          body_sheet_url?: string | null
+          cost_actual?: number | null
+          cost_estimate?: number | null
+          country?: string | null
+          created_at?: string
+          duration_s?: number | null
+          failed_step?: string | null
+          id?: string
+          name?: string | null
+          number?: number | null
+          request_ids?: Json
+          sketch_url?: string | null
+          status?: string
+          thumbnail_url?: string | null
+          timings?: Json
+          updated_at?: string
+          upload_url?: string | null
+          video_url?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       agent_profiles_safe: {
@@ -10445,6 +12691,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      af_owns_artist: { Args: { _artist_id: string }; Returns: boolean }
       bootstrap_wallet_user: {
         Args: { p_user_id: string; p_wallet_address: string }
         Returns: Json
@@ -10597,6 +12844,608 @@ export type Database = {
         Args: { board_id_param: string; user_id_param: string }
         Returns: boolean
       }
+      wzrd_append_generation_event: {
+        Args: {
+          p_byte_count?: number
+          p_duration_ms?: number
+          p_elapsed_ms?: number
+          p_error_code?: string
+          p_event_type: string
+          p_http_status?: number
+          p_mime_type?: string
+          p_model?: string
+          p_prompt_hash?: string
+          p_prompt_length?: number
+          p_prompt_version?: string
+          p_run_id: string
+          p_stage: string
+        }
+        Returns: Json
+      }
+      wzrd_append_pending_media: {
+        Args: {
+          p_expires_at: string
+          p_media_object_paths: Json
+          p_message_sent_at: string
+          p_request_snapshot: Json
+          p_source_message_id: string
+          p_space_id: string
+        }
+        Returns: Json
+      }
+      wzrd_begin_fanpic_delivery: { Args: { p_run_id: string }; Returns: Json }
+      wzrd_claim_fanpic_generation: {
+        Args: { p_run_id: string }
+        Returns: Json
+      }
+      wzrd_claim_fanpic_history_message: {
+        Args: {
+          p_lease_seconds?: number
+          p_message_id: string
+          p_space_id: string
+        }
+        Returns: Json
+      }
+      wzrd_claim_inbound_events: {
+        Args: { p_lease_seconds?: number; p_limit?: number }
+        Returns: {
+          attempts: number
+          event_key: string
+          lease_version: number
+          message_id: string
+          phone: string
+          raw_body_base64: string
+          sender_id: string
+          space_id: string
+        }[]
+      }
+      wzrd_complete_fanpic_history_message: {
+        Args: {
+          p_lease_version: number
+          p_message_id: string
+          p_space_id: string
+        }
+        Returns: boolean
+      }
+      wzrd_complete_fanpic_run: { Args: { p_run_id: string }; Returns: Json }
+      wzrd_complete_generation_run: {
+        Args: { p_run_id: string }
+        Returns: Json
+      }
+      wzrd_complete_inbound_event: {
+        Args: { p_event_key: string; p_lease_version: number }
+        Returns: boolean
+      }
+      wzrd_consume_pending_media: {
+        Args: { p_space_id: string }
+        Returns: Json
+      }
+      wzrd_create_fanpic_run: {
+        Args: {
+          p_expires_at: string
+          p_input_mime_type: string
+          p_input_object_path: string
+          p_input_origin: string
+          p_preset_id: string
+          p_prompt_hash: string
+          p_prompt_version: string
+          p_run_id: string
+          p_source_message_id: string
+          p_space_id: string
+        }
+        Returns: Json
+      }
+      wzrd_create_ready_generation_run: {
+        Args: {
+          p_expires_at: string
+          p_media_object_paths: Json
+          p_mode: string
+          p_pending_run_id?: string
+          p_prompt_hash: string
+          p_prompt_version: string
+          p_request_snapshot: Json
+          p_source_message_id: string
+          p_space_id: string
+        }
+        Returns: Json
+      }
+      wzrd_enqueue_inbound_event: {
+        Args: {
+          p_event_key: string
+          p_message_id: string
+          p_phone?: string
+          p_raw_body_base64: string
+          p_sender_id?: string
+          p_space_id: string
+          p_webhook_id: string
+        }
+        Returns: boolean
+      }
+      wzrd_expire_fanpic_run: { Args: { p_run_id: string }; Returns: Json }
+      wzrd_expire_generation_run: { Args: { p_run_id: string }; Returns: Json }
+      wzrd_fanpic_cleanup_for: {
+        Args: { p_run: Database["public"]["Tables"]["wzrd_fanpic_runs"]["Row"] }
+        Returns: Json
+      }
+      wzrd_fanpic_ready: { Args: never; Returns: boolean }
+      wzrd_generation_runs_ready: { Args: never; Returns: boolean }
+      wzrd_get_fanpic_run: { Args: { p_run_id: string }; Returns: Json }
+      wzrd_get_generation_run: { Args: { p_run_id: string }; Returns: Json }
+      wzrd_get_ol_context: {
+        Args: { p_conversation_key: string }
+        Returns: Json
+      }
+      wzrd_latest_recoverable_fanpic_run: {
+        Args: { p_now: string; p_space_id: string }
+        Returns: Json
+      }
+      wzrd_latest_retryable_generation_run: {
+        Args: { p_now?: string; p_space_id: string }
+        Returns: Json
+      }
+      wzrd_mark_fanpic_delivered: {
+        Args: { p_delivery_claim_token: string; p_run_id: string }
+        Returns: Json
+      }
+      wzrd_mark_fanpic_delivery_unknown: {
+        Args: { p_delivery_claim_token: string; p_run_id: string }
+        Returns: Json
+      }
+      wzrd_mark_fanpic_input_ready: {
+        Args: {
+          p_input_byte_count: number
+          p_input_mime_type: string
+          p_input_sha256: string
+          p_run_id: string
+        }
+        Returns: Json
+      }
+      wzrd_mark_fanpic_submit_unknown: {
+        Args: { p_generation_claim_token: string; p_run_id: string }
+        Returns: Json
+      }
+      wzrd_mark_ol_map_delivered: {
+        Args: { p_conversation_key: string }
+        Returns: Json
+      }
+      wzrd_ol_context_ready: { Args: never; Returns: boolean }
+      wzrd_persist_fanpic_artifact: {
+        Args: {
+          p_generation_claim_token: string
+          p_result_byte_count: number
+          p_result_mime_type: string
+          p_result_object_path: string
+          p_result_sha256: string
+          p_run_id: string
+        }
+        Returns: Json
+      }
+      wzrd_put_ol_context: {
+        Args: {
+          p_area_id: string
+          p_conversation_key: string
+          p_day: string
+          p_performer_id: string
+          p_set_id: string
+          p_source: string
+          p_stage_id: string
+          p_time_anchor: string
+        }
+        Returns: Json
+      }
+      wzrd_renew_inbound_event: {
+        Args: {
+          p_event_key: string
+          p_lease_seconds?: number
+          p_lease_version: number
+        }
+        Returns: boolean
+      }
+      wzrd_retry_fanpic_history_message: {
+        Args: {
+          p_backoff_seconds?: number
+          p_error: string
+          p_lease_version: number
+          p_max_attempts?: number
+          p_message_id: string
+          p_space_id: string
+        }
+        Returns: boolean
+      }
+      wzrd_retry_inbound_event: {
+        Args: {
+          p_backoff_seconds?: number
+          p_error: string
+          p_event_key: string
+          p_lease_version: number
+          p_max_attempts?: number
+        }
+        Returns: boolean
+      }
+      wzrd_stage_pending_media: {
+        Args: {
+          p_expires_at: string
+          p_media_object_paths: Json
+          p_request_snapshot: Json
+          p_source_message_id: string
+          p_space_id: string
+        }
+        Returns: Json
+      }
+      wzrd_studio_arm_reserved_object: {
+        Args: { p_object_path: string; p_operation_id: string }
+        Returns: boolean
+      }
+      wzrd_studio_asset_cast_ids: {
+        Args: { p_asset_id: string }
+        Returns: string[]
+      }
+      wzrd_studio_asset_json: {
+        Args: {
+          p_asset: Database["public"]["Tables"]["wzrd_studio_assets"]["Row"]
+        }
+        Returns: Json
+      }
+      wzrd_studio_begin_artifact_delivery: {
+        Args: { p_asset_id: string; p_operation_id: string }
+        Returns: Json
+      }
+      wzrd_studio_begin_operation:
+        | {
+            Args: {
+              p_cast_id?: string
+              p_kind: string
+              p_request_hash: string
+              p_request_snapshot?: Json
+              p_source_message_id: string
+              p_space_id: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_cast_id: string
+              p_cast_ids: string[]
+              p_kind: string
+              p_request_hash: string
+              p_request_snapshot: Json
+              p_source_message_id: string
+              p_space_id: string
+            }
+            Returns: Json
+          }
+      wzrd_studio_claim_delete_outbox: {
+        Args: { p_lease_seconds?: number; p_limit?: number }
+        Returns: Json
+      }
+      wzrd_studio_claim_operation: {
+        Args: { p_operation_id: string; p_request_snapshot: Json }
+        Returns: Json
+      }
+      wzrd_studio_commit_board: {
+        Args: {
+          p_board_id: string
+          p_byte_count: number
+          p_content_hash: string
+          p_delivery_message_id?: string
+          p_mime_type: string
+          p_object_path: string
+          p_operation_id: string
+          p_panels: Json
+          p_style_lock: string
+        }
+        Returns: Json
+      }
+      wzrd_studio_commit_generated_asset: {
+        Args: {
+          p_byte_count: number
+          p_cast_id: string
+          p_content_hash: string
+          p_delivery_message_id?: string
+          p_mime_type: string
+          p_object_path: string
+          p_operation_id: string
+          p_space_id: string
+        }
+        Returns: Json
+      }
+      wzrd_studio_commit_panel: {
+        Args: {
+          p_board_id: string
+          p_byte_count: number
+          p_content_hash: string
+          p_delivery_message_id?: string
+          p_mime_type: string
+          p_object_path: string
+          p_operation_id: string
+          p_panel_index: number
+        }
+        Returns: Json
+      }
+      wzrd_studio_commit_sheet: {
+        Args: {
+          p_byte_count: number
+          p_cast_id: string
+          p_content_hash: string
+          p_delivery_message_id?: string
+          p_mime_type: string
+          p_object_path: string
+          p_operation_id: string
+          p_space_id: string
+        }
+        Returns: Json
+      }
+      wzrd_studio_complete_delete_outbox: {
+        Args: { p_lease_version: number; p_outbox_id: number }
+        Returns: boolean
+      }
+      wzrd_studio_confirm_cast_drop: {
+        Args: { p_handle: string; p_space_id: string; p_steward_id: string }
+        Returns: Json
+      }
+      wzrd_studio_consume_reserved_object: {
+        Args: { p_object_path: string; p_operation_id: string }
+        Returns: boolean
+      }
+      wzrd_studio_contains_signed_url: {
+        Args: { p_value: string }
+        Returns: boolean
+      }
+      wzrd_studio_create_board: {
+        Args: {
+          p_cast_id: string
+          p_operation_id: string
+          p_premise: string
+          p_space_id: string
+        }
+        Returns: Json
+      }
+      wzrd_studio_create_cast: {
+        Args: {
+          p_byte_count: number
+          p_content_hash: string
+          p_descriptor: string
+          p_handle: string
+          p_mime_type: string
+          p_object_path: string
+          p_operation_id?: string
+          p_provenance: string
+          p_source_message_id: string
+          p_source_sender_id: string
+          p_space_id: string
+          p_steward_id: string
+        }
+        Returns: Json
+      }
+      wzrd_studio_delivery_fence: {
+        Args: { p_asset_id: string; p_operation_id: string }
+        Returns: boolean
+      }
+      wzrd_studio_enqueue_late_artifact_delete: {
+        Args: {
+          p_byte_count: number
+          p_content_hash: string
+          p_mime_type: string
+          p_object_path: string
+          p_operation_id: string
+        }
+        Returns: boolean
+      }
+      wzrd_studio_finalize_board_deletion: {
+        Args: { p_board_id: string }
+        Returns: boolean
+      }
+      wzrd_studio_finalize_cast_deletion: {
+        Args: { p_cast_id: string }
+        Returns: boolean
+      }
+      wzrd_studio_get_asset: { Args: { p_asset_id: string }; Returns: Json }
+      wzrd_studio_get_operation: {
+        Args: { p_operation_id: string }
+        Returns: Json
+      }
+      wzrd_studio_get_sheet: {
+        Args: { p_handle: string; p_space_id: string }
+        Returns: Json
+      }
+      wzrd_studio_insert_asset: {
+        Args: {
+          p_board_id?: string
+          p_byte_count: number
+          p_cast_id: string
+          p_content_hash: string
+          p_delivery_message_id?: string
+          p_expires_at?: string
+          p_kind: string
+          p_mime_type: string
+          p_object_path: string
+          p_panel_id?: string
+          p_provenance: string
+          p_sheet_id?: string
+          p_source_message_id?: string
+          p_source_sender_id?: string
+          p_space_id: string
+        }
+        Returns: {
+          board_id: string | null
+          byte_count: number | null
+          cast_id: string
+          content_hash: string | null
+          created_at: string
+          delivery_message_id: string | null
+          erased_at: string | null
+          expires_at: string | null
+          id: string
+          kind: string
+          mime_type: string | null
+          object_path: string | null
+          panel_id: string | null
+          provenance: string | null
+          sheet_id: string | null
+          source_message_id: string | null
+          source_sender_id: string | null
+          space_id: string
+          tombstoned_at: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "wzrd_studio_assets"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      wzrd_studio_link_asset_casts: {
+        Args: { p_asset_id: string; p_cast_ids: string[] }
+        Returns: boolean
+      }
+      wzrd_studio_list_casts: {
+        Args: { p_page?: number; p_space_id: string }
+        Returns: Json
+      }
+      wzrd_studio_lock_cast_set: {
+        Args: {
+          p_cast_ids: string[]
+          p_require_active: boolean
+          p_space_id: string
+        }
+        Returns: boolean
+      }
+      wzrd_studio_operation_asset_casts_match: {
+        Args: { p_asset_id: string; p_operation_id: string }
+        Returns: boolean
+      }
+      wzrd_studio_operation_cast_ids: {
+        Args: { p_operation_id: string }
+        Returns: string[]
+      }
+      wzrd_studio_operation_json: {
+        Args: {
+          p_operation: Database["public"]["Tables"]["wzrd_studio_operations"]["Row"]
+        }
+        Returns: Json
+      }
+      wzrd_studio_path_receipt_hash: {
+        Args: { p_path: string }
+        Returns: string
+      }
+      wzrd_studio_ready: { Args: never; Returns: boolean }
+      wzrd_studio_record_asset_delivery: {
+        Args: { p_asset_id: string; p_delivery_message_id: string }
+        Returns: boolean
+      }
+      wzrd_studio_recover_interrupted_deliveries: {
+        Args: { p_limit?: number }
+        Returns: number
+      }
+      wzrd_studio_recover_stale_submission: {
+        Args: { p_operation_id: string; p_stale_before: string }
+        Returns: Json
+      }
+      wzrd_studio_request_cast_drop: {
+        Args: { p_handle: string; p_space_id: string; p_steward_id: string }
+        Returns: Json
+      }
+      wzrd_studio_reserve_object: {
+        Args: { p_object_path: string; p_operation_id: string }
+        Returns: boolean
+      }
+      wzrd_studio_resolve_board_by_asset_hash: {
+        Args: { p_content_hash: string; p_space_id: string }
+        Returns: Json
+      }
+      wzrd_studio_resolve_board_by_delivery_message_id: {
+        Args: { p_delivery_message_id: string; p_space_id: string }
+        Returns: Json
+      }
+      wzrd_studio_resolve_casts: {
+        Args: { p_handles: Json; p_space_id: string }
+        Returns: Json
+      }
+      wzrd_studio_resolve_panel_by_asset_hash: {
+        Args: { p_content_hash: string; p_space_id: string }
+        Returns: Json
+      }
+      wzrd_studio_resolve_panel_by_delivery_message_id: {
+        Args: { p_delivery_message_id: string; p_space_id: string }
+        Returns: Json
+      }
+      wzrd_studio_retry_delete_outbox: {
+        Args: {
+          p_backoff_seconds?: number
+          p_error: string
+          p_lease_version: number
+          p_max_attempts?: number
+          p_outbox_id: number
+        }
+        Returns: boolean
+      }
+      wzrd_studio_snapshot_is_safe: {
+        Args: { p_snapshot: Json }
+        Returns: boolean
+      }
+      wzrd_studio_storyboard_is_safe: {
+        Args: { p_panels: Json; p_style_lock: string }
+        Returns: boolean
+      }
+      wzrd_studio_sweep_expired_boards: {
+        Args: { p_limit?: number; p_now?: string }
+        Returns: number
+      }
+      wzrd_studio_sweep_stale_object_reservations: {
+        Args: { p_limit?: number; p_stale_before: string }
+        Returns: number
+      }
+      wzrd_studio_tombstone_board: {
+        Args: { p_board_id: string }
+        Returns: number
+      }
+      wzrd_studio_update_operation: {
+        Args: {
+          p_error_code?: string
+          p_operation_id: string
+          p_provider_request_id?: string
+          p_request_snapshot?: Json
+          p_result_asset_id?: string
+          p_status: string
+        }
+        Returns: Json
+      }
+      wzrd_studio_valid_asset_media: {
+        Args: { p_byte_count: number; p_mime_type: string; p_path: string }
+        Returns: boolean
+      }
+      wzrd_studio_valid_handle: { Args: { p_handle: string }; Returns: boolean }
+      wzrd_studio_valid_object_path: {
+        Args: { p_path: string }
+        Returns: boolean
+      }
+      wzrd_supersede_pending_media: {
+        Args: { p_space_id: string }
+        Returns: Json
+      }
+      wzrd_sweep_expired_fanpic_runs: {
+        Args: { p_limit?: number; p_now: string }
+        Returns: Json
+      }
+      wzrd_sweep_expired_generation_runs: {
+        Args: { p_limit?: number; p_now?: string }
+        Returns: Json
+      }
+      wzrd_update_generation_run: {
+        Args: {
+          p_artifact_snapshot?: Json
+          p_attempt?: number
+          p_clear_provider_request_id?: boolean
+          p_error_code?: string
+          p_error_http_status?: number
+          p_error_stage?: string
+          p_provider_request_id?: string
+          p_run_id: string
+          p_status: string
+        }
+        Returns: Json
+      }
+      wzrd_webhook_queue_ready: { Args: never; Returns: boolean }
     }
     Enums: {
       activation_status:
